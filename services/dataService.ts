@@ -1,63 +1,92 @@
 
-/**
- * DataService - Camada de Conexão com Banco de Dados
- * Para conectar ao seu banco real, altere a BASE_URL para o endereço da sua API.
- */
+import { createClient } from '@supabase/supabase-js';
 
-const BASE_URL = 'https://sua-api-erp.com/api'; // Substitua pela URL do seu backend (ex: Supabase, Node.js)
+const SUPABASE_URL = 'https://oyzfafmbaumlsetchkon.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_J5K2LFz-hbZ-Z-WHTUwYrw_g6Cjy1-M';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export const db = {
-  async request(endpoint: string, method = 'GET', body?: any) {
+  async getTable(tableName: string) {
     try {
-      // Quando você tiver o backend pronto, descomente as linhas abaixo:
-      /*
-      const response = await fetch(`${BASE_URL}${endpoint}`, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      return await response.json();
-      */
+      const { data, error } = await supabase.from(tableName).select('*');
+      if (error) throw error;
+      return data || [];
+    } catch (e: any) {
+      console.error(`Erro ao buscar tabela ${tableName}:`, e.message);
+      return [];
+    }
+  },
 
-      // Enquanto não houver backend, operamos via LocalStorage (Simulação)
-      const key = `calcarioflow_${endpoint.split('/')[0]}`;
-      if (method === 'GET') {
-        const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
-      } else {
-        localStorage.setItem(key, JSON.stringify(body));
-        return body;
-      }
-    } catch (error) {
-      console.error("Erro na requisição:", error);
-      throw error;
+  async upsert(tableName: string, record: any) {
+    try {
+      const { data, error } = await supabase.from(tableName).upsert(record).select();
+      if (error) throw error;
+      return data;
+    } catch (e: any) {
+      console.error(`Erro ao salvar na tabela ${tableName}:`, e.message);
+      throw e;
+    }
+  },
+
+  async delete(tableName: string, id: string) {
+    try {
+      const { error } = await supabase.from(tableName).delete().eq('id', id);
+      if (error) throw error;
+    } catch (e: any) {
+      console.error(`Erro ao deletar de ${tableName}:`, e.message);
+      throw e;
     }
   }
 };
 
 export const userService = {
   async authenticate(email: string, pass: string) {
-    // Simulação de login - Em produção, isso bateria no seu banco
-    const users = await this.getAll();
-    const user = users.find(u => u.email === email);
-    if (user && pass === '123456') return user; // Senha padrão para teste
-    throw new Error("Credenciais inválidas");
+    try {
+      const { data: users, error } = await supabase.from('users_profile').select('*').eq('email', email);
+      if (error || !users || users.length === 0) throw new Error("Usuário não encontrado");
+      
+      const user = users[0];
+      // Nota: Em produção real, use Supabase Auth. Aqui mantemos a lógica simplificada solicitada.
+      if (pass === '123456') { 
+        await supabase.from('users_profile').update({ last_access: new Date().toISOString() }).eq('id', user.id);
+        return user;
+      }
+      throw new Error("Senha inválida");
+    } catch (e: any) {
+      throw new Error(e.message || "Falha na autenticação");
+    }
   },
 
   async getAll() {
-    return await db.request('users') || [];
+    return await db.getTable('users_profile');
   },
 
   async sync(users: any[]) {
-    return await db.request('users', 'POST', users);
+    return await db.upsert('users_profile', users);
   }
 };
 
 export const financeService = {
   async getTransactions() {
-    return await db.request('transactions') || [];
+    return await db.getTable('transactions');
   },
+  
   async saveTransactions(txs: any[]) {
-    return await db.request('transactions', 'POST', txs);
+    return await db.upsert('transactions', txs);
+  }
+};
+
+export const inventoryService = {
+  async getInventory() {
+    return await db.getTable('inventory');
+  },
+  async updateStock(id: string, quantity: number) {
+    try {
+      const { error } = await supabase.from('inventory').update({ quantity }).eq('id', id);
+      if (error) throw error;
+    } catch (e: any) {
+      console.error("Erro ao atualizar estoque:", e.message);
+    }
   }
 };

@@ -42,7 +42,7 @@ import {
   INITIAL_COST_CENTERS,
   INITIAL_USERS
 } from './constants';
-import { financeService, userService } from './services/dataService';
+import { financeService, userService, inventoryService, db } from './services/dataService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -70,19 +70,50 @@ const App: React.FC = () => {
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
 
-  // Carregamento Inicial (Simulando busca no DB)
+  // Carregamento Inicial do Banco de Dados
   useEffect(() => {
     const loadData = async () => {
-      const savedTxs = await financeService.getTransactions();
-      if (savedTxs.length > 0) setTransactions(savedTxs);
-      
-      const savedUsers = await userService.getAll();
-      if (savedUsers.length > 0) setUsers(savedUsers);
+      try {
+        const [savedTxs, savedUsers, savedInv, savedCust] = await Promise.all([
+          financeService.getTransactions(),
+          userService.getAll(),
+          inventoryService.getInventory(),
+          db.getTable('customers')
+        ]);
+
+        if (savedTxs.length > 0) {
+          setTransactions(savedTxs.map((t: any) => ({
+            ...t,
+            amount: Number(t.amount),
+            paidAmount: Number(t.paidAmount)
+          })));
+        }
+        
+        if (savedUsers.length > 0) setUsers(savedUsers);
+
+        if (savedInv.length > 0) {
+          setInventory(savedInv.map((i: any) => ({
+            ...i,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unitPrice),
+            minStock: Number(i.minStock)
+          })));
+        }
+
+        if (savedCust.length > 0) {
+          setCustomers(savedCust.map((c: any) => ({
+            ...c,
+            totalSpent: Number(c.totalSpent)
+          })));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados do Supabase:", error);
+      }
     };
     loadData();
   }, []);
 
-  // Sincronização Automática (Exemplo para Transações)
+  // Sincronização Automática
   useEffect(() => {
     if (transactions.length > 0) {
       financeService.saveTransactions(transactions);
@@ -126,11 +157,17 @@ const App: React.FC = () => {
   };
 
   const processStockChange = (productId: string, quantity: number) => {
-    setInventory(prev => prev.map(item => 
-      (item.id === productId && item.companyId === selectedCompanyId) 
-        ? { ...item, quantity: item.quantity + quantity } 
-        : item
-    ));
+    setInventory(prev => {
+      const newList = prev.map(item => 
+        (item.id === productId && item.companyId === selectedCompanyId) 
+          ? { ...item, quantity: item.quantity + quantity } 
+          : item
+      );
+      // Sincroniza com o banco
+      const updatedItem = newList.find(i => i.id === productId && i.companyId === selectedCompanyId);
+      if (updatedItem) inventoryService.updateStock(productId, updatedItem.quantity);
+      return newList;
+    });
   };
 
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => {
@@ -177,13 +214,12 @@ const App: React.FC = () => {
     });
 
     setCustomers(prev => prev.map(c => 
-      c.id === order.customerId ? { ...c, totalSpent: c.totalSpent + order.total } : c
+      c.id === order.customerId ? { ...c, totalSpent: Number(c.totalSpent) + order.total } : c
     ));
 
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, payments, status: OrderStatus.FINALIZED } : o));
   };
 
-  // Fleet/Yard/Fuel Handlers
   const handleAddMachine = (machine: Omit<Machine, 'id' | 'companyId'>) => {
     setMachines(prev => [...prev, { ...machine, id: `m-${Date.now()}`, companyId: selectedCompanyId }]);
   };
@@ -231,10 +267,9 @@ const App: React.FC = () => {
     setStoreItems(prev => [...prev, { ...item, id: `s-${Date.now()}`, companyId: selectedCompanyId }]);
   };
 
-  // User Handlers
   const handleAddUser = (userData: Omit<User, 'id'>) => {
     const newUser = { ...userData, id: `u-${Date.now()}` };
-    setUsers(prev => [...prev, newUser]);
+    setUsers(prev => [...prev, newUser as User]);
     userService.sync([...users, newUser]);
   };
 

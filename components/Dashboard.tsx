@@ -15,14 +15,19 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customers }) => {
-  const [insights, setInsights] = useState<string | undefined>('');
+  const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
     const fetchInsights = async () => {
       setLoadingInsights(true);
-      const res = await getBusinessInsights(transactions, inventory, customers);
-      setInsights(res);
+      try {
+        const res = await getBusinessInsights(transactions, inventory, customers);
+        // Garante que res seja string
+        setInsights(typeof res === 'string' ? res : String(res));
+      } catch (e) {
+        setInsights("Indisponível no momento.");
+      }
       setLoadingInsights(false);
     };
     fetchInsights();
@@ -30,17 +35,17 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
 
   const totalRevenue = transactions
     .filter(t => t.type === TransactionType.SALE)
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Number(t.amount), 0);
 
   const totalExpenses = transactions
     .filter(t => t.type === TransactionType.PURCHASE || t.type === TransactionType.EXPENSE)
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Number(t.amount), 0);
 
   const balance = totalRevenue - totalExpenses;
 
   const stockData = inventory.map(item => ({
     name: item.name,
-    value: item.quantity
+    value: Number(item.quantity)
   }));
 
   const COLORS = ['#f59e0b', '#0f172a'];
@@ -51,8 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
     { name: 'Nov', receita: totalRevenue, despesa: totalExpenses },
   ];
 
-  // Identifica itens com estoque baixo
-  const lowStockItems = inventory.filter(item => item.quantity <= item.minStock);
+  const lowStockItems = inventory.filter(item => Number(item.quantity) <= Number(item.minStock));
 
   return (
     <div className="space-y-6">
@@ -95,7 +99,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
             <span className="text-xs font-bold uppercase tracking-wider">Estoque</span>
           </div>
           <p className="text-2xl font-bold text-slate-800">
-            {inventory.reduce((acc, i) => acc + i.quantity, 0).toFixed(1)} T
+            {inventory.reduce((acc, i) => acc + Number(i.quantity), 0).toFixed(1)} T
           </p>
         </div>
       </div>
@@ -131,7 +135,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto text-sm leading-relaxed text-slate-300">
-              {insights?.split('\n').map((line, i) => (
+              {insights.split('\n').map((line, i) => (
                 <p key={i} className="mb-2">{line}</p>
               ))}
               {lowStockItems.length > 0 && (
