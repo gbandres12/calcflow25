@@ -4,17 +4,21 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Transaction, InventoryItem, Customer, TransactionType } from '../types';
+import { Transaction, InventoryItem, Customer, TransactionType, View } from '../types';
 import { getBusinessInsights } from '../services/geminiService';
-import { Brain, TrendingUp, TrendingDown, DollarSign, Package, AlertCircle, ZapOff } from 'lucide-react';
+import { 
+  Brain, TrendingUp, TrendingDown, DollarSign, Package, AlertCircle, 
+  ZapOff, Zap, UserPlus, ShoppingCart, Factory, ChevronRight 
+} from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
   inventory: InventoryItem[];
   customers: Customer[];
+  onNavigate?: (view: View) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customers }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customers, onNavigate }) => {
   const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
 
@@ -42,13 +46,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
 
   const balance = totalRevenue - totalExpenses;
 
-  const stockData = inventory.map(item => ({
-    name: item.name,
-    value: Number(item.quantity)
-  }));
-
-  const COLORS = ['#f59e0b', '#0f172a'];
-
   const monthlyData = [
     { name: 'Set', receita: 4000, despesa: 2400 },
     { name: 'Out', receita: 3000, despesa: 1398 },
@@ -57,11 +54,18 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
 
   const lowStockItems = inventory.filter(item => Number(item.quantity) <= Number(item.minStock));
 
+  const quickActions = [
+    { id: 'users', label: 'Novo Usuário', icon: UserPlus, color: 'bg-purple-600', hover: 'hover:bg-purple-700' },
+    { id: 'orders', label: 'Nova Venda', icon: ShoppingCart, color: 'bg-emerald-600', hover: 'hover:bg-emerald-700' },
+    { id: 'milling', label: 'Moagem Hoje', icon: Factory, color: 'bg-amber-500', hover: 'hover:bg-amber-600' },
+    { id: 'inventory', label: 'Ver Estoque', icon: Package, color: 'bg-slate-800', hover: 'hover:bg-slate-900' },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Painel Operacional</h2>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Painel Operacional</h2>
           <p className="text-slate-500 text-sm font-medium">Dados reais em tempo real do banco de dados</p>
         </div>
         <div className="bg-emerald-50 text-emerald-700 p-2 px-4 rounded-full border border-emerald-100 flex items-center gap-2 text-[10px] font-black uppercase">
@@ -69,6 +73,30 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
           Fluxo de Dados Ativo
         </div>
       </header>
+
+      {/* Atalhos Rápidos */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+           <Zap size={16} className="text-amber-500" />
+           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Atalhos Operacionais</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+           {quickActions.map(action => (
+             <button 
+                key={action.id}
+                onClick={() => onNavigate?.(action.id as View)}
+                className={`flex items-center justify-between p-5 ${action.color} ${action.hover} text-white rounded-[2rem] transition-all shadow-lg shadow-slate-200 group overflow-hidden relative`}
+             >
+                <div className="flex flex-col items-start gap-1 z-10 text-left">
+                   <span className="text-[9px] font-black uppercase tracking-widest opacity-60">Ação Rápida</span>
+                   <span className="text-sm font-black">{action.label}</span>
+                </div>
+                <action.icon size={28} className="opacity-20 group-hover:scale-125 transition-transform group-hover:opacity-40" />
+                <div className="absolute -right-4 -bottom-4 bg-white/10 w-16 h-16 rounded-full group-hover:scale-150 transition-transform"></div>
+             </button>
+           ))}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-emerald-200 transition-all group">

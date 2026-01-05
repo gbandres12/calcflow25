@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Machine, StoreItem, MaintenanceRecord } from '../types';
-import { Boxes, Plus, Wrench, Search, Package, AlertTriangle, X, Settings } from 'lucide-react';
+import { Boxes, Plus, Wrench, Search, Package, AlertTriangle, X, Settings, Edit, Trash2 } from 'lucide-react';
 
 interface YardManagementProps {
   machines: Machine[];
@@ -12,10 +12,18 @@ interface YardManagementProps {
   onUpdateStoreItem: (item: StoreItem) => void;
 }
 
-const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, maintenances, onAddMaintenance, onAddStoreItem, onUpdateStoreItem }) => {
+const YardManagement: React.FC<YardManagementProps> = ({ 
+  machines, 
+  storeItems, 
+  maintenances, 
+  onAddMaintenance, 
+  onAddStoreItem, 
+  onUpdateStoreItem 
+}) => {
   const [activeTab, setActiveTab] = useState<'store' | 'maintenance'>('store');
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [isMaintModalOpen, setIsMaintModalOpen] = useState(false);
+  const [editingStoreItem, setEditingStoreItem] = useState<StoreItem | null>(null);
 
   const [storeForm, setStoreForm] = useState({
     name: '',
@@ -34,11 +42,33 @@ const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, m
     horimeter: 0
   });
 
+  const handleOpenStoreModal = (item?: StoreItem) => {
+    if (item) {
+      setEditingStoreItem(item);
+      setStoreForm({
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unit: item.unit,
+        minStock: item.minStock
+      });
+    } else {
+      setEditingStoreItem(null);
+      setStoreForm({ name: '', category: 'Peças', quantity: 0, unit: 'UN', minStock: 1 });
+    }
+    setIsStoreModalOpen(true);
+  };
+
   const handleAddStore = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddStoreItem(storeForm);
+    if (editingStoreItem) {
+      onUpdateStoreItem({ ...editingStoreItem, ...storeForm });
+    } else {
+      onAddStoreItem(storeForm);
+    }
     setIsStoreModalOpen(false);
     setStoreForm({ name: '', category: 'Peças', quantity: 0, unit: 'UN', minStock: 1 });
+    setEditingStoreItem(null);
   };
 
   const handleAddMaint = (e: React.FormEvent) => {
@@ -68,7 +98,7 @@ const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, m
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input type="text" placeholder="Pesquisar no almoxarifado..." className="w-full pl-12 pr-6 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-medium text-sm" />
               </div>
-              <button onClick={() => setIsStoreModalOpen(true)} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 text-sm shadow-xl shadow-slate-100">
+              <button onClick={() => handleOpenStoreModal()} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 text-sm shadow-xl shadow-slate-100">
                  <Plus size={18}/> Novo Item
               </button>
            </div>
@@ -81,30 +111,48 @@ const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, m
                     <th className="px-6 py-4">Estoque Atual</th>
                     <th className="px-6 py-4">Unidade</th>
                     <th className="px-6 py-4 text-center">Status</th>
+                    <th className="px-8 py-4 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                   {storeItems.map(item => (
-                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-8 py-5">
-                           <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.name}</p>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.category}</p>
-                        </td>
-                        <td className="px-6 py-5 font-black text-slate-800">{item.quantity}</td>
-                        <td className="px-6 py-5 text-xs font-bold text-slate-500">{item.unit}</td>
-                        <td className="px-6 py-5">
-                           <div className="flex justify-center">
-                              {item.quantity <= item.minStock ? (
-                                <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full text-[9px] font-black uppercase border border-rose-100 flex items-center gap-1">
-                                   <AlertTriangle size={10}/> Reposição
-                                </span>
-                              ) : (
-                                <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase border border-emerald-100">Ok</span>
-                              )}
-                           </div>
-                        </td>
+                   {storeItems.length === 0 ? (
+                     <tr>
+                        <td colSpan={5} className="py-20 text-center opacity-30 italic font-bold">Nenhum item em estoque.</td>
                      </tr>
-                   ))}
+                   ) : (
+                     storeItems.map(item => (
+                       <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                          <td className="px-8 py-5">
+                             <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.name}</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.category}</p>
+                          </td>
+                          <td className="px-6 py-5 font-black text-slate-800">{item.quantity}</td>
+                          <td className="px-6 py-5 text-xs font-bold text-slate-500">{item.unit}</td>
+                          <td className="px-6 py-5">
+                             <div className="flex justify-center">
+                                {item.quantity <= item.minStock ? (
+                                  <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full text-[9px] font-black uppercase border border-rose-100 flex items-center gap-1">
+                                     <AlertTriangle size={10}/> Reposição
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[9px] font-black uppercase border border-emerald-100">Ok</span>
+                                )}
+                             </div>
+                          </td>
+                          <td className="px-8 py-5">
+                             <div className="flex justify-center gap-2">
+                                <button 
+                                  onClick={() => handleOpenStoreModal(item)}
+                                  className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                                  title="Editar Item"
+                                >
+                                   <Edit size={16} />
+                                </button>
+                             </div>
+                          </td>
+                       </tr>
+                     ))
+                   )}
                 </tbody>
              </table>
            </div>
@@ -147,18 +195,25 @@ const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, m
         </div>
       )}
 
-      {/* Modal Almoxarifado */}
+      {/* Modal Almoxarifado (Add/Edit) */}
       {isStoreModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Novo Item de Pátio</h3>
-                <button onClick={() => setIsStoreModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X/></button>
+                <div>
+                   <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                     {editingStoreItem ? 'Editar Item' : 'Novo Item de Pátio'}
+                   </h3>
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                     Controle de suprimentos internos
+                   </p>
+                </div>
+                <button onClick={() => setIsStoreModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full text-slate-400 transition-colors"><X/></button>
              </div>
              <form onSubmit={handleAddStore} className="space-y-4">
                 <div className="space-y-1.5">
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição do Item</label>
-                   <input required type="text" value={storeForm.name} onChange={e => setStoreForm({...storeForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" />
+                   <input required type="text" value={storeForm.name} onChange={e => setStoreForm({...storeForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" placeholder="Ex: Correia em V 45x10" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-1.5">
@@ -172,27 +227,38 @@ const YardManagement: React.FC<YardManagementProps> = ({ machines, storeItems, m
                       </select>
                    </div>
                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade</label>
-                      <input required type="text" value={storeForm.unit} onChange={e => setStoreForm({...storeForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" placeholder="UN, KG, LT..." />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade de Medida</label>
+                      <input required type="text" value={storeForm.unit} onChange={e => setStoreForm({...storeForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm" placeholder="UN, KG, LT, MT..." />
                    </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qtd Inicial</label>
-                      <input required type="number" value={storeForm.quantity} onChange={e => setStoreForm({...storeForm, quantity: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg" />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade em Estoque</label>
+                      <input required type="number" step="0.01" value={storeForm.quantity} onChange={e => setStoreForm({...storeForm, quantity: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg" />
                    </div>
                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque Mínimo</label>
-                      <input required type="number" value={storeForm.minStock} onChange={e => setStoreForm({...storeForm, minStock: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg" />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque de Segurança (Mín)</label>
+                      <input required type="number" step="0.01" value={storeForm.minStock} onChange={e => setStoreForm({...storeForm, minStock: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg" />
                    </div>
                 </div>
-                <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black shadow-xl mt-4">Salvar no Almoxarifado</button>
+                <div className="flex gap-4 pt-4">
+                   <button 
+                     type="button"
+                     onClick={() => setIsStoreModalOpen(false)}
+                     className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all"
+                   >
+                     Cancelar
+                   </button>
+                   <button type="submit" className="flex-[2] py-5 bg-slate-900 text-white rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest text-xs">
+                     {editingStoreItem ? 'Salvar Alterações' : 'Salvar no Almoxarifado'}
+                   </button>
+                </div>
              </form>
           </div>
         </div>
       )}
 
-      {/* Modal Manutenção */}
+      {/* Modal Manutenção (Existing) */}
       {isMaintModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
            <div className="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">

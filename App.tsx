@@ -71,13 +71,21 @@ const App: React.FC = () => {
     const loadData = async () => {
       setSyncing(true);
       try {
-        const [savedTxs, savedUsers, savedInv, savedCust, savedCompanies, savedOrders] = await Promise.all([
+        const [
+          savedTxs, savedUsers, savedInv, savedCust, 
+          savedCompanies, savedOrders, savedMachines, 
+          savedStore, savedMaint, savedFuel
+        ] = await Promise.all([
           financeService.getTransactions(),
           userService.getAll(),
           inventoryService.getInventory(),
           db.getTable('customers'),
           db.getTable('companies'),
-          orderService.getOrders()
+          orderService.getOrders(),
+          db.getTable('machines'),
+          db.getTable('store_items'),
+          db.getTable('maintenance_records'),
+          db.getTable('fuel_records')
         ]);
 
         if (savedCompanies && savedCompanies.length > 0) {
@@ -97,6 +105,10 @@ const App: React.FC = () => {
         
         if (savedUsers.length > 0) setUsers(savedUsers);
         if (savedOrders.length > 0) setOrders(savedOrders);
+        if (savedMachines.length > 0) setMachines(savedMachines);
+        if (savedStore.length > 0) setStoreItems(savedStore);
+        if (savedMaint.length > 0) setMaintenances(savedMaint);
+        if (savedFuel.length > 0) setFuelRecords(savedFuel);
 
         if (savedInv.length > 0) {
           setInventory(savedInv.map((i: any) => ({
@@ -122,7 +134,7 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Sincronização Automática
+  // Sincronização Automática para transações e pedidos
   useEffect(() => {
     if (transactions.length > 0) financeService.saveTransactions(transactions);
   }, [transactions]);
@@ -131,17 +143,92 @@ const App: React.FC = () => {
     if (orders.length > 0) orderService.saveOrders(orders);
   }, [orders]);
 
-  // Derivations com segurança
+  // Derivations filtradas por filial
   const filteredInventory = useMemo(() => inventory.filter(i => i.companyId === selectedCompanyId), [inventory, selectedCompanyId]);
   const filteredTransactions = useMemo(() => transactions.filter(t => t.companyId === selectedCompanyId), [transactions, selectedCompanyId]);
   const filteredCustomers = useMemo(() => customers.filter(c => c.companyId === selectedCompanyId), [customers, selectedCompanyId]);
   const filteredAccounts = useMemo(() => accounts.filter(a => a.companyId === selectedCompanyId), [accounts, selectedCompanyId]);
   const filteredOrders = useMemo(() => orders.filter(o => o.companyId === selectedCompanyId), [orders, selectedCompanyId]);
+  const filteredMachines = useMemo(() => machines.filter(m => m.companyId === selectedCompanyId), [machines, selectedCompanyId]);
+  const filteredStoreItems = useMemo(() => storeItems.filter(s => s.companyId === selectedCompanyId), [storeItems, selectedCompanyId]);
+  const filteredMaintenances = useMemo(() => maintenances.filter(m => m.companyId === selectedCompanyId), [maintenances, selectedCompanyId]);
+  const filteredFuelRecords = useMemo(() => fuelRecords.filter(f => f.companyId === selectedCompanyId), [fuelRecords, selectedCompanyId]);
   
   const activeCompany = useMemo(() => 
     companies.find(c => c.id === selectedCompanyId) || companies[0], 
   [companies, selectedCompanyId]);
 
+  // Handlers Frota e Pátio
+  const handleAddMachine = (machineData: Omit<Machine, 'id' | 'companyId'>) => {
+    const newMachine: Machine = { ...machineData, id: `mach-${Date.now()}`, companyId: selectedCompanyId };
+    setMachines(prev => [...prev, newMachine]);
+    db.upsert('machines', newMachine);
+  };
+
+  const handleUpdateHorimeter = (machineId: string, newHorimeter: number) => {
+    setMachines(prev => prev.map(m => {
+      if (m.id === machineId) {
+        const updated = { ...m, currentHorimeter: newHorimeter };
+        db.upsert('machines', updated);
+        return updated;
+      }
+      return m;
+    }));
+  };
+
+  const handleAddFuel = (fuelData: Omit<FuelRecord, 'id' | 'companyId'>) => {
+    const newFuel: FuelRecord = { ...fuelData, id: `fuel-${Date.now()}`, companyId: selectedCompanyId };
+    setFuelRecords(prev => [...prev, newFuel]);
+    db.upsert('fuel_records', newFuel);
+    
+    // Atualiza horímetro da máquina automaticamente
+    handleUpdateHorimeter(fuelData.machineId, fuelData.horimeter);
+
+    // Lança despesa no financeiro
+    handleAddTransaction({
+      accountId: filteredAccounts[0]?.id || '',
+      costCenterId: 'cc3',
+      date: fuelData.date,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMADO,
+      description: `Abastecimento: ${machines.find(m => m.id === fuelData.machineId)?.name || 'Máquina'}`,
+      category: 'Combustível',
+      amount: fuelData.totalCost,
+      paidAmount: fuelData.totalCost
+    });
+  };
+
+  const handleAddMaintenance = (maintData: Omit<MaintenanceRecord, 'id' | 'companyId'>) => {
+    const newMaint: MaintenanceRecord = { ...maintData, id: `maint-${Date.now()}`, companyId: selectedCompanyId };
+    setMaintenances(prev => [...prev, newMaint]);
+    db.upsert('maintenance_records', newMaint);
+
+    // Lança despesa no financeiro
+    handleAddTransaction({
+      accountId: filteredAccounts[0]?.id || '',
+      costCenterId: 'cc3',
+      date: maintData.date,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMADO,
+      description: `Manutenção: ${machines.find(m => m.id === maintData.machineId)?.name || 'Máquina'}`,
+      category: 'Manutenção Veículos',
+      amount: maintData.cost,
+      paidAmount: maintData.cost
+    });
+  };
+
+  const handleAddStoreItem = (itemData: Omit<StoreItem, 'id' | 'companyId'>) => {
+    const newItem: StoreItem = { ...itemData, id: `store-${Date.now()}`, companyId: selectedCompanyId };
+    setStoreItems(prev => [...prev, newItem]);
+    db.upsert('store_items', newItem);
+  };
+
+  const handleUpdateStoreItem = (item: StoreItem) => {
+    setStoreItems(prev => prev.map(s => s.id === item.id ? item : s));
+    db.upsert('store_items', item);
+  };
+
+  // Handlers Financeiros
   const handleUpdateAccount = (updatedAccount: FinancialAccount) => {
     setAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
   };
@@ -165,10 +252,7 @@ const App: React.FC = () => {
       companyId: selectedCompanyId,
       totalSpent: 0
     }));
-    
     setCustomers(prev => [...prev, ...formatted]);
-    
-    // Salva no banco de dados (Supabase/Local)
     db.upsert('customers', formatted);
   };
 
@@ -214,26 +298,16 @@ const App: React.FC = () => {
       reference,
       companyId: selectedCompanyId
     };
-
     setOrders(prev => [...prev, newOrder]);
-
-    if (newOrder.status === OrderStatus.FINALIZED) {
-      finalizeSale(newOrder, newOrder.payments);
-    }
+    if (newOrder.status === OrderStatus.FINALIZED) finalizeSale(newOrder, newOrder.payments);
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    // Redução de estoque
     order.items.forEach(item => processStockChange(item.productId, -item.quantity));
-
-    // Registro das transações para cada parcela/pagamento
     payments.forEach(payment => {
       let actualPaid = 0;
-      if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
-        actualPaid = payment.amount;
-      } else if (payment.status === TransactionStatus.PARCIAL) {
-        actualPaid = payment.paidAmount || 0;
-      }
+      if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) actualPaid = payment.amount;
+      else if (payment.status === TransactionStatus.PARCIAL) actualPaid = payment.paidAmount || 0;
 
       handleAddTransaction({
         accountId: payment.accountId,
@@ -250,20 +324,13 @@ const App: React.FC = () => {
         notes: `Pedido de Venda: ${order.reference}`
       });
     });
-
-    // Atualiza volume de gastos do cliente
-    setCustomers(prev => prev.map(c => 
-      c.id === order.customerId ? { ...c, totalSpent: Number(c.totalSpent) + order.total } : c
-    ));
-
-    // Atualiza status do pedido localmente
+    setCustomers(prev => prev.map(c => c.id === order.customerId ? { ...c, totalSpent: Number(c.totalSpent) + order.total } : c));
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, payments, status: OrderStatus.FINALIZED } : o));
   };
 
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(updatedOrder, updatedOrder.payments);
     }
@@ -275,7 +342,7 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <Dashboard transactions={filteredTransactions} inventory={filteredInventory} customers={filteredCustomers} />;
+      case 'dashboard': return <Dashboard transactions={filteredTransactions} inventory={filteredInventory} customers={filteredCustomers} onNavigate={setCurrentView} />;
       case 'orders': return (
         <SalesOrders 
           orders={filteredOrders} 
@@ -315,8 +382,32 @@ const App: React.FC = () => {
       );
       case 'customers': return <Customers customers={filteredCustomers} onImportCustomers={handleImportCustomers} />;
       case 'cashflow': return <CashFlow transactions={filteredTransactions} />;
-      case 'users': return <UserManagement users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} />;
-      default: return <Dashboard transactions={filteredTransactions} inventory={filteredInventory} customers={filteredCustomers} />;
+      case 'users': return <UserManagement users={users} companies={companies} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} />;
+      case 'fleet': return (
+        <FleetManagement 
+          machines={filteredMachines} 
+          onAddMachine={handleAddMachine} 
+          onUpdateHorimeter={handleUpdateHorimeter} 
+        />
+      );
+      case 'fuel': return (
+        <FuelManagement 
+          machines={filteredMachines} 
+          fuelRecords={filteredFuelRecords} 
+          onAddFuel={handleAddFuel} 
+        />
+      );
+      case 'yard': return (
+        <YardManagement 
+          machines={filteredMachines} 
+          storeItems={filteredStoreItems} 
+          maintenances={filteredMaintenances} 
+          onAddMaintenance={handleAddMaintenance} 
+          onAddStoreItem={handleAddStoreItem} 
+          onUpdateStoreItem={handleUpdateStoreItem} 
+        />
+      );
+      default: return <Dashboard transactions={filteredTransactions} inventory={filteredInventory} customers={filteredCustomers} onNavigate={setCurrentView} />;
     }
   };
 

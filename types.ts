@@ -33,6 +33,7 @@ export enum UserRole {
 
 export interface User {
   id: string;
+  companyId?: string; // Opcional para Admins Globais, Obrigatório para Operadores de Filial
   name: string;
   email: string;
   role: UserRole;

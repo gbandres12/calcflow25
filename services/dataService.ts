@@ -7,10 +7,32 @@ const SUPABASE_KEY = 'sb_publishable_J5K2LFz-hbZ-Z-WHTUwYrw_g6Cjy1-M';
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /**
- * Utilitário de persistência híbrida:
- * Tenta sincronizar com Supabase, mas mantém cópia local e 
- * serve como fallback caso as tabelas não existam no schema.
+ * Utilitários para converter chaves entre camelCase e snake_case
  */
+const toSnakeCase = (obj: any): any => {
+  if (Array.isArray(obj)) return obj.map(toSnakeCase);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      acc[snakeKey] = toSnakeCase(obj[key]);
+      return acc;
+    }, {} as any);
+  }
+  return obj;
+};
+
+const toCamelCase = (obj: any): any => {
+  if (Array.isArray(obj)) return obj.map(toCamelCase);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce((acc, key) => {
+      const camelKey = key.replace(/(_\w)/g, m => m[1].toUpperCase());
+      acc[camelKey] = toCamelCase(obj[key]);
+      return acc;
+    }, {} as any);
+  }
+  return obj;
+};
+
 const storage = {
   get(key: string) {
     const val = localStorage.getItem(`calcarioflow_${key}`);
@@ -26,43 +48,42 @@ export const db = {
     try {
       const { data, error } = await supabase.from(tableName).select('*');
       
-      // Se der erro de tabela não encontrada (PGRST116 ou similar), usamos o fallback local
       if (error) {
-        console.warn(`Tabela ${tableName} não encontrada no Supabase. Usando armazenamento local.`);
+        console.warn(`Tabela ${tableName} no Supabase falhou. Usando LocalStorage.`);
         return storage.get(tableName) || [];
       }
       
-      // Atualiza cache local com dados do banco
-      if (data) storage.set(tableName, data);
-      return data || [];
+      const formattedData = toCamelCase(data);
+      if (data) storage.set(tableName, formattedData);
+      return formattedData || [];
     } catch (e: any) {
-      console.warn(`Erro crítico ao acessar ${tableName}, recorrendo ao LocalStorage:`, e.message);
       return storage.get(tableName) || [];
     }
   },
 
   async upsert(tableName: string, record: any) {
-    // Sempre salva localmente primeiro para garantir funcionamento offline/sem schema
-    const current = storage.get(tableName) || [];
     const records = Array.isArray(record) ? record : [record];
     
+    // Atualiza cache local imediatamente (em camelCase)
+    const current = storage.get(tableName) || [];
     const updated = [...current];
     records.forEach(newRec => {
       const idx = updated.findIndex(r => r.id === newRec.id);
       if (idx >= 0) updated[idx] = newRec;
       else updated.push(newRec);
     });
-    
     storage.set(tableName, updated);
 
     try {
-      const { data, error } = await supabase.from(tableName).upsert(record).select();
+      // Converte para snake_case antes de enviar para o Supabase
+      const dbRecords = toSnakeCase(records);
+      const { data, error } = await supabase.from(tableName).upsert(dbRecords).select();
+      
       if (error) {
-        console.error(`Erro de sincronização Supabase (${tableName}):`, error.message);
+        console.error(`Erro Supabase (${tableName}):`, error.message);
       }
-      return data;
+      return toCamelCase(data);
     } catch (e: any) {
-      // Falha silenciosa no banco, o dado já está salvo no localStorage
       return record;
     }
   },
@@ -75,7 +96,7 @@ export const db = {
       const { error } = await supabase.from(tableName).delete().eq('id', id);
       if (error) throw error;
     } catch (e: any) {
-      console.warn(`Erro ao deletar no banco (${tableName}), removido apenas localmente.`);
+      console.warn(`Erro ao deletar no banco (${tableName}).`);
     }
   }
 };
@@ -85,7 +106,6 @@ export const userService = {
     try {
       const { data: users, error } = await supabase.from('users_profile').select('*').eq('email', email);
       
-      // Fallback para login se a tabela de usuários falhar
       if (error || !users || users.length === 0) {
         if (email === 'admin@calcarioflow.com.br' && pass === '123456') {
           return { id: 'u1', name: 'Admin (Offline)', email, role: 'Administrador', status: 'Ativo' };
@@ -93,14 +113,13 @@ export const userService = {
         throw new Error("Usuário não encontrado");
       }
       
-      const user = users[0];
+      const user = toCamelCase(users[0]);
       if (pass === '123456') { 
         await supabase.from('users_profile').update({ last_access: new Date().toISOString() }).eq('id', user.id);
         return user;
       }
       throw new Error("Senha inválida");
     } catch (e: any) {
-      // Se não houver conexão ou tabela, permitir o login admin padrão
       if (email === 'admin@calcarioflow.com.br' && pass === '123456') {
          return { id: 'u1', name: 'Admin (Emergencial)', email, role: 'Administrador', status: 'Ativo' };
       }
