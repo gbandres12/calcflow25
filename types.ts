@@ -50,11 +50,13 @@ export interface CostCenter {
 export interface Company {
   id: string;
   name: string;
+  code: string;
   address?: string;
   document?: string;
   city?: string;
   state?: string;
   phone?: string;
+  isActive: boolean;
 }
 
 export interface FinancialAccount {
@@ -132,6 +134,7 @@ export interface FuelRecord {
 export interface SalePayment {
   id: string;
   amount: number;
+  paidAmount?: number;
   date: string;
   status: TransactionStatus;
   accountId: string;

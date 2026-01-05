@@ -1,6 +1,41 @@
 
 import { Customer, InventoryItem, Transaction, TransactionType, TransactionStatus, Company, FinancialAccount, AccountType, CostCenter, User, UserRole } from './types';
 
+// IDs oficiais sincronizados com o seu banco de dados (UUIDs válidos)
+export const ID_CBA_STM = '68ed0b32-c9c7-40de-8b10-af2900000029';
+export const ID_MUC_RR = '68ed0b32-c9c7-40de-8b10-af2a0000002a';
+export const ID_LDS_STM = '68ed0b32-c9c7-40de-8b10-af2b0000002b';
+
+export const INFLOW_CATEGORIES = [
+  'Vendas',
+  'Distribuição entre Filiais',
+  'Empréstimo entre Filiais',
+  'Outros'
+];
+
+export const OUTFLOW_CATEGORIES = [
+  'Combustível',
+  'Manutenção Veículos',
+  'Peças',
+  'Salários',
+  'Alimentação',
+  'Serviços Terceiros',
+  'Impostos',
+  'Aluguel',
+  'Energia Elétrica',
+  'Água/Esgoto',
+  'Internet/Telefone',
+  'Material de Escritório',
+  'Material de Construção',
+  'EPIs',
+  'Marketing',
+  'Pró-labore',
+  'Outros'
+];
+
+// Mantido para compatibilidade onde for necessário a lista completa
+export const STANDARD_CATEGORIES = [...INFLOW_CATEGORIES, ...OUTFLOW_CATEGORIES];
+
 export const INITIAL_USERS: User[] = [
   { 
     id: 'u1', 
@@ -9,35 +44,42 @@ export const INITIAL_USERS: User[] = [
     role: UserRole.ADMIN, 
     status: 'Ativo',
     lastAccess: new Date().toISOString()
-  },
-  { 
-    id: 'u2', 
-    name: 'Gerente Barreiras', 
-    email: 'gerente.ba@lojasertanejo.com', 
-    role: UserRole.MANAGER, 
-    status: 'Ativo',
-    lastAccess: new Date().toISOString()
   }
 ];
 
 export const INITIAL_COMPANIES: Company[] = [
   { 
-    id: 'c1', 
-    name: 'Calcário Amazônia STM', 
-    address: 'Rod. Santarém-Cuiabá, KM 12', 
+    id: ID_CBA_STM, 
+    name: 'CBA Santarém', 
+    code: 'CBA-STM',
+    address: 'Rodovia Br 163, 1030 - Sale, Santarem - PA', 
     city: 'Santarém', 
     state: 'PA', 
-    document: '11.222.333/0001-01',
-    phone: '(93) 3522-1000'
+    document: '10.375.218/0002-65',
+    phone: '(93) 3522-1000',
+    isActive: true
   },
   { 
-    id: 'c2', 
-    name: 'Loja do Sertanejo', 
-    address: 'Av. das Palmeiras, 500', 
-    city: 'Barreiras', 
-    state: 'BA', 
-    document: '44.555.666/0001-02',
-    phone: '(77) 3611-2000'
+    id: ID_LDS_STM, 
+    name: 'Loja do Sertanejo Santarém', 
+    code: 'LDS-STM',
+    address: 'Rua do Comércio, 500', 
+    city: 'Santarém', 
+    state: 'PA', 
+    document: '25.143.614/0001-53',
+    phone: '(93) 3522-3000',
+    isActive: true
+  },
+  { 
+    id: ID_MUC_RR, 
+    name: 'Mucajaí - Roraima', 
+    code: 'MUC-RR',
+    address: 'Area Vicinal Apiau Km 04, Mucajai - RR', 
+    city: 'Mucajaí', 
+    state: 'RR', 
+    document: '10.375.218/0004-27',
+    phone: '(95) 3415-2000',
+    isActive: true
   }
 ];
 
@@ -49,16 +91,13 @@ export const INITIAL_COST_CENTERS: CostCenter[] = [
 ];
 
 export const INITIAL_ACCOUNTS: FinancialAccount[] = [
-  { id: 'acc_c1', companyId: 'c1', name: 'Caixa Geral - STM', type: AccountType.CAIXA, initialBalance: 0 }
+  { id: 'acc_c1', companyId: ID_CBA_STM, name: 'Caixa Geral - STM', type: AccountType.CAIXA, initialBalance: 0 }
 ];
 
 export const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: 'britado', companyId: 'c1', name: 'Calcário Britado', quantity: 100, unitPrice: 40.00, minStock: 20 },
-  { id: 'moido', companyId: 'c1', name: 'Calcário Moído', quantity: 50, unitPrice: 95.00, minStock: 15 }
+  { id: 'britado', companyId: ID_CBA_STM, name: 'Calcário Britado', quantity: 100, unitPrice: 40.00, minStock: 20 },
+  { id: 'moido', companyId: ID_CBA_STM, name: 'Calcário Moído', quantity: 50, unitPrice: 95.00, minStock: 15 }
 ];
 
-export const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'cust1', companyId: 'c1', name: 'Fazenda Rio Verde', document: '12.345.678/0001-90', email: 'contato@rioverde.com', phone: '(93) 9999-0001', totalSpent: 0 }
-];
-
+export const INITIAL_CUSTOMERS: Customer[] = [];
 export const INITIAL_TRANSACTIONS: Transaction[] = [];

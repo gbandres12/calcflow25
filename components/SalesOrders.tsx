@@ -3,7 +3,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { SaleOrder, Customer, InventoryItem, OrderStatus, Company, SalePayment, TransactionStatus, FinancialAccount } from '../types';
 import { 
   Plus, Printer, FileCheck, Search, X, 
-  ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck
+  ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
+  PlusCircle, Banknote, Landmark, Wallet, ChevronRight
 } from 'lucide-react';
 
 interface SalesOrdersProps {
@@ -43,32 +44,85 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(true);
   const [notes, setNotes] = useState('');
+  
+  // New Payments State
+  const [payments, setPayments] = useState<SalePayment[]>([]);
 
   const formatBRL = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+  const subtotalValue = useMemo(() => {
+    return (parseFloat(quantity) || 0) * (parseFloat(unitPrice) || 0);
+  }, [quantity, unitPrice]);
+
   const totalOrderValue = useMemo(() => {
-    const subtotal = parseFloat(quantity || '0') * parseFloat(unitPrice || '0');
-    return subtotal - parseFloat(discount || '0') + parseFloat(shipping || '0');
-  }, [quantity, unitPrice, discount, shipping]);
+    return subtotalValue - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0);
+  }, [subtotalValue, discount, shipping]);
+
+  const totalProgrammed = useMemo(() => {
+    return payments.reduce((acc, p) => acc + p.amount, 0);
+  }, [payments]);
+
+  const remainingToProgram = totalOrderValue - totalProgrammed;
 
   useEffect(() => {
     if (editingOrder) {
       setSelectedCustomerId(editingOrder.customerId);
-      setQuantity(editingOrder.items[0].quantity.toString());
-      setUnitPrice(editingOrder.items[0].unitPrice.toString());
+      const firstItem = editingOrder.items[0];
+      setQuantity(firstItem ? firstItem.quantity.toString() : '');
+      setUnitPrice(firstItem ? firstItem.unitPrice.toString() : '');
       setDiscount(editingOrder.discount.toString());
       setShipping(editingOrder.shipping.toString());
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
       setNotes(editingOrder.notes || '');
+      setPayments(editingOrder.payments || []);
       setIsModalOpen(true);
+    } else {
+      setPayments([]);
     }
   }, [editingOrder]);
+
+  const addPaymentRow = () => {
+    const newPayment: SalePayment = {
+      id: `pay-${Date.now()}-${Math.random()}`,
+      amount: remainingToProgram > 0 ? remainingToProgram : 0,
+      paidAmount: 0,
+      date: new Date().toISOString().split('T')[0],
+      status: TransactionStatus.PENDENTE,
+      accountId: accounts[0]?.id || '',
+      description: `Parcela ${payments.length + 1}`
+    };
+    setPayments([...payments, newPayment]);
+  };
+
+  const removePaymentRow = (id: string) => {
+    setPayments(payments.filter(p => p.id !== id));
+  };
+
+  const updatePaymentRow = (id: string, field: keyof SalePayment, value: any) => {
+    setPayments(payments.map(p => {
+      if (p.id === id) {
+        const updated = { ...p, [field]: value };
+        // Regra de negócio: se o status for confirmado ou pago, o paidAmount vira o amount total
+        if (field === 'status' && (value === TransactionStatus.CONFIRMADO || value === TransactionStatus.PAGO)) {
+          updated.paidAmount = updated.amount;
+        } else if (field === 'status' && value === TransactionStatus.PENDENTE) {
+          updated.paidAmount = 0;
+        }
+        return updated;
+      }
+      return p;
+    }));
+  };
 
   const handleCreateOrUpdateOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerId) return;
 
-    const subtotal = parseFloat(quantity) * parseFloat(unitPrice);
+    if (!isBudget && Math.abs(remainingToProgram) > 0.01) {
+      alert(`Erro: O plano de pagamento deve totalizar ${formatBRL(totalOrderValue)}. Saldo restante: ${formatBRL(remainingToProgram)}`);
+      return;
+    }
+
     const itemData = {
       productId: 'moido',
       productCode: '001',
@@ -77,37 +131,29 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       quantity: parseFloat(quantity),
       unitPrice: parseFloat(unitPrice),
       discount: 0,
-      total: subtotal
+      total: subtotalValue
+    };
+
+    const orderPayload = {
+      customerId: selectedCustomerId,
+      sellerName: 'Vendedor Padrão',
+      date: editingOrder?.date || new Date().toISOString().split('T')[0],
+      deliveryDate: new Date().toISOString().split('T')[0],
+      validUntil: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      subtotal: subtotalValue,
+      discount: parseFloat(discount),
+      shipping: parseFloat(shipping),
+      total: totalOrderValue,
+      status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
+      items: [itemData],
+      payments: payments,
+      notes: notes
     };
 
     if (editingOrder) {
-      onUpdateOrder({
-        ...editingOrder,
-        customerId: selectedCustomerId,
-        subtotal: subtotal,
-        discount: parseFloat(discount),
-        shipping: parseFloat(shipping),
-        total: totalOrderValue,
-        status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
-        notes: notes,
-        items: [itemData]
-      });
+      onUpdateOrder({ ...editingOrder, ...orderPayload });
     } else {
-      onAddOrder({
-        customerId: selectedCustomerId,
-        sellerName: 'Vendedor Padrão',
-        date: new Date().toISOString().split('T')[0],
-        deliveryDate: new Date().toISOString().split('T')[0],
-        validUntil: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-        subtotal: subtotal,
-        discount: parseFloat(discount),
-        shipping: parseFloat(shipping),
-        total: totalOrderValue,
-        status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
-        items: [itemData],
-        payments: [],
-        notes: notes
-      });
+      onAddOrder(orderPayload);
     }
     handleCloseModal();
   };
@@ -125,6 +171,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setDiscount('0');
     setShipping('0');
     setNotes('');
+    setPayments([]);
   };
 
   const handleConfirmDeletion = () => {
@@ -218,7 +265,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Modal Criar/Editar */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg">
@@ -232,57 +279,168 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               <button onClick={handleCloseModal} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X size={24} /></button>
             </div>
             
-            <form onSubmit={handleCreateOrUpdateOrder} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+            <form onSubmit={handleCreateOrUpdateOrder} className="p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-4 p-1.5 bg-slate-100 rounded-2xl">
                 <button type="button" onClick={() => setIsBudget(true)} className={`py-3 rounded-xl font-black text-xs transition-all ${isBudget ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}>APENAS ORÇAMENTO</button>
                 <button type="button" onClick={() => setIsBudget(false)} className={`py-3 rounded-xl font-black text-xs transition-all ${!isBudget ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500'}`}>VENDA DIRETA</button>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><User size={12} /> Cliente Destinatário</label>
-                  <select required value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm">
-                    <option value="">Selecione o cliente...</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Coluna Dados do Pedido */}
+                <div className="space-y-6">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><FileText size={14}/> Dados Gerais</h4>
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><User size={12} /> Cliente Destinatário</label>
+                      <select required value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm">
+                        <option value="">Selecione o cliente...</option>
+                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest"><Package size={12} className="inline mr-1" /> Toneladas</label>
+                        <input required type="number" step="0.1" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="0.0" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço Unitário (R$)</label>
+                        <input required type="number" step="0.01" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="0.00" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Tag size={12} /> Desconto (R$)</label>
+                        <input type="number" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-rose-500 outline-none font-bold text-sm" placeholder="0.00" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Truck size={12} /> Frete (R$)</label>
+                        <input type="number" step="0.01" value={shipping} onChange={e => setShipping(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-bold text-sm" placeholder="0.00" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações do Pedido</label>
+                      <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[80px] resize-none" placeholder="Detalhes de entrega..." />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest"><Package size={12} className="inline mr-1" /> Toneladas</label>
-                    <input required type="number" step="0.1" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="0.0" />
+                {/* Coluna Plano de Pagamento */}
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14}/> Plano de Recebimento</h4>
+                    {!isBudget && (
+                      <button type="button" onClick={addPaymentRow} className="text-purple-600 hover:text-purple-700 font-black text-[10px] uppercase flex items-center gap-1">
+                        <PlusCircle size={14}/> Adicionar Parcela
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço Unitário (R$)</label>
-                    <input required type="number" step="0.01" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="0.00" />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Tag size={12} /> Desconto Total (R$)</label>
-                    <input type="number" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-rose-500 outline-none font-bold text-sm" placeholder="0.00" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Truck size={12} /> Frete (R$)</label>
-                    <input type="number" step="0.01" value={shipping} onChange={e => setShipping(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-bold text-sm" placeholder="0.00" />
-                  </div>
-                </div>
+                  {isBudget ? (
+                    <div className="p-8 bg-slate-50 rounded-3xl border border-dashed border-slate-200 text-center space-y-3">
+                       <Banknote size={32} className="mx-auto text-slate-300"/>
+                       <p className="text-xs text-slate-500 font-medium px-4">O plano de pagamento será definido apenas na conversão de orçamento para venda confirmada.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {payments.length === 0 && (
+                        <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-3">
+                          <AlertTriangle size={20} className="text-amber-600 shrink-0"/>
+                          <p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-tighter">
+                            Nenhum pagamento programado. Adicione pelo menos uma parcela para prosseguir.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {payments.map((payment, idx) => {
+                        const isPartial = payment.status === TransactionStatus.PARCIAL;
+                        return (
+                          <div key={payment.id} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm relative group">
+                            <button onClick={() => removePaymentRow(payment.id)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X size={12}/></button>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                 <label className="text-[9px] font-black text-slate-400 uppercase">Valor Parcela</label>
+                                 <input type="number" step="0.01" value={payment.amount} onChange={e => updatePaymentRow(payment.id, 'amount', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-black text-sm" />
+                              </div>
+                              <div className="space-y-1">
+                                 <label className="text-[9px] font-black text-slate-400 uppercase">Vencimento</label>
+                                 <input type="date" value={payment.date} onChange={e => updatePaymentRow(payment.id, 'date', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs" />
+                              </div>
+                            </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações do Pedido</label>
-                  <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[100px] resize-none" placeholder="Detalhes de entrega, condições especiais, etc." />
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                 <label className="text-[9px] font-black text-slate-400 uppercase">Status</label>
+                                 <select value={payment.status} onChange={e => updatePaymentRow(payment.id, 'status', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs">
+                                    <option value={TransactionStatus.PENDENTE}>Pendente</option>
+                                    <option value={TransactionStatus.CONFIRMADO}>Recebido (Total)</option>
+                                    <option value={TransactionStatus.PARCIAL}>Recebido (Parcial)</option>
+                                 </select>
+                              </div>
+                              <div className="space-y-1">
+                                 <label className="text-[9px] font-black text-slate-400 uppercase">{isPartial ? 'Já Recebido' : 'Conta Destino'}</label>
+                                 {isPartial ? (
+                                   <input 
+                                     type="number" 
+                                     step="0.01" 
+                                     value={payment.paidAmount || 0} 
+                                     onChange={e => updatePaymentRow(payment.id, 'paidAmount', parseFloat(e.target.value))} 
+                                     className="w-full p-2 bg-blue-50 border border-blue-100 rounded-lg outline-none font-black text-xs text-blue-700" 
+                                   />
+                                 ) : (
+                                   <select value={payment.accountId} onChange={e => updatePaymentRow(payment.id, 'accountId', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs">
+                                      {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                    </select>
+                                 )}
+                              </div>
+                            </div>
+                            
+                            {isPartial && (
+                              <div className="space-y-1 pt-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase">Conta Destino do Recebido</label>
+                                <select value={payment.accountId} onChange={e => updatePaymentRow(payment.id, 'accountId', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs">
+                                  {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Resumo Financeiro do Pedido */}
+                      <div className="mt-6 p-6 bg-slate-900 rounded-[2rem] border border-slate-800 space-y-4">
+                         <div className="flex justify-between items-center text-slate-400">
+                            <span className="text-[10px] font-black uppercase tracking-widest">Valor do Pedido</span>
+                            <span className="font-bold">{formatBRL(totalOrderValue)}</span>
+                         </div>
+                         <div className="flex justify-between items-center text-slate-400">
+                            <span className="text-[10px] font-black uppercase tracking-widest">Programado</span>
+                            <span className="font-bold">{formatBRL(totalProgrammed)}</span>
+                         </div>
+                         <div className="pt-3 border-t border-slate-800 flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
+                               {remainingToProgram === 0 ? <ShieldCheck size={14} className="text-emerald-500"/> : <Clock size={14} className="text-amber-500"/>}
+                               Saldo a Programar
+                            </span>
+                            <span className={`text-lg font-black ${remainingToProgram === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                               {formatBRL(remainingToProgram)}
+                            </span>
+                         </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="bg-slate-900 p-8 rounded-[2.5rem] flex flex-col items-center text-white border border-slate-800 shadow-xl shadow-slate-100">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 mb-1">Investimento Total Estimado</span>
-                <span className="text-3xl font-black tracking-tighter">{formatBRL(totalOrderValue)}</span>
+              <div className="pt-6 border-t border-slate-100 flex gap-4">
+                 <button type="button" onClick={handleCloseModal} className="px-8 py-5 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
+                 <button type="submit" className={`flex-1 py-5 rounded-2xl font-black text-white shadow-xl transition-all hover:scale-[1.01] ${isBudget ? 'bg-amber-500 shadow-amber-100 text-slate-900' : 'bg-purple-600 shadow-purple-100'}`}>
+                   {editingOrder ? 'Salvar Alterações' : (isBudget ? 'Emitir Orçamento' : 'Finalizar Pedido de Venda')}
+                 </button>
               </div>
-
-              <button type="submit" className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-all hover:scale-[1.01] ${isBudget ? 'bg-amber-500 shadow-amber-100 text-slate-900' : 'bg-purple-600 shadow-purple-100'}`}>
-                {editingOrder ? 'Salvar Alterações' : (isBudget ? 'Emitir Orçamento' : 'Confirmar e Finalizar Venda')}
-              </button>
             </form>
           </div>
         </div>
@@ -293,197 +451,123 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         <div className="fixed inset-0 bg-white z-[999] p-0 text-slate-900 hidden print:block overflow-visible" 
           style={{ width: '210mm', minHeight: '297mm', padding: '10mm', margin: '0 auto', fontFamily: "'Inter', sans-serif" }}>
           
-          {/* CABECALHO */}
           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '4px solid #1B3C73', paddingBottom: '15px', marginBottom: '25px' }}>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-               <div style={{ width: '100px', height: '100px', background: '#F8FAFC', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E2E8F0' }}>
-                  <img src="https://api.dicebear.com/7.x/initials/svg?seed=CA" alt="Logo" style={{ width: '60px' }} />
+               <div style={{ width: '80px', height: '80px', background: '#F8FAFC', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E2E8F0' }}>
+                  <img src="https://api.dicebear.com/7.x/initials/svg?seed=CA" alt="Logo" style={{ width: '40px' }} />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <h1 style={{ fontSize: '24px', fontWeight: '900', color: '#1B3C73', margin: 0, letterSpacing: '-0.02em' }}>{company.name}</h1>
-                  <p style={{ fontSize: '10px', color: '#555', margin: 0, fontWeight: '700' }}>CNPJ: {company.document}</p>
-                  <p style={{ fontSize: '10px', color: '#555', margin: 0 }}>{company.address}</p>
-                  <p style={{ fontSize: '10px', color: '#555', margin: 0 }}>{company.city} - {company.state}</p>
-                  <p style={{ fontSize: '10px', color: '#555', margin: 0 }}>FONE: {company.phone}</p>
+                  <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#1B3C73', margin: 0 }}>{company.name}</h1>
+                  <p style={{ fontSize: '9px', color: '#555', margin: 0, fontWeight: '700' }}>CNPJ: {company.document}</p>
+                  <p style={{ fontSize: '9px', color: '#555', margin: 0 }}>{company.address}</p>
+                  <p style={{ fontSize: '9px', color: '#555', margin: 0 }}>FONE: {company.phone}</p>
                </div>
             </div>
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-               <h2 style={{ fontSize: '14pt', fontWeight: '800', color: '#0B1E3C', margin: 0, textTransform: 'uppercase' }}>
+               <h2 style={{ fontSize: '12pt', fontWeight: '800', color: '#0B1E3C', margin: 0, textTransform: 'uppercase' }}>
                  {printOrder.status === OrderStatus.BUDGET ? 'ORÇAMENTO' : 'PEDIDO DE VENDA'}
                </h2>
-               <p style={{ fontSize: '26px', fontWeight: '900', color: '#1B3C73', margin: '4px 0' }}>Nº {printOrder.reference}</p>
+               <p style={{ fontSize: '22px', fontWeight: '900', color: '#1B3C73', margin: '4px 0' }}>Nº {printOrder.reference}</p>
             </div>
           </div>
 
-          {/* DADOS DO DOCUMENTO */}
-          <div style={{ background: '#F9FAFB', border: '1px solid #E2E8F0', padding: '15px', borderRadius: '10px', marginBottom: '25px' }}>
-             <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px', marginBottom: '12px', textTransform: 'uppercase' }}>
-               {printOrder.status === OrderStatus.BUDGET ? 'Dados do Orçamento' : 'Dados do Pedido'}
-             </h3>
-             <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+          <div style={{ background: '#F9FAFB', border: '1px solid #E2E8F0', padding: '15px', borderRadius: '10px', marginBottom: '20px' }}>
+             <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
                 <tbody>
                    <tr>
-                      <td style={{ padding: '6px 0', fontWeight: '700', width: '15%', color: '#666' }}>Cliente:</td>
-                      <td style={{ padding: '6px 0', fontWeight: '800' }}>{customers.find(c => c.id === printOrder.customerId)?.name} ({customers.find(c => c.id === printOrder.customerId)?.document})</td>
-                      <td style={{ padding: '6px 0', fontWeight: '700', width: '15%', color: '#666' }}>Emissão:</td>
-                      <td style={{ padding: '6px 0', fontWeight: '800' }}>{printOrder.date}</td>
-                   </tr>
-                   <tr>
-                      <td style={{ padding: '6px 0', fontWeight: '700', color: '#666' }}>Vendedor:</td>
-                      <td style={{ padding: '6px 0', fontWeight: '800' }}>{printOrder.sellerName}</td>
-                      <td style={{ padding: '6px 0', fontWeight: '700', color: '#666' }}>{printOrder.status === OrderStatus.BUDGET ? 'Validade:' : 'Entrega:'}</td>
-                      <td style={{ padding: '6px 0', fontWeight: '800' }}>{printOrder.status === OrderStatus.BUDGET ? printOrder.validUntil : printOrder.deliveryDate}</td>
+                      <td style={{ padding: '4px 0', fontWeight: '700', width: '15%', color: '#666' }}>Cliente:</td>
+                      <td style={{ padding: '4px 0', fontWeight: '800' }}>{customers.find(c => c.id === printOrder.customerId)?.name}</td>
+                      <td style={{ padding: '4px 0', fontWeight: '700', width: '15%', color: '#666' }}>Emissão:</td>
+                      <td style={{ padding: '4px 0', fontWeight: '800' }}>{printOrder.date}</td>
                    </tr>
                 </tbody>
              </table>
           </div>
 
-          {/* ITENS DO PEDIDO */}
-          <div style={{ marginBottom: '25px' }}>
-            <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px', marginBottom: '12px', textTransform: 'uppercase' }}>
-               📦 Itens do {printOrder.status === OrderStatus.BUDGET ? 'Orçamento' : 'Pedido'}
-            </h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
                <thead>
                   <tr style={{ background: '#F9FAFB', color: '#1B3C73', borderBottom: '2px solid #1B3C73' }}>
-                     <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '800' }}>REF</th>
-                     <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '800' }}>DESCRIÇÃO</th>
-                     <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '800' }}>UN</th>
-                     <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '800' }}>QTD</th>
-                     <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '800' }}>UNITÁRIO</th>
-                     <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '800' }}>DESC.</th>
-                     <th style={{ textAlign: 'right', padding: '12px 8px', fontWeight: '800' }}>TOTAL</th>
+                     <th style={{ textAlign: 'left', padding: '10px 8px' }}>DESCRIÇÃO</th>
+                     <th style={{ textAlign: 'center', padding: '10px 8px' }}>QTD</th>
+                     <th style={{ textAlign: 'right', padding: '10px 8px' }}>UNITÁRIO</th>
+                     <th style={{ textAlign: 'right', padding: '10px 8px' }}>TOTAL</th>
                   </tr>
                </thead>
                <tbody>
                   {printOrder.items.map((item, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                       <td style={{ padding: '10px 8px' }}>{item.productCode}</td>
-                       <td style={{ padding: '10px 8px', fontWeight: '700' }}>{item.productName}</td>
-                       <td style={{ padding: '10px 8px', textAlign: 'center' }}>{item.unit}</td>
-                       <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '800' }}>{item.quantity}</td>
-                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{formatBRL(item.unitPrice)}</td>
-                       <td style={{ padding: '10px 8px', textAlign: 'right', color: '#666' }}>{formatBRL(item.discount)}</td>
-                       <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#1B3C73' }}>{formatBRL(item.total)}</td>
+                       <td style={{ padding: '8px', fontWeight: '700' }}>{item.productName}</td>
+                       <td style={{ padding: '8px', textAlign: 'center', fontWeight: '800' }}>{item.quantity} {item.unit}</td>
+                       <td style={{ padding: '8px', textAlign: 'right' }}>{formatBRL(item.unitPrice)}</td>
+                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(item.total)}</td>
                     </tr>
                   ))}
                </tbody>
             </table>
           </div>
 
-          {/* TOTAIS E PAGAMENTO */}
-          <div style={{ display: 'flex', gap: '25px', marginBottom: '35px' }}>
-             {/* Condições de Pagamento */}
+          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '6px', marginBottom: '12px', textTransform: 'uppercase' }}>
-                   Forma / Condições de Pagamento
+                <h3 style={{ fontSize: '10px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase' }}>
+                   Condições de Pagamento
                 </h3>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
                    <thead>
-                      <tr style={{ background: '#F8FAFC', color: '#0B1E3C' }}>
-                         <th style={{ textAlign: 'left', padding: '8px', fontWeight: '800' }}>DESCRIÇÃO</th>
-                         <th style={{ textAlign: 'left', padding: '8px', fontWeight: '800' }}>VENCIMENTO</th>
-                         <th style={{ textAlign: 'right', padding: '8px', fontWeight: '800' }}>VALOR</th>
+                      <tr style={{ background: '#F8FAFC' }}>
+                         <th style={{ textAlign: 'left', padding: '6px' }}>VENCIMENTO</th>
+                         <th style={{ textAlign: 'right', padding: '6px' }}>VALOR</th>
                       </tr>
                    </thead>
                    <tbody>
-                      {printOrder.payments.length > 0 ? printOrder.payments.map((p, idx) => (
+                      {printOrder.payments.map((p, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                           <td style={{ padding: '8px' }}>{p.description || `Parcela ${idx+1}`}</td>
-                           <td style={{ padding: '8px' }}>{p.date}</td>
-                           <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(p.amount)}</td>
+                           <td style={{ padding: '6px' }}>{p.date}</td>
+                           <td style={{ padding: '6px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(p.amount)}</td>
                         </tr>
-                      )) : (
-                        <tr>
-                           <td colSpan={3} style={{ padding: '15px', textAlign: 'center', fontStyle: 'italic', color: '#999', fontSize: '11px' }}>
-                              A definir no ato do faturamento / Entrega
-                           </td>
-                        </tr>
-                      )}
+                      ))}
                    </tbody>
                 </table>
              </div>
-
-             {/* Resumo Financeiro */}
-             <div style={{ width: '280px', background: '#F0F4F8', border: '3px double #1B3C73', padding: '20px', borderRadius: '15px' }}>
-                <table style={{ width: '100%', fontSize: '12px' }}>
+             <div style={{ width: '200px', background: '#F0F4F8', padding: '15px', borderRadius: '10px' }}>
+                <table style={{ width: '100%', fontSize: '11px' }}>
                    <tbody>
-                      <tr>
-                         <td style={{ padding: '5px 0', color: '#555' }}>Total dos Itens:</td>
-                         <td style={{ textAlign: 'right', padding: '5px 0', fontWeight: '700' }}>{formatBRL(printOrder.subtotal)}</td>
-                      </tr>
-                      {printOrder.discount > 0 && (
-                        <tr>
-                           <td style={{ padding: '5px 0', color: '#E11D48' }}>Desconto:</td>
-                           <td style={{ textAlign: 'right', padding: '5px 0', fontWeight: '700', color: '#E11D48' }}>- {formatBRL(printOrder.discount)}</td>
-                        </tr>
-                      )}
-                      {printOrder.shipping > 0 && (
-                        <tr>
-                           <td style={{ padding: '5px 0', color: '#555' }}>Frete:</td>
-                           <td style={{ textAlign: 'right', padding: '5px 0', fontWeight: '700' }}>{formatBRL(printOrder.shipping)}</td>
-                        </tr>
-                      )}
-                      <tr>
-                         <td style={{ padding: '5px 0', color: '#555' }}>Outros:</td>
-                         <td style={{ textAlign: 'right', padding: '5px 0', fontWeight: '700' }}>R$ 0,00</td>
-                      </tr>
-                      <tr style={{ fontSize: '20px', fontWeight: '900', color: '#1B3C73' }}>
-                         <td style={{ padding: '15px 0 0 0' }}>VALOR TOTAL:</td>
-                         <td style={{ textAlign: 'right', padding: '15px 0 0 0' }}>{formatBRL(printOrder.total)}</td>
+                      <tr style={{ fontSize: '16px', fontWeight: '900', color: '#1B3C73' }}>
+                         <td style={{ padding: '10px 0' }}>TOTAL:</td>
+                         <td style={{ textAlign: 'right', padding: '10px 0' }}>{formatBRL(printOrder.total)}</td>
                       </tr>
                    </tbody>
                 </table>
              </div>
           </div>
 
-          {/* OBSERVAÇÕES */}
-          {printOrder.notes && (
-            <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE047', padding: '20px', borderRadius: '12px', marginBottom: '35px' }}>
-               <h4 style={{ fontSize: '11px', fontWeight: '900', color: '#1B3C73', margin: '0 0 8px 0', textTransform: 'uppercase' }}>Observações Gerais:</h4>
-               <p style={{ fontSize: '10px', color: '#444', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{printOrder.notes}</p>
-            </div>
-          )}
-
-          {/* ASSINATURAS */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', gap: '60px' }}>
-             <div style={{ flex: 1, borderTop: '1.5px solid #1B3C73', textAlign: 'center', paddingTop: '12px' }}>
-                <p style={{ fontSize: '10px', margin: 0, fontWeight: '800', color: '#1B3C73' }}>
-                  {printOrder.status === OrderStatus.BUDGET ? 'Assinatura do Cliente' : 'Assinatura do Comprador'}
-                </p>
-                <p style={{ fontSize: '8px', color: '#777', margin: '6px 0 0 0' }}>CPF/CNPJ: ________________________</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', gap: '40px' }}>
+             <div style={{ flex: 1, borderTop: '1px solid #1B3C73', textAlign: 'center', paddingTop: '8px' }}>
+                <p style={{ fontSize: '9px', margin: 0, fontWeight: '800' }}>Assinatura do Cliente</p>
              </div>
-             <div style={{ flex: 1, borderTop: '1.5px solid #1B3C73', textAlign: 'center', paddingTop: '12px' }}>
-                <p style={{ fontSize: '10px', margin: 0, fontWeight: '800', color: '#1B3C73' }}>
-                  {printOrder.status === OrderStatus.BUDGET ? 'Assinatura do Vendedor' : 'Assinatura do Recebedor'}
-                </p>
-                <p style={{ fontSize: '8px', color: '#777', margin: '6px 0 0 0' }}>DATA: ____/____/________</p>
+             <div style={{ flex: 1, borderTop: '1px solid #1B3C73', textAlign: 'center', paddingTop: '8px' }}>
+                <p style={{ fontSize: '9px', margin: 0, fontWeight: '800' }}>Assinatura da Empresa</p>
              </div>
           </div>
-
-          {/* RODAPÉ */}
-          <div style={{ position: 'fixed', bottom: '10mm', left: '10mm', right: '10mm', borderTop: '1px solid #E2E8F0', paddingTop: '12px', textAlign: 'center' }}>
-             <p style={{ fontSize: '8px', color: '#999', margin: 0, fontWeight: '500' }}>
-               Documento gerado eletronicamente via CalcárioFlow ERP em {new Date().toLocaleString('pt-BR')}. 
-               Este documento não substitui a Nota Fiscal Eletrônica e tem validade comercial conforme condições expressas.
-             </p>
-          </div>
-
         </div>
       )}
 
       {/* Confirmação de Exclusão */}
       {isDeleteModalOpen && selectedOrderToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[120] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl text-center space-y-6 animate-in zoom-in-95">
-            <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner"><AlertTriangle size={40} /></div>
-            <h3 className="text-xl font-black text-slate-800">Confirmar Exclusão?</h3>
-            <p className="text-sm text-slate-500 font-medium">
-              Você está prestes a excluir o documento <b>REF: {selectedOrderToDelete.reference}</b>. Esta ação removerá o registro permanentemente.
-            </p>
+          <div className="bg-white w-full max-sm rounded-[2.5rem] p-8 shadow-2xl text-center space-y-6 animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+              <AlertTriangle size={40} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">Excluir Documento?</h3>
+              <p className="text-sm text-slate-500 font-medium">
+                Deseja remover <b>REF: {selectedOrderToDelete.reference}</b>? Esta ação é irreversível.
+              </p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all">Cancelar</button>
-              <button onClick={handleConfirmDeletion} className="flex-1 py-4 bg-rose-600 text-white text-xs font-black uppercase rounded-2xl shadow-xl shadow-rose-100 hover:bg-rose-700 transition-all">Sim, Excluir</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl">Cancelar</button>
+              <button onClick={handleConfirmDeletion} className="flex-1 py-4 bg-rose-600 text-white text-xs font-black uppercase rounded-2xl shadow-xl">Confirmar</button>
             </div>
           </div>
         </div>

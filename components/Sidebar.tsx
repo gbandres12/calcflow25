@@ -17,7 +17,7 @@ import {
   Boxes,
   UserCog
 } from 'lucide-react';
-import { View, Company } from '../types';
+import { View, Company, UserRole, User } from '../types';
 
 interface SidebarProps {
   currentView: View;
@@ -25,18 +25,21 @@ interface SidebarProps {
   companies: Company[];
   selectedCompanyId: string;
   onSelectCompany: (id: string) => void;
+  user: User;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, selectedCompanyId, onSelectCompany }) => {
-  const groups = [
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, selectedCompanyId, onSelectCompany, user }) => {
+  const allGroups = [
     {
       title: 'Principal',
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
         { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
       ]
     },
     {
       title: 'Comercial',
+      roles: [UserRole.ADMIN, UserRole.MANAGER],
       items: [
         { id: 'orders', label: 'Vendas e Orçamentos', icon: FileText },
         { id: 'customers', label: 'Clientes', icon: Users },
@@ -44,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
     },
     {
       title: 'Produção e Estoque',
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
         { id: 'inventory', label: 'Estoque Mineral', icon: Package },
         { id: 'milling', label: 'Moagem / Fábrica', icon: Factory },
@@ -51,6 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
     },
     {
       title: 'Frota e Pátio',
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
         { id: 'fleet', label: 'Frota e Maquinário', icon: Truck },
         { id: 'fuel', label: 'Combustível', icon: Fuel },
@@ -59,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
     },
     {
       title: 'Financeiro',
+      roles: [UserRole.ADMIN, UserRole.MANAGER],
       items: [
         { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
         { id: 'transactions', label: 'Lançamentos', icon: CreditCard },
@@ -67,11 +73,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
     },
     {
       title: 'Configurações',
+      roles: [UserRole.ADMIN],
       items: [
         { id: 'users', label: 'Usuários e Equipe', icon: UserCog },
       ]
     }
   ];
+
+  // Filtra os grupos baseado na role do usuário
+  const groups = allGroups.filter(group => group.roles.includes(user.role));
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId);
 
@@ -83,26 +93,29 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
           CalcárioFlow
         </h1>
         
+        {/* Seletor de Filial - Apenas para Admin ou Managers (que podem ver outras filiais se permitido) */}
         <div className="relative group">
           <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border border-slate-700/50">
             <div className="flex items-center gap-2 overflow-hidden">
               <Building2 size={16} className="text-purple-400 shrink-0" />
               <span className="text-xs font-bold truncate text-slate-200">{selectedCompany?.name}</span>
             </div>
-            <ChevronDown size={14} className="text-slate-500" />
+            {user.role === UserRole.ADMIN && <ChevronDown size={14} className="text-slate-500" />}
           </div>
           
-          <div className="absolute top-full left-0 w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-            {companies.map(c => (
-              <button
-                key={c.id}
-                onClick={() => onSelectCompany(c.id)}
-                className={`w-full text-left px-4 py-3 text-xs hover:bg-purple-600 hover:text-white transition-colors border-b border-slate-700 last:border-0 ${c.id === selectedCompanyId ? 'bg-slate-700/50 text-purple-400 font-bold' : ''}`}
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
+          {user.role === UserRole.ADMIN && (
+            <div className="absolute top-full left-0 w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              {companies.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectCompany(c.id)}
+                  className={`w-full text-left px-4 py-3 text-xs hover:bg-purple-600 hover:text-white transition-colors border-b border-slate-700 last:border-0 ${c.id === selectedCompanyId ? 'bg-slate-700/50 text-purple-400 font-bold' : ''}`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

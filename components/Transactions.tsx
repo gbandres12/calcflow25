@@ -1,11 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, FinancialAccount, CostCenter } from '../types';
+import { INFLOW_CATEGORIES, OUTFLOW_CATEGORIES } from '../constants';
 import { 
   Plus, Search, Filter, Download, 
   TrendingUp, TrendingDown, 
   Calendar, CreditCard, Tag, 
-  X, CheckCircle2, Clock, AlertCircle, FileUp, Database, Loader2, AlignLeft, Zap, Pencil, Trash2
+  X, CheckCircle2, Clock, AlertCircle, FileUp, Database, Loader2, AlignLeft, Zap, Pencil, Trash2, DollarSign,
+  ArrowRight, CheckCircle
 } from 'lucide-react';
 
 interface TransactionsProps {
@@ -34,20 +36,41 @@ const Transactions: React.FC<TransactionsProps> = ({
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
+    paidAmount: '',
     date: new Date().toISOString().split('T')[0],
     type: TransactionType.EXPENSE,
     accountId: accounts[0]?.id || '',
     costCenterId: costCenters[0]?.id || '',
-    category: 'Geral',
+    category: 'Outros',
     status: TransactionStatus.CONFIRMADO,
     notes: ''
   });
+
+  // LOGICA PARA QUE OS VALORES SEMPRE BATAM
+  useEffect(() => {
+    const total = parseFloat(formData.amount) || 0;
+
+    if (formData.status === TransactionStatus.CONFIRMADO || formData.status === TransactionStatus.PAGO) {
+      // Se está pago, valor pago DEVE ser igual ao total
+      setFormData(prev => ({ ...prev, paidAmount: total.toString() }));
+    } else if (formData.status === TransactionStatus.PENDENTE || formData.status === TransactionStatus.ATRASADO) {
+      // Se está pendente, valor pago DEVE ser zero
+      setFormData(prev => ({ ...prev, paidAmount: '0' }));
+    } else if (formData.status === TransactionStatus.PARCIAL) {
+       // No parcial, se o valor pago estiver vazio ou for igual ao total, sugere 50%
+       const currentPaid = parseFloat(formData.paidAmount) || 0;
+       if (currentPaid >= total && total > 0) {
+          setFormData(prev => ({ ...prev, paidAmount: (total * 0.5).toFixed(2) }));
+       }
+    }
+  }, [formData.status, formData.amount]);
 
   useEffect(() => {
     if (editingTransaction) {
       setFormData({
         description: editingTransaction.description,
         amount: editingTransaction.amount.toString(),
+        paidAmount: editingTransaction.paidAmount.toString(),
         date: editingTransaction.date,
         type: editingTransaction.type,
         accountId: editingTransaction.accountId,
@@ -63,20 +86,32 @@ const Transactions: React.FC<TransactionsProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(formData.amount);
+    const paidAmountNum = parseFloat(formData.paidAmount) || 0;
     
+    // Validação de Segurança
+    if (paidAmountNum > amountNum) {
+      alert('Erro: O valor pago não pode ser superior ao valor total do lançamento.');
+      return;
+    }
+
+    if (formData.status === TransactionStatus.PARCIAL && paidAmountNum <= 0) {
+      alert('Erro: Para status PARCIAL, informe o valor que já foi liquidado.');
+      return;
+    }
+
     if (editingTransaction) {
       onUpdateTransaction({
         ...editingTransaction,
         ...formData,
         amount: amountNum,
-        paidAmount: (formData.status === TransactionStatus.CONFIRMADO || formData.status === TransactionStatus.PAGO) ? amountNum : 0
+        paidAmount: paidAmountNum
       });
     } else {
       onAddTransaction({
         ...formData,
         type: formData.type as TransactionType,
         amount: amountNum,
-        paidAmount: (formData.status === TransactionStatus.CONFIRMADO || formData.status === TransactionStatus.PAGO) ? amountNum : 0
+        paidAmount: paidAmountNum
       });
     }
     
@@ -93,13 +128,22 @@ const Transactions: React.FC<TransactionsProps> = ({
     setFormData({
       description: '',
       amount: '',
+      paidAmount: '',
       date: new Date().toISOString().split('T')[0],
       type: TransactionType.EXPENSE,
       accountId: accounts[0]?.id || '',
       costCenterId: costCenters[0]?.id || '',
-      category: 'Geral',
+      category: 'Outros',
       status: TransactionStatus.CONFIRMADO,
       notes: ''
+    });
+  };
+
+  const handleTypeChange = (type: TransactionType) => {
+    setFormData({
+      ...formData, 
+      type, 
+      category: type === TransactionType.SALE ? 'Vendas' : 'Outros'
     });
   };
 
@@ -109,8 +153,10 @@ const Transactions: React.FC<TransactionsProps> = ({
       ...formData,
       description: 'Saída Rápida',
       amount: '',
+      paidAmount: '',
       type: TransactionType.EXPENSE,
       status: TransactionStatus.CONFIRMADO,
+      category: 'Combustível',
       notes: 'Lançamento registrado via ação rápida.'
     });
     setIsModalOpen(true);
@@ -121,7 +167,7 @@ const Transactions: React.FC<TransactionsProps> = ({
     setTimeout(() => {
       const mockImports = [
         { description: 'Venda Diversos (Importado)', amount: 1500, type: TransactionType.SALE, category: 'Vendas', status: TransactionStatus.CONFIRMADO },
-        { description: 'Energia Elétrica (Importado)', amount: 450.20, type: TransactionType.EXPENSE, category: 'Utilidades', status: TransactionStatus.CONFIRMADO },
+        { description: 'Energia Elétrica (Importado)', amount: 450.20, type: TransactionType.EXPENSE, category: 'Energia Elétrica', status: TransactionStatus.CONFIRMADO },
       ];
 
       mockImports.forEach(item => {
@@ -145,12 +191,17 @@ const Transactions: React.FC<TransactionsProps> = ({
     }, 2000);
   };
 
+  const isPaidAmountEditable = formData.status === TransactionStatus.PARCIAL;
+  const remainingAmount = (parseFloat(formData.amount) || 0) - (parseFloat(formData.paidAmount) || 0);
+
+  const currentCategories = formData.type === TransactionType.SALE ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES;
+
   return (
     <div className="space-y-6">
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Área de Lançamentos</h2>
-          <p className="text-slate-500 text-sm font-medium">Gestão completa de receitas e despesas operacionais</p>
+          <p className="text-slate-500 text-sm font-medium">Gestão financeira estrita para conciliação perfeita</p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleQuickExpense} className="bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-900 transition-all text-sm shadow-lg shadow-slate-100">
@@ -184,64 +235,67 @@ const Transactions: React.FC<TransactionsProps> = ({
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
                 <th className="px-8 py-4">Data</th>
                 <th className="px-6 py-4">Descrição / C. Custo</th>
-                <th className="px-6 py-4">Conta</th>
-                <th className="px-6 py-4 text-right">Valor</th>
-                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-6 py-4">Categoria</th>
+                <th className="px-6 py-4 text-right">Valor Total</th>
+                <th className="px-6 py-4 text-right">Impacto Caixa</th>
+                <th className="px-6 py-4 text-center">Status / Quitação</th>
                 <th className="px-8 py-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-20 text-center text-slate-400 text-sm italic font-medium">Nenhum lançamento encontrado.</td>
+                  <td colSpan={7} className="py-20 text-center text-slate-400 text-sm italic font-medium">Nenhum lançamento encontrado.</td>
                 </tr>
               ) : (
-                transactions.slice().reverse().map(t => (
-                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5 text-xs font-bold text-slate-500">{t.date}</td>
-                    <td className="px-6 py-5">
-                      <p className="text-sm font-bold text-slate-800">{t.description}</p>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-purple-600">
-                        {costCenters.find(cc => cc.id === t.costCenterId)?.name || 'Sem Centro de Custo'}
-                      </p>
-                    </td>
-                    <td className="px-6 py-5 text-xs font-bold text-slate-500">
-                      {accounts.find(a => a.id === t.accountId)?.name}
-                    </td>
-                    <td className={`px-6 py-5 text-right font-black text-sm ${t.type === TransactionType.SALE ? 'text-green-600' : 'text-slate-800'}`}>
-                      {t.type === TransactionType.SALE ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex justify-center">
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase border ${
-                          t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO 
-                          ? 'bg-green-50 text-green-700 border-green-200' 
-                          : 'bg-amber-100 text-amber-700 border-amber-200'
-                        }`}>
-                          {t.status}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex justify-center gap-1">
-                        <button 
-                          onClick={() => setEditingTransaction(t)} 
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" 
-                          title="Editar"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button 
-                          onClick={() => { if(confirm('Excluir este lançamento?')) onDeleteTransaction(t.id); }} 
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" 
-                          title="Excluir"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                transactions.slice().reverse().map(t => {
+                  const diff = t.amount - t.paidAmount;
+                  const isSettled = diff <= 0;
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-8 py-5 text-xs font-bold text-slate-500">{t.date}</td>
+                      <td className="px-6 py-5">
+                        <p className="text-sm font-bold text-slate-800">{t.description}</p>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-purple-600">
+                          {costCenters.find(cc => cc.id === t.costCenterId)?.name || 'Sem Centro de Custo'}
+                        </p>
+                      </td>
+                      <td className="px-6 py-5">
+                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight bg-slate-100 px-2 py-0.5 rounded-md">
+                           {t.category}
+                         </span>
+                      </td>
+                      <td className={`px-6 py-5 text-right font-black text-sm text-slate-800`}>
+                        R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className={`px-6 py-5 text-right font-black text-sm ${t.type === TransactionType.SALE ? 'text-green-600' : 'text-rose-600'}`}>
+                        {t.type === TransactionType.SALE ? '+' : '-'} R$ {t.paidAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase border ${
+                            isSettled 
+                            ? 'bg-green-50 text-green-700 border-green-200' 
+                            : t.status === TransactionStatus.PARCIAL
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-amber-100 text-amber-700 border-amber-200'
+                          }`}>
+                            {t.status}
+                          </span>
+                          {!isSettled && (
+                             <span className="text-[8px] font-bold text-rose-500 uppercase">Aberto: R$ {diff.toLocaleString('pt-BR')}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex justify-center gap-1">
+                          <button onClick={() => setEditingTransaction(t)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Pencil size={16} /></button>
+                          <button onClick={() => { if(confirm('Excluir este lançamento?')) onDeleteTransaction(t.id); }} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -256,6 +310,12 @@ const Transactions: React.FC<TransactionsProps> = ({
               {editingTransaction ? 'Editar Lançamento' : 'Novo Lançamento Financeiro'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar pr-2">
+               
+               <div className="grid grid-cols-2 gap-4 p-1.5 bg-slate-100 rounded-2xl mb-6">
+                <button type="button" onClick={() => handleTypeChange(TransactionType.SALE)} className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${formData.type === TransactionType.SALE ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500'}`}>ENTRADA / RECEITA (+)</button>
+                <button type="button" onClick={() => handleTypeChange(TransactionType.EXPENSE)} className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${formData.type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>SAÍDA / DESPESA (-)</button>
+               </div>
+
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><AlignLeft size={12} /> Descrição</label>
@@ -271,12 +331,67 @@ const Transactions: React.FC<TransactionsProps> = ({
 
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor (R$)</label>
-                    <input required type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-xl text-slate-800" placeholder="0,00" />
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Tag size={12} /> Categoria</label>
+                    <input 
+                      list="category-suggestions"
+                      required 
+                      type="text" 
+                      value={formData.category} 
+                      onChange={e => setFormData({...formData, category: e.target.value})} 
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm" 
+                      placeholder="Selecione ou digite..."
+                    />
+                    <datalist id="category-suggestions">
+                      {currentCategories.map(cat => <option key={cat} value={cat} />)}
+                    </datalist>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</label>
                     <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm" />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total (R$)</label>
+                    <input required type="number" step="0.01" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg text-slate-800" placeholder="0,00" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1 ${isPaidAmountEditable ? 'text-blue-600' : 'text-slate-400'}`}>
+                      <DollarSign size={10} /> Valor Pago (Impacto Caixa)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        disabled={!isPaidAmountEditable}
+                        type="number" 
+                        step="0.01" 
+                        value={formData.paidAmount} 
+                        onChange={e => setFormData({...formData, paidAmount: e.target.value})} 
+                        className={`w-full p-4 border rounded-2xl outline-none font-black text-lg ${
+                          isPaidAmountEditable 
+                          ? 'bg-blue-50 border-blue-200 text-blue-800 focus:border-blue-500' 
+                          : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        }`} 
+                        placeholder="0,00" 
+                      />
+                      {!isPaidAmountEditable && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 uppercase">Automático</div>
+                      )}
+                    </div>
+                  </div>
+               </div>
+
+               {/* INDICADOR DE INTEGRIDADE */}
+               <div className={`p-4 rounded-2xl flex items-center justify-between border-2 transition-all ${remainingAmount === 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+                  <div className="flex items-center gap-2">
+                     {remainingAmount === 0 ? <CheckCircle size={18}/> : <Clock size={18}/>}
+                     <span className="text-[10px] font-black uppercase tracking-widest">
+                       {remainingAmount === 0 ? 'Lançamento totalmente quitado' : 'Haverá saldo remanescente em aberto'}
+                     </span>
+                  </div>
+                  <div className="text-right">
+                     <p className="text-[9px] font-black opacity-60 uppercase">Saldo devedor</p>
+                     <p className="text-sm font-black">R$ {remainingAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                </div>
 
@@ -288,26 +403,23 @@ const Transactions: React.FC<TransactionsProps> = ({
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status Inicial</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status de Pagamento</label>
                     <select required value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as TransactionStatus})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm">
-                      <option value={TransactionStatus.CONFIRMADO}>Confirmado</option>
+                      <option value={TransactionStatus.CONFIRMADO}>Confirmado / Total</option>
                       <option value={TransactionStatus.PAGO}>Pago / Recebido</option>
-                      <option value={TransactionStatus.PENDENTE}>Pendente (Previsão)</option>
+                      <option value={TransactionStatus.PARCIAL}>Pagamento Parcial (Entrada)</option>
+                      <option value={TransactionStatus.PENDENTE}>Pendente (Apenas Previsão)</option>
+                      <option value={TransactionStatus.ATRASADO}>Atrasado / Inadimplente</option>
                     </select>
                   </div>
                </div>
 
                <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações Adicionais</label>
-                  <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[100px] resize-none" placeholder="Detalhes específicos..." />
+                  <textarea value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[80px] resize-none" placeholder="Detalhes específicos..." />
                </div>
 
-               <div className="grid grid-cols-2 gap-4 p-1.5 bg-slate-100 rounded-2xl mt-4">
-                <button type="button" onClick={() => setFormData({...formData, type: TransactionType.SALE})} className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${formData.type === TransactionType.SALE ? 'bg-white text-green-600 shadow-sm' : 'text-slate-500'}`}>RECEITA (+)</button>
-                <button type="button" onClick={() => setFormData({...formData, type: TransactionType.EXPENSE})} className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${formData.type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>DESPESA (-)</button>
-               </div>
-
-               <button type="submit" className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-all hover:scale-[1.01] ${formData.type === TransactionType.SALE ? 'bg-green-600 shadow-green-100' : 'bg-slate-900 shadow-slate-100'}`}>
+               <button type="submit" className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-all hover:scale-[1.01] mt-4 ${formData.type === TransactionType.SALE ? 'bg-green-600 shadow-green-100' : 'bg-slate-900 shadow-slate-100'}`}>
                 {editingTransaction ? 'Salvar Alterações' : 'Efetivar Lançamento'}
               </button>
             </form>

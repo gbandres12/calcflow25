@@ -16,6 +16,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [importError, setImportError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredCustomers = customers.filter(c => 
@@ -23,21 +24,76 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
     c.document.includes(searchQuery)
   );
 
-  const handleSimulateImport = () => {
-    setIsImporting(true);
-    // Simulação de processamento de arquivo CSV/Excel
-    setTimeout(() => {
-      const mockData = [
-        { name: 'João da Silva (Fazenda Esperança)', document: '123.456.789-00', email: 'joao@fazenda.com', phone: '(93) 98877-6655' },
-        { name: 'Agropecuária Central Barreiras', document: '12.345.678/0001-99', email: 'comercial@agrocentral.com', phone: '(77) 3611-4433' },
-        { name: 'Maria Oliveira (Sítio Novo)', document: '987.654.321-11', email: 'maria@sitio.com', phone: '(93) 91122-3344' },
-        { name: 'Cooperativa dos Produtores Oeste', document: '44.555.666/0001-22', email: 'contato@coopoeste.org', phone: '(77) 3612-9988' },
-      ];
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      onImportCustomers(mockData);
+    setIsImporting(true);
+    setImportError('');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split(/\r?\n/);
+        
+        if (lines.length < 2) {
+          throw new Error("O arquivo parece estar vazio ou sem cabeçalho.");
+        }
+
+        // Identifica o separador (vírgula ou ponto e vírgula)
+        const header = lines[0];
+        const separator = header.includes(';') ? ';' : ',';
+        const headers = header.split(separator).map(h => h.trim().toLowerCase());
+
+        const newCustomers: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>[] = [];
+
+        // Mapeamento de colunas flexível
+        const idxName = headers.findIndex(h => h.includes('nome') || h.includes('cliente'));
+        const idxDoc = headers.findIndex(h => h.includes('documento') || h.includes('cpf') || h.includes('cnpj'));
+        const idxEmail = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
+        const idxPhone = headers.findIndex(h => h.includes('fone') || h.includes('telefone') || h.includes('celular'));
+
+        if (idxName === -1 || idxDoc === -1) {
+          throw new Error("Colunas obrigatórias 'Nome' e 'Documento' (CPF/CNPJ) não encontradas.");
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const cells = line.split(separator).map(c => c.trim());
+          if (cells.length < 2) continue;
+
+          newCustomers.push({
+            name: cells[idxName] || 'Sem Nome',
+            document: cells[idxDoc] || '',
+            email: idxEmail !== -1 ? cells[idxEmail] : '',
+            phone: idxPhone !== -1 ? cells[idxPhone] : ''
+          });
+        }
+
+        if (newCustomers.length === 0) {
+          throw new Error("Nenhum dado válido encontrado nas linhas do arquivo.");
+        }
+
+        onImportCustomers(newCustomers);
+        setIsImportModalOpen(false);
+        alert(`${newCustomers.length} clientes importados com sucesso!`);
+      } catch (err: any) {
+        setImportError(err.message || "Erro ao processar arquivo.");
+      } finally {
+        setIsImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    reader.onerror = () => {
+      setImportError("Erro ao ler o arquivo.");
       setIsImporting(false);
-      setIsImportModalOpen(false);
-    }, 2000);
+    };
+
+    reader.readAsText(file);
   };
 
   return (
@@ -49,7 +105,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => setIsImportModalOpen(true)}
+            onClick={() => { setImportError(''); setIsImportModalOpen(true); }}
             className="bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm shadow-sm"
           >
             <FileUp size={18} /> Importar Base
@@ -136,7 +192,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
                     </td>
                     <td className="px-6 py-5 text-xs text-slate-500 font-mono font-bold bg-slate-50/30">{c.document}</td>
                     <td className="px-6 py-5 text-right font-black text-slate-900 text-sm">
-                      R$ {c.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {Number(c.totalSpent).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-center gap-1">
@@ -167,39 +223,50 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
                </div>
             </div>
 
+            {importError && (
+              <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600">
+                <AlertCircle size={20} />
+                <p className="text-xs font-bold uppercase">{importError}</p>
+              </div>
+            )}
+
             <div className="space-y-4">
                <div 
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-slate-200 rounded-[2.5rem] p-12 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group"
                 >
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.xls,.xlsx" />
-                  <FileUp size={32} className="mx-auto text-slate-300 group-hover:text-blue-400 mb-4 transition-colors" />
-                  <p className="text-sm font-black text-slate-700">Selecione o arquivo de clientes</p>
-                  <p className="text-xs text-slate-400 mt-1">Colunas recomendadas: Nome, CPF/CNPJ, E-mail, Fone</p>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept=".csv" 
+                    onChange={handleFileChange}
+                  />
+                  {isImporting ? (
+                    <Loader2 size={32} className="mx-auto text-blue-500 animate-spin mb-4" />
+                  ) : (
+                    <FileUp size={32} className="mx-auto text-slate-300 group-hover:text-blue-400 mb-4 transition-colors" />
+                  )}
+                  <p className="text-sm font-black text-slate-700">
+                    {isImporting ? 'Lendo arquivo...' : 'Selecione o arquivo CSV'}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">Colunas esperadas: Nome, Documento, Email, Telefone</p>
                </div>
             </div>
 
             <div className="flex gap-4">
                <button 
                   onClick={() => setIsImportModalOpen(false)}
-                  className="flex-1 py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl border border-slate-200 transition-all"
+                  className="w-full py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl border border-slate-200 transition-all"
                >
                   Cancelar
-               </button>
-               <button 
-                  onClick={handleSimulateImport}
-                  disabled={isImporting}
-                  className="flex-[2] py-4 bg-blue-600 text-white text-xs font-black uppercase rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-               >
-                  {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Database size={18} />}
-                  {isImporting ? 'Processando Base...' : 'Validar e Importar'}
                </button>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3">
                <AlertCircle size={16} className="text-blue-500" />
                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
-                 O sistema verificará duplicidades por CPF/CNPJ automaticamente.
+                 Dica: Use ponto e vírgula (;) ou vírgula (,) como separador.
                </p>
             </div>
           </div>

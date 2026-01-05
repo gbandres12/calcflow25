@@ -14,6 +14,7 @@ import YardManagement from './components/YardManagement';
 import FuelManagement from './components/FuelManagement';
 import UserManagement from './components/UserManagement';
 import Login from './components/Login';
+import { Database, CloudCheck, RefreshCw } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -42,15 +43,16 @@ import {
   INITIAL_COST_CENTERS,
   INITIAL_USERS
 } from './constants';
-import { financeService, userService, inventoryService, db } from './services/dataService';
+import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(INITIAL_COMPANIES[0].id);
+  const [syncing, setSyncing] = useState(false);
   
   // States
-  const [companies] = useState<Company[]>(INITIAL_COMPANIES);
+  const [companies, setCompanies] = useState<Company[]>(INITIAL_COMPANIES);
   const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
   const [accounts, setAccounts] = useState<FinancialAccount[]>(INITIAL_ACCOUNTS);
   const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
@@ -59,27 +61,31 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<SaleOrder[]>([]);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   
-  const [machines, setMachines] = useState<Machine[]>([
-    { id: 'm1', companyId: 'c1', name: 'Britador Primário', type: 'Britador', plateOrId: 'B-01', currentHorimeter: 1250.5, status: 'Operacional' },
-    { id: 'm2', companyId: 'c1', name: 'Pá Carregadeira Volvo', type: 'Pá Carregadeira', plateOrId: 'PC-23', currentHorimeter: 4500.0, status: 'Operacional' }
-  ]);
-  const [storeItems, setStoreItems] = useState<StoreItem[]>([
-    { id: 's1', companyId: 'c1', name: 'Graxa de Alta Temperatura', category: 'Lubrificantes', quantity: 15, unit: 'KG', minStock: 5 },
-    { id: 's2', companyId: 'c1', name: 'Correia Transportadora 3/4', category: 'Peças', quantity: 2, unit: 'UN', minStock: 1 }
-  ]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
 
   // Carregamento Inicial do Banco de Dados
   useEffect(() => {
     const loadData = async () => {
+      setSyncing(true);
       try {
-        const [savedTxs, savedUsers, savedInv, savedCust] = await Promise.all([
+        const [savedTxs, savedUsers, savedInv, savedCust, savedCompanies, savedOrders] = await Promise.all([
           financeService.getTransactions(),
           userService.getAll(),
           inventoryService.getInventory(),
-          db.getTable('customers')
+          db.getTable('customers'),
+          db.getTable('companies'),
+          orderService.getOrders()
         ]);
+
+        if (savedCompanies && savedCompanies.length > 0) {
+          setCompanies(savedCompanies.map((c: any) => ({
+            ...c,
+            isActive: c.is_active ?? true
+          })));
+        }
 
         if (savedTxs.length > 0) {
           setTransactions(savedTxs.map((t: any) => ({
@@ -90,6 +96,7 @@ const App: React.FC = () => {
         }
         
         if (savedUsers.length > 0) setUsers(savedUsers);
+        if (savedOrders.length > 0) setOrders(savedOrders);
 
         if (savedInv.length > 0) {
           setInventory(savedInv.map((i: any) => ({
@@ -108,6 +115,8 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error("Erro ao carregar dados do Supabase:", error);
+      } finally {
+        setSyncing(false);
       }
     };
     loadData();
@@ -115,20 +124,23 @@ const App: React.FC = () => {
 
   // Sincronização Automática
   useEffect(() => {
-    if (transactions.length > 0) {
-      financeService.saveTransactions(transactions);
-    }
+    if (transactions.length > 0) financeService.saveTransactions(transactions);
   }, [transactions]);
 
-  // Derivations
+  useEffect(() => {
+    if (orders.length > 0) orderService.saveOrders(orders);
+  }, [orders]);
+
+  // Derivations com segurança
   const filteredInventory = useMemo(() => inventory.filter(i => i.companyId === selectedCompanyId), [inventory, selectedCompanyId]);
   const filteredTransactions = useMemo(() => transactions.filter(t => t.companyId === selectedCompanyId), [transactions, selectedCompanyId]);
   const filteredCustomers = useMemo(() => customers.filter(c => c.companyId === selectedCompanyId), [customers, selectedCompanyId]);
   const filteredAccounts = useMemo(() => accounts.filter(a => a.companyId === selectedCompanyId), [accounts, selectedCompanyId]);
   const filteredOrders = useMemo(() => orders.filter(o => o.companyId === selectedCompanyId), [orders, selectedCompanyId]);
-  const filteredMachines = useMemo(() => machines.filter(m => m.companyId === selectedCompanyId), [machines, selectedCompanyId]);
-  const filteredStoreItems = useMemo(() => storeItems.filter(s => s.companyId === selectedCompanyId), [storeItems, selectedCompanyId]);
-  const activeCompany = useMemo(() => companies.find(c => c.id === selectedCompanyId)!, [companies, selectedCompanyId]);
+  
+  const activeCompany = useMemo(() => 
+    companies.find(c => c.id === selectedCompanyId) || companies[0], 
+  [companies, selectedCompanyId]);
 
   const handleUpdateAccount = (updatedAccount: FinancialAccount) => {
     setAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
@@ -153,7 +165,11 @@ const App: React.FC = () => {
       companyId: selectedCompanyId,
       totalSpent: 0
     }));
+    
     setCustomers(prev => [...prev, ...formatted]);
+    
+    // Salva no banco de dados (Supabase/Local)
+    db.upsert('customers', formatted);
   };
 
   const processStockChange = (productId: string, quantity: number) => {
@@ -163,11 +179,31 @@ const App: React.FC = () => {
           ? { ...item, quantity: item.quantity + quantity } 
           : item
       );
-      // Sincroniza com o banco
       const updatedItem = newList.find(i => i.id === productId && i.companyId === selectedCompanyId);
       if (updatedItem) inventoryService.updateStock(productId, updatedItem.quantity);
       return newList;
     });
+  };
+
+  const handleAddInventoryItem = (item: Omit<InventoryItem, 'id' | 'companyId'> & { id?: string }) => {
+    const newItem: InventoryItem = {
+      ...item,
+      id: item.id || `prod-${Date.now()}`,
+      companyId: selectedCompanyId
+    };
+    setInventory(prev => [...prev, newItem]);
+    db.upsert('inventory', newItem);
+  };
+
+  const handleAddUser = (userData: Omit<User, 'id'>) => {
+    const newUser: User = { ...userData, id: `u-${Date.now()}`, status: 'Ativo' };
+    setUsers(prev => [...prev, newUser]);
+    userService.sync([...users, newUser]);
+  };
+
+  const handleUpdateUser = (updatedUser: User) => {
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    userService.sync(users.map(u => u.id === updatedUser.id ? updatedUser : u));
   };
 
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => {
@@ -182,101 +218,55 @@ const App: React.FC = () => {
     setOrders(prev => [...prev, newOrder]);
 
     if (newOrder.status === OrderStatus.FINALIZED) {
-      finalizeSale(newOrder, [{
-        id: `pay-${Date.now()}`,
-        amount: newOrder.total,
-        date: newOrder.date,
-        status: TransactionStatus.CONFIRMADO,
-        accountId: filteredAccounts[0].id,
-        description: 'Recebimento à vista'
-      }]);
+      finalizeSale(newOrder, newOrder.payments);
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
+    // Redução de estoque
     order.items.forEach(item => processStockChange(item.productId, -item.quantity));
 
+    // Registro das transações para cada parcela/pagamento
     payments.forEach(payment => {
+      let actualPaid = 0;
+      if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
+        actualPaid = payment.amount;
+      } else if (payment.status === TransactionStatus.PARCIAL) {
+        actualPaid = payment.paidAmount || 0;
+      }
+
       handleAddTransaction({
         accountId: payment.accountId,
         costCenterId: 'cc4',
         date: payment.date,
         type: TransactionType.SALE,
         status: payment.status,
-        description: `Recebimento Pedido #${order.reference}`,
+        description: `Recebimento Pedido #${order.reference} (${payment.description || 'Parcela'})`,
         category: 'Vendas Moído',
         amount: payment.amount,
-        paidAmount: (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) ? payment.amount : 0,
+        paidAmount: actualPaid,
         customerId: order.customerId,
         orderId: order.id,
-        notes: payment.description
+        notes: `Pedido de Venda: ${order.reference}`
       });
     });
 
+    // Atualiza volume de gastos do cliente
     setCustomers(prev => prev.map(c => 
       c.id === order.customerId ? { ...c, totalSpent: Number(c.totalSpent) + order.total } : c
     ));
 
+    // Atualiza status do pedido localmente
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, payments, status: OrderStatus.FINALIZED } : o));
   };
 
-  const handleAddMachine = (machine: Omit<Machine, 'id' | 'companyId'>) => {
-    setMachines(prev => [...prev, { ...machine, id: `m-${Date.now()}`, companyId: selectedCompanyId }]);
-  };
+  const handleUpdateOrder = (updatedOrder: SaleOrder) => {
+    const originalOrder = orders.find(o => o.id === updatedOrder.id);
+    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
 
-  const handleUpdateHorimeter = (machineId: string, newHorimeter: number) => {
-    setMachines(prev => prev.map(m => m.id === machineId ? { ...m, currentHorimeter: newHorimeter } : m));
-  };
-
-  const handleAddMaintenance = (record: Omit<MaintenanceRecord, 'id' | 'companyId'>) => {
-    setMaintenances(prev => [...prev, { ...record, id: `mnt-${Date.now()}`, companyId: selectedCompanyId }]);
-    handleAddTransaction({
-      accountId: filteredAccounts[0].id,
-      costCenterId: 'cc3',
-      date: record.date,
-      type: TransactionType.EXPENSE,
-      status: TransactionStatus.CONFIRMADO,
-      description: `Manutenção: ${record.description}`,
-      category: 'Manutenção de Frota',
-      amount: record.cost,
-      paidAmount: record.cost
-    });
-  };
-
-  const handleAddFuel = (record: Omit<FuelRecord, 'id' | 'companyId'>) => {
-    setFuelRecords(prev => [...prev, { ...record, id: `fuel-${Date.now()}`, companyId: selectedCompanyId }]);
-    handleUpdateHorimeter(record.machineId, record.horimeter);
-    handleAddTransaction({
-      accountId: filteredAccounts[0].id,
-      costCenterId: 'cc3',
-      date: record.date,
-      type: TransactionType.EXPENSE,
-      status: TransactionStatus.CONFIRMADO,
-      description: `Abastecimento Máquina ID ${record.machineId}`,
-      category: 'Combustível',
-      amount: record.totalCost,
-      paidAmount: record.totalCost
-    });
-  };
-
-  const handleUpdateStoreItem = (item: StoreItem) => {
-    setStoreItems(prev => prev.map(s => s.id === item.id ? item : s));
-  };
-
-  const handleAddStoreItem = (item: Omit<StoreItem, 'id' | 'companyId'>) => {
-    setStoreItems(prev => [...prev, { ...item, id: `s-${Date.now()}`, companyId: selectedCompanyId }]);
-  };
-
-  const handleAddUser = (userData: Omit<User, 'id'>) => {
-    const newUser = { ...userData, id: `u-${Date.now()}` };
-    setUsers(prev => [...prev, newUser as User]);
-    userService.sync([...users, newUser]);
-  };
-
-  const handleUpdateUser = (updatedUser: User) => {
-    const updatedList = users.map(u => u.id === updatedUser.id ? updatedUser : u);
-    setUsers(updatedList);
-    userService.sync(updatedList);
+    if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
+      finalizeSale(updatedOrder, updatedOrder.payments);
+    }
   };
 
   if (!currentUser) {
@@ -294,7 +284,7 @@ const App: React.FC = () => {
           accounts={filteredAccounts} 
           company={activeCompany} 
           onAddOrder={handleAddOrder} 
-          onUpdateOrder={(o) => setOrders(prev => prev.map(x => x.id === o.id ? o : x))}
+          onUpdateOrder={handleUpdateOrder}
           onDeleteOrder={(id) => setOrders(prev => prev.filter(x => x.id !== id))}
           onFinalizeOrder={(orderId, payments) => {
             const order = orders.find(o => o.id === orderId);
@@ -302,7 +292,15 @@ const App: React.FC = () => {
           }} 
         />
       );
-      case 'inventory': return <Inventory inventory={filteredInventory} customers={filteredCustomers} onPurchase={(q, c) => { processStockChange('britado', q); handleAddTransaction({ accountId: filteredAccounts[0].id, costCenterId: 'cc2', date: new Date().toISOString().split('T')[0], type: TransactionType.PURCHASE, status: TransactionStatus.CONFIRMADO, description: `Compra Britado (${q}T)`, category: 'Matéria Prima', amount: q * c, paidAmount: q * c }); }} onSale={(q, p, c) => { handleAddOrder({ customerId: c, sellerName: 'Vendedor', date: new Date().toISOString().split('T')[0], total: q * p, subtotal: q * p, discount: 0, shipping: 0, status: OrderStatus.FINALIZED, items: [{ productId: 'moido', productCode: '001', productName: 'Calcário Moído', unit: 'TON', quantity: q, unitPrice: p, discount: 0, total: q * p }], payments: [] }); }} />;
+      case 'inventory': return (
+        <Inventory 
+          inventory={filteredInventory} 
+          customers={filteredCustomers} 
+          onPurchase={(q, c) => { processStockChange('britado', q); handleAddTransaction({ accountId: filteredAccounts[0]?.id || '', costCenterId: 'cc2', date: new Date().toISOString().split('T')[0], type: TransactionType.PURCHASE, status: TransactionStatus.CONFIRMADO, description: `Compra Britado (${q}T)`, category: 'Matéria Prima', amount: q * c, paidAmount: q * c }); }} 
+          onSale={(q, p, c) => { handleAddOrder({ customerId: c, sellerName: 'Vendedor', date: new Date().toISOString().split('T')[0], total: q * p, subtotal: q * p, discount: 0, shipping: 0, status: OrderStatus.FINALIZED, items: [{ productId: 'moido', productCode: '001', productName: 'Calcário Moído', unit: 'TON', quantity: q, unitPrice: p, discount: 0, total: q * p }], payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: new Date().toISOString().split('T')[0], status: TransactionStatus.CONFIRMADO, accountId: filteredAccounts[0]?.id || '', description: 'Venda à Vista' }] }); }}
+          onAddProduct={handleAddInventoryItem}
+        />
+      );
       case 'milling': return <MillingProcess onMilling={(i, o) => { processStockChange('britado', -i); processStockChange('moido', o); }} availableBritado={filteredInventory.find(it => it.id === 'britado')?.quantity || 0} />;
       case 'accounts': return <FinancialAccounts accounts={filteredAccounts} transactions={filteredTransactions} onUpdateAccount={handleUpdateAccount} onAddTransaction={handleAddTransaction} />;
       case 'transactions': return (
@@ -317,9 +315,6 @@ const App: React.FC = () => {
       );
       case 'customers': return <Customers customers={filteredCustomers} onImportCustomers={handleImportCustomers} />;
       case 'cashflow': return <CashFlow transactions={filteredTransactions} />;
-      case 'fleet': return <FleetManagement machines={filteredMachines} onAddMachine={handleAddMachine} onUpdateHorimeter={handleUpdateHorimeter} />;
-      case 'yard': return <YardManagement machines={filteredMachines} storeItems={filteredStoreItems} maintenances={maintenances.filter(m => m.companyId === selectedCompanyId)} onAddMaintenance={handleAddMaintenance} onAddStoreItem={handleAddStoreItem} onUpdateStoreItem={handleUpdateStoreItem} />;
-      case 'fuel': return <FuelManagement machines={filteredMachines} fuelRecords={fuelRecords.filter(f => f.companyId === selectedCompanyId)} onAddFuel={handleAddFuel} />;
       case 'users': return <UserManagement users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} />;
       default: return <Dashboard transactions={filteredTransactions} inventory={filteredInventory} customers={filteredCustomers} />;
     }
@@ -327,10 +322,30 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <Sidebar currentView={currentView} onNavigate={setCurrentView} companies={companies} selectedCompanyId={selectedCompanyId} onSelectCompany={setSelectedCompanyId} />
+      <Sidebar 
+        currentView={currentView} 
+        onNavigate={setCurrentView} 
+        companies={companies} 
+        selectedCompanyId={selectedCompanyId} 
+        onSelectCompany={setSelectedCompanyId} 
+        user={currentUser}
+      />
       <main className="flex-1 ml-64 p-8 transition-all duration-300 print:ml-0 print:p-0">
         <div className="max-w-7xl mx-auto pb-20 print:max-w-none">
-          <div className="flex justify-end mb-4 print:hidden">
+          <div className="flex justify-between items-center mb-6 print:hidden">
+             <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border shadow-sm">
+               {syncing ? (
+                 <>
+                   <RefreshCw size={14} className="text-blue-500 animate-spin" />
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando Banco...</span>
+                 </>
+               ) : (
+                 <>
+                   <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Banco Conectado</span>
+                 </>
+               )}
+             </div>
              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border">
                 <div className="text-right">
                    <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">{currentUser.name}</p>
