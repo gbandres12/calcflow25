@@ -1,14 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { InventoryItem, Customer } from '../types';
-import { Package, ArrowDown, ArrowUp, X, PlusCircle, ShoppingCart, AlertTriangle, ShieldCheck, Info, Plus } from 'lucide-react';
+import { Package, ArrowDown, ArrowUp, X, PlusCircle, ShoppingCart, AlertTriangle, ShieldCheck, Info, Plus, Search, Check, Phone, Fingerprint } from 'lucide-react';
 
 interface InventoryProps {
   inventory: InventoryItem[];
   customers: Customer[];
   onPurchase: (qty: number, cost: number) => void;
   onSale: (qty: number, price: number, customerId: string) => void;
-  // Fixed: Updated to include optional id to match App.tsx implementation and component usage
   onAddProduct: (item: Omit<InventoryItem, 'id' | 'companyId'> & { id?: string }) => void;
 }
 
@@ -18,7 +17,12 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
   // Form States
   const [qty, setQty] = useState('');
   const [val, setVal] = useState('');
+  
+  // Searchable Customer State
   const [customerId, setCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
 
   // New Product States
   const [newProdName, setNewProdName] = useState('');
@@ -26,15 +30,46 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
   const [newProdMin, setNewProdMin] = useState('');
   const [newProdType, setNewProdType] = useState('moido');
 
-  // Busca segura dos itens base
   const britado = inventory.find(i => i.id === 'britado');
   const moido = inventory.find(i => i.id === 'moido');
+
+  // Busca multi-critério para registro de venda rápida
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch) return customers;
+    
+    const lowerSearch = customerSearch.toLowerCase().replace(/\D/g, '');
+    const lowerSearchText = customerSearch.toLowerCase();
+
+    return customers.filter(c => {
+      const docClean = c.document.replace(/\D/g, '');
+      const phoneClean = c.phone.replace(/\D/g, '');
+      
+      return (
+        c.name.toLowerCase().includes(lowerSearchText) || 
+        docClean.includes(lowerSearch) || 
+        phoneClean.includes(lowerSearch) ||
+        c.document.includes(customerSearch) ||
+        c.phone.includes(customerSearch)
+      );
+    });
+  }, [customers, customerSearch]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleClose = () => {
     setActiveModal(null);
     setQty('');
     setVal('');
     setCustomerId('');
+    setCustomerSearch('');
     setNewProdName('');
     setNewProdPrice('');
     setNewProdMin('');
@@ -48,6 +83,10 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
 
   const submitSale = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!customerId) {
+      alert("Selecione um cliente da lista de sugestões.");
+      return;
+    }
     const currentMoidoQty = moido?.quantity || 0;
     if (parseFloat(qty) > currentMoidoQty) {
       alert('Estoque insuficiente de calcário moído!');
@@ -59,7 +98,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
 
   const submitNewProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    // Fix: Passing the id here is now allowed by the updated InventoryProps interface
     onAddProduct({
       id: newProdType === 'britado' ? 'britado' : `prod-${Date.now()}`,
       name: newProdName,
@@ -205,12 +243,57 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
               <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X /></button>
             </div>
             <form onSubmit={submitSale} className="p-8 space-y-6">
-              <div className="space-y-2">
+              <div className="space-y-2 relative" ref={customerDropdownRef}>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</label>
-                <select required value={customerId} onChange={e => setCustomerId(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-emerald-500 outline-none font-bold text-sm">
-                  <option value="">Selecione um cliente...</option>
-                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <div className="relative">
+                  <input 
+                    required
+                    type="text"
+                    placeholder="Nome, CNPJ ou Telefone..."
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value);
+                      setIsCustomerDropdownOpen(true);
+                      if (customerId) setCustomerId('');
+                    }}
+                    onFocus={() => setIsCustomerDropdownOpen(true)}
+                    className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-emerald-500 outline-none font-bold text-sm transition-all"
+                  />
+                  {customerId && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-emerald-50 text-emerald-600 p-1 rounded-lg">
+                      <Check size={16} />
+                    </div>
+                  )}
+                </div>
+
+                {isCustomerDropdownOpen && (
+                  <div className="absolute z-[110] top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-56 overflow-y-auto custom-scrollbar">
+                    {filteredCustomers.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400">
+                         <p className="text-xs font-bold uppercase">Nenhum resultado</p>
+                      </div>
+                    ) : (
+                      filteredCustomers.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setCustomerId(c.id);
+                            setCustomerSearch(c.name);
+                            setIsCustomerDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-5 py-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex flex-col gap-1 ${customerId === c.id ? 'bg-emerald-50' : ''}`}
+                        >
+                          <span className="text-sm font-black text-slate-800 uppercase">{c.name}</span>
+                          <div className="flex gap-3 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                             <span className="flex items-center gap-1"><Fingerprint size={10}/> {c.document}</span>
+                             {c.phone && <span className="flex items-center gap-1"><Phone size={10}/> {c.phone}</span>}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade (Toneladas)</label>
@@ -227,7 +310,6 @@ const Inventory: React.FC<InventoryProps> = ({ inventory, customers, onPurchase,
         </div>
       )}
 
-      {/* NOVO MODAL: Cadastro de Produto */}
       {activeModal === 'newProduct' && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">

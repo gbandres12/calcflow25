@@ -31,6 +31,8 @@ export enum UserRole {
   OPERATOR = 'Operador'
 }
 
+export type FuelType = 'S10' | 'S500';
+
 export interface User {
   id: string;
   companyId?: string; // Opcional para Admins Globais, Obrigatório para Operadores de Filial
@@ -130,6 +132,18 @@ export interface FuelRecord {
   pricePerLiter: number;
   totalCost: number;
   horimeter: number;
+  fuelType: FuelType;
+}
+
+export interface FuelPurchase {
+  id: string;
+  companyId: string;
+  date: string;
+  liters: number;
+  pricePerLiter: number;
+  totalCost: number;
+  supplier: string;
+  fuelType: FuelType;
 }
 
 export interface SalePayment {

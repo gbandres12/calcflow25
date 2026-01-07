@@ -32,6 +32,7 @@ import {
   StoreItem,
   MaintenanceRecord,
   FuelRecord,
+  FuelPurchase,
   User,
   UserRole
 } from './types';
@@ -65,6 +66,7 @@ const App: React.FC = () => {
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
+  const [fuelPurchases, setFuelPurchases] = useState<FuelPurchase[]>([]);
 
   // Carregamento de dados RESTRITO à filial selecionada
   useEffect(() => {
@@ -77,7 +79,7 @@ const App: React.FC = () => {
         const [
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
-          savedMaint, savedFuel, savedAccounts
+          savedMaint, savedFuel, savedFuelPurchases, savedAccounts
         ] = await Promise.all([
           financeService.getTransactions(cid),
           inventoryService.getInventory(cid),
@@ -87,6 +89,7 @@ const App: React.FC = () => {
           db.getTable('store_items', cid),
           db.getTable('maintenance_records', cid),
           db.getTable('fuel_records', cid),
+          db.getTable('fuel_purchases', cid),
           db.getTable('financial_accounts', cid)
         ]);
 
@@ -98,6 +101,7 @@ const App: React.FC = () => {
         setStoreItems(savedStore);
         setMaintenances(savedMaint);
         setFuelRecords(savedFuel);
+        setFuelPurchases(savedFuelPurchases);
         setAccounts(savedAccounts.length > 0 ? savedAccounts : INITIAL_ACCOUNTS.filter(a => a.companyId === cid));
 
       } catch (error) {
@@ -156,10 +160,27 @@ const App: React.FC = () => {
       date: fuelData.date,
       type: TransactionType.EXPENSE,
       status: TransactionStatus.CONFIRMADO,
-      description: `Combustível: ${machines.find(m => m.id === fuelData.machineId)?.name}`,
+      description: `Abastecimento (${fuelData.fuelType}): ${machines.find(m => m.id === fuelData.machineId)?.name}`,
       category: 'Combustível',
       amount: fuelData.totalCost,
       paidAmount: fuelData.totalCost
+    });
+  };
+
+  const handleAddFuelPurchase = (purchaseData: Omit<FuelPurchase, 'id' | 'companyId'>) => {
+    const newPurchase: FuelPurchase = { ...purchaseData, id: `pur-${Date.now()}`, companyId: selectedCompanyId };
+    setFuelPurchases(prev => [...prev, newPurchase]);
+    db.upsert('fuel_purchases', selectedCompanyId, newPurchase);
+    handleAddTransaction({
+      accountId: accounts[0]?.id || '',
+      costCenterId: 'cc3',
+      date: purchaseData.date,
+      type: TransactionType.EXPENSE,
+      status: TransactionStatus.CONFIRMADO,
+      description: `Compra Diesel ${purchaseData.fuelType} (${purchaseData.liters}L) - ${purchaseData.supplier}`,
+      category: 'Combustível',
+      amount: purchaseData.totalCost,
+      paidAmount: purchaseData.totalCost
     });
   };
 
@@ -340,7 +361,7 @@ const App: React.FC = () => {
           {currentView === 'cashflow' && <CashFlow transactions={transactions} />}
           {currentView === 'users' && <UserManagement users={users} companies={companies} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} />}
           {currentView === 'fleet' && <FleetManagement machines={machines} onAddMachine={handleAddMachine} onUpdateHorimeter={handleUpdateHorimeter} />}
-          {currentView === 'fuel' && <FuelManagement machines={machines} fuelRecords={fuelRecords} onAddFuel={handleAddFuel} />}
+          {currentView === 'fuel' && <FuelManagement machines={machines} fuelRecords={fuelRecords} fuelPurchases={fuelPurchases} onAddFuel={handleAddFuel} onAddFuelPurchase={handleAddFuelPurchase} />}
           {currentView === 'yard' && <YardManagement machines={machines} storeItems={storeItems} maintenances={maintenances} onAddMaintenance={handleAddMaintenance} onAddStoreItem={handleAddStoreItem} onUpdateStoreItem={handleUpdateStoreItem} />}
         </div>
       </main>

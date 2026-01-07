@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { SaleOrder, Customer, InventoryItem, OrderStatus, Company, SalePayment, TransactionStatus, FinancialAccount } from '../types';
 import { 
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
-  PlusCircle, Banknote, Landmark, Wallet, ChevronRight
+  PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint
 } from 'lucide-react';
 
 interface SalesOrdersProps {
@@ -38,6 +38,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
   const [discount, setDiscount] = useState('0');
@@ -64,9 +68,48 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const remainingToProgram = totalOrderValue - totalProgrammed;
 
+  // Lógica de busca de clientes multi-critério (Nome, Documento, Telefone)
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch || selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.name === customerSearch) {
+       if (!customerSearch) return customers;
+    }
+    
+    const lowerSearch = customerSearch.toLowerCase().replace(/\D/g, '');
+    const lowerSearchText = customerSearch.toLowerCase();
+
+    return customers.filter(c => {
+      const docClean = c.document.replace(/\D/g, '');
+      const phoneClean = c.phone.replace(/\D/g, '');
+      
+      return (
+        c.name.toLowerCase().includes(lowerSearchText) || 
+        docClean.includes(lowerSearch) || 
+        phoneClean.includes(lowerSearch) ||
+        c.document.includes(customerSearch) ||
+        c.phone.includes(customerSearch)
+      );
+    });
+  }, [customers, customerSearch, selectedCustomerId]);
+
+  const selectedCustomer = useMemo(() => 
+    customers.find(c => c.id === selectedCustomerId), 
+  [customers, selectedCustomerId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setIsCustomerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (editingOrder) {
       setSelectedCustomerId(editingOrder.customerId);
+      const cust = customers.find(c => c.id === editingOrder.customerId);
+      setCustomerSearch(cust?.name || '');
       const firstItem = editingOrder.items[0];
       setQuantity(firstItem ? firstItem.quantity.toString() : '');
       setUnitPrice(firstItem ? firstItem.unitPrice.toString() : '');
@@ -79,7 +122,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     } else {
       setPayments([]);
     }
-  }, [editingOrder]);
+  }, [editingOrder, customers]);
 
   const addPaymentRow = () => {
     const newPayment: SalePayment = {
@@ -102,7 +145,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setPayments(payments.map(p => {
       if (p.id === id) {
         const updated = { ...p, [field]: value };
-        // Regra de negócio: se o status for confirmado ou pago, o paidAmount vira o amount total
         if (field === 'status' && (value === TransactionStatus.CONFIRMADO || value === TransactionStatus.PAGO)) {
           updated.paidAmount = updated.amount;
         } else if (field === 'status' && value === TransactionStatus.PENDENTE) {
@@ -116,7 +158,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const handleCreateOrUpdateOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomerId) return;
+    if (!selectedCustomerId) {
+      alert("Por favor, selecione um cliente da lista.");
+      return;
+    }
 
     if (!isBudget && Math.abs(remainingToProgram) > 0.01) {
       alert(`Erro: O plano de pagamento deve totalizar ${formatBRL(totalOrderValue)}. Saldo restante: ${formatBRL(remainingToProgram)}`);
@@ -166,6 +211,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const resetForm = () => {
     setSelectedCustomerId('');
+    setCustomerSearch('');
     setQuantity('');
     setUnitPrice('');
     setDiscount('0');
@@ -189,6 +235,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setPrintOrder(null);
     }, 500);
   };
+
+  // Cores da Identidade Visual
+  const brandGreen = '#2E6B12';
+  const brandGold = '#D9A036';
 
   return (
     <div className="space-y-6">
@@ -290,12 +340,58 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <div className="space-y-6">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><FileText size={14}/> Dados Gerais</h4>
                   <div className="space-y-4">
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 relative" ref={customerDropdownRef}>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><User size={12} /> Cliente Destinatário</label>
-                      <select required value={selectedCustomerId} onChange={e => setSelectedCustomerId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm">
-                        <option value="">Selecione o cliente...</option>
-                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+                      <div className="relative">
+                        <input 
+                          required
+                          type="text"
+                          placeholder="Pesquisar por Nome, CPF/CNPJ ou Telefone..."
+                          value={customerSearch}
+                          onChange={(e) => {
+                            setCustomerSearch(e.target.value);
+                            setIsCustomerDropdownOpen(true);
+                            if (selectedCustomerId) setSelectedCustomerId('');
+                          }}
+                          onFocus={() => setIsCustomerDropdownOpen(true)}
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm transition-all"
+                        />
+                        {selectedCustomerId && (
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-emerald-50 text-emerald-600 p-1 rounded-lg">
+                            <Check size={16} />
+                          </div>
+                        )}
+                      </div>
+
+                      {isCustomerDropdownOpen && (
+                        <div className="absolute z-[110] top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-72 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2 duration-200">
+                          {filteredCustomers.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400">
+                               <Search size={32} className="mx-auto mb-2 opacity-20"/>
+                               <p className="text-xs font-bold uppercase tracking-widest">Nenhum cliente encontrado</p>
+                            </div>
+                          ) : (
+                            filteredCustomers.map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerId(c.id);
+                                  setCustomerSearch(c.name);
+                                  setIsCustomerDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-5 py-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex flex-col gap-1.5 ${selectedCustomerId === c.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''}`}
+                              >
+                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{c.name}</span>
+                                <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                   <span className="flex items-center gap-1"><Fingerprint size={12}/> {c.document}</span>
+                                   {c.phone && <span className="flex items-center gap-1"><Phone size={12}/> {c.phone}</span>}
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -349,7 +445,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-3">
                           <AlertTriangle size={20} className="text-amber-600 shrink-0"/>
                           <p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-tighter">
-                            Nenhum pagamento programado. Adicione pelo menos uma parcela para prosseguir.
+                            Nenhum pagamento programado.
                           </p>
                         </div>
                       )}
@@ -397,15 +493,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                  )}
                               </div>
                             </div>
-                            
-                            {isPartial && (
-                              <div className="space-y-1 pt-1">
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Conta Destino do Recebido</label>
-                                <select value={payment.accountId} onChange={e => updatePaymentRow(payment.id, 'accountId', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs">
-                                  {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
-                                </select>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -415,10 +502,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                          <div className="flex justify-between items-center text-slate-400">
                             <span className="text-[10px] font-black uppercase tracking-widest">Valor do Pedido</span>
                             <span className="font-bold">{formatBRL(totalOrderValue)}</span>
-                         </div>
-                         <div className="flex justify-between items-center text-slate-400">
-                            <span className="text-[10px] font-black uppercase tracking-widest">Programado</span>
-                            <span className="font-bold">{formatBRL(totalProgrammed)}</span>
                          </div>
                          <div className="pt-3 border-t border-slate-800 flex justify-between items-center">
                             <span className="text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2">
@@ -451,13 +534,14 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         <div className="fixed inset-0 bg-white z-[999] p-0 text-slate-900 hidden print:block overflow-visible" 
           style={{ width: '210mm', minHeight: '297mm', padding: '10mm', margin: '0 auto', fontFamily: "'Inter', sans-serif" }}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '4px solid #1B3C73', paddingBottom: '15px', marginBottom: '25px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `4px solid ${brandGreen}`, paddingBottom: '15px', marginBottom: '25px' }}>
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-               <div style={{ width: '80px', height: '80px', background: '#F8FAFC', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E2E8F0' }}>
-                  <img src="https://api.dicebear.com/7.x/initials/svg?seed=CA" alt="Logo" style={{ width: '40px' }} />
+               {/* Logo Alinhado à Esquerda */}
+               <div style={{ width: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img src="https://i.ibb.co/h9vDq8s/calcario-logo.png" alt="Calcário Amazônia Logo" style={{ width: '100%', height: 'auto' }} />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#1B3C73', margin: 0 }}>{company.name}</h1>
+                  <h1 style={{ fontSize: '18px', fontWeight: '900', color: brandGreen, margin: 0 }}>CALCÁRIO AMAZÔNIA</h1>
                   <p style={{ fontSize: '9px', color: '#555', margin: 0, fontWeight: '700' }}>CNPJ: {company.document}</p>
                   <p style={{ fontSize: '9px', color: '#555', margin: 0 }}>{company.address}</p>
                   <p style={{ fontSize: '9px', color: '#555', margin: 0 }}>FONE: {company.phone}</p>
@@ -467,7 +551,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                <h2 style={{ fontSize: '12pt', fontWeight: '800', color: '#0B1E3C', margin: 0, textTransform: 'uppercase' }}>
                  {printOrder.status === OrderStatus.BUDGET ? 'ORÇAMENTO' : 'PEDIDO DE VENDA'}
                </h2>
-               <p style={{ fontSize: '22px', fontWeight: '900', color: '#1B3C73', margin: '4px 0' }}>Nº {printOrder.reference}</p>
+               <p style={{ fontSize: '22px', fontWeight: '900', color: brandGreen, margin: '4px 0' }}>Nº {printOrder.reference}</p>
             </div>
           </div>
 
@@ -487,7 +571,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           <div style={{ marginBottom: '20px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
                <thead>
-                  <tr style={{ background: '#F9FAFB', color: '#1B3C73', borderBottom: '2px solid #1B3C73' }}>
+                  <tr style={{ background: '#F9FAFB', color: brandGreen, borderBottom: `2px solid ${brandGreen}` }}>
                      <th style={{ textAlign: 'left', padding: '10px 8px' }}>DESCRIÇÃO</th>
                      <th style={{ textAlign: 'center', padding: '10px 8px', width: '80px' }}>QTD</th>
                      <th style={{ textAlign: 'right', padding: '10px 8px', width: '100px' }}>UNITÁRIO</th>
@@ -509,7 +593,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', alignItems: 'flex-start' }}>
              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '10px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase' }}>
+                <h3 style={{ fontSize: '10px', fontWeight: '800', color: brandGreen, borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase' }}>
                    Condições de Pagamento
                 </h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
@@ -526,11 +610,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                            <td style={{ padding: '6px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(p.amount)}</td>
                         </tr>
                       ))}
-                      {printOrder.payments.length === 0 && (
-                        <tr>
-                          <td colSpan={2} style={{ padding: '10px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>Condições a combinar</td>
-                        </tr>
-                      )}
                    </tbody>
                 </table>
              </div>
@@ -554,26 +633,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         </tr>
                       )}
                       <tr style={{ borderTop: '1px solid #E2E8F0' }}>
-                         <td style={{ padding: '12px 0 0 0', fontSize: '14px', fontWeight: '900', color: '#1B3C73' }}>TOTAL GERAL:</td>
-                         <td style={{ textAlign: 'right', padding: '12px 0 0 0', fontSize: '18px', fontWeight: '900', color: '#1B3C73' }}>{formatBRL(printOrder.total)}</td>
+                         <td style={{ padding: '12px 0 0 0', fontSize: '14px', fontWeight: '900', color: brandGreen }}>TOTAL GERAL:</td>
+                         <td style={{ textAlign: 'right', padding: '12px 0 0 0', fontSize: '18px', fontWeight: '900', color: brandGreen }}>{formatBRL(printOrder.total)}</td>
                       </tr>
                    </tbody>
                 </table>
              </div>
           </div>
 
-          {printOrder.notes && (
-            <div style={{ marginBottom: '30px', padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
-              <p style={{ fontSize: '8px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Observações:</p>
-              <p style={{ fontSize: '9px', color: '#1e293b', margin: 0, whiteSpace: 'pre-wrap' }}>{printOrder.notes}</p>
-            </div>
-          )}
-
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', gap: '40px' }}>
-             <div style={{ flex: 1, borderTop: '1px solid #1B3C73', textAlign: 'center', paddingTop: '8px' }}>
+             <div style={{ flex: 1, borderTop: `1px solid ${brandGreen}`, textAlign: 'center', paddingTop: '8px' }}>
                 <p style={{ fontSize: '9px', margin: 0, fontWeight: '800' }}>Assinatura do Cliente</p>
              </div>
-             <div style={{ flex: 1, borderTop: '1px solid #1B3C73', textAlign: 'center', paddingTop: '8px' }}>
+             <div style={{ flex: 1, borderTop: `1px solid ${brandGreen}`, textAlign: 'center', paddingTop: '8px' }}>
                 <p style={{ fontSize: '9px', margin: 0, fontWeight: '800' }}>Assinatura da Empresa</p>
              </div>
           </div>
@@ -590,7 +662,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             <div>
               <h3 className="text-xl font-black text-slate-800 tracking-tight">Excluir Documento?</h3>
               <p className="text-sm text-slate-500 font-medium">
-                Deseja remover <b>REF: {selectedOrderToDelete.reference}</b>? Esta ação é irreversível.
+                Deseja remover <b>REF: {selectedOrderToDelete.reference}</b>?
               </p>
             </div>
             <div className="flex gap-3">

@@ -85,9 +85,14 @@ export const INITIAL_COMPANIES: Company[] = [
 
 export const INITIAL_COST_CENTERS: CostCenter[] = [
   { id: 'cc1', name: 'Administrativo', color: '#1B3C73' },
-  { id: 'cc2', name: 'Produção / Moagem', color: '#334D13' },
-  { id: 'cc3', name: 'Logística / Frota', color: '#B45309' },
-  { id: 'cc4', name: 'Vendas / Comercial', color: '#6D28D9' }
+  { id: 'cc2', name: 'Produção / Moagem', color: '#10B981' },
+  { id: 'cc3', name: 'Frota / Logística', color: '#F59E0B' },
+  { id: 'cc4', name: 'Vendas / Comercial', color: '#8B5CF6' },
+  { id: 'cc5', name: 'Marketing / Branding', color: '#EC4899' },
+  { id: 'cc6', name: 'Recursos Humanos', color: '#3B82F6' },
+  { id: 'cc7', name: 'Manutenção / Obras', color: '#EF4444' },
+  { id: 'cc8', name: 'TI / Tecnologia', color: '#0EA5E9' },
+  { id: 'cc9', name: 'Impostos / Taxas', color: '#64748B' }
 ];
 
 export const INITIAL_ACCOUNTS: FinancialAccount[] = [
