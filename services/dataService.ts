@@ -6,9 +6,6 @@ const SUPABASE_KEY = 'sb_publishable_J5K2LFz-hbZ-Z-WHTUwYrw_g6Cjy1-M';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/**
- * Utilitários para converter chaves entre camelCase e snake_case
- */
 const toSnakeCase = (obj: any): any => {
   if (Array.isArray(obj)) return obj.map(toSnakeCase);
   if (obj !== null && typeof obj === 'object') {
@@ -34,70 +31,66 @@ const toCamelCase = (obj: any): any => {
 };
 
 const storage = {
-  get(key: string) {
-    const val = localStorage.getItem(`calcarioflow_${key}`);
+  get(key: string, companyId: string) {
+    const val = localStorage.getItem(`calcarioflow_${companyId}_${key}`);
     return val ? JSON.parse(val) : null;
   },
-  set(key: string, val: any) {
-    localStorage.setItem(`calcarioflow_${key}`, JSON.stringify(val));
+  set(key: string, companyId: string, val: any) {
+    localStorage.setItem(`calcarioflow_${companyId}_${key}`, JSON.stringify(val));
   }
 };
 
 export const db = {
-  async getTable(tableName: string) {
+  async getTable(tableName: string, companyId: string) {
     try {
-      const { data, error } = await supabase.from(tableName).select('*');
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('company_id', companyId);
       
       if (error) {
-        console.warn(`Tabela ${tableName} no Supabase falhou. Usando LocalStorage.`);
-        return storage.get(tableName) || [];
+        console.warn(`Erro na tabela ${tableName}. Usando Offline Cache.`);
+        return storage.get(tableName, companyId) || [];
       }
       
       const formattedData = toCamelCase(data);
-      if (data) storage.set(tableName, formattedData);
+      storage.set(tableName, companyId, formattedData);
       return formattedData || [];
     } catch (e: any) {
-      return storage.get(tableName) || [];
+      return storage.get(tableName, companyId) || [];
     }
   },
 
-  async upsert(tableName: string, record: any) {
-    const records = Array.isArray(record) ? record : [record];
+  async upsert(tableName: string, companyId: string, record: any) {
+    const records = (Array.isArray(record) ? record : [record]).map(r => ({ ...r, companyId }));
     
-    // Atualiza cache local imediatamente (em camelCase)
-    const current = storage.get(tableName) || [];
+    // Cache local imediato
+    const current = storage.get(tableName, companyId) || [];
     const updated = [...current];
     records.forEach(newRec => {
       const idx = updated.findIndex(r => r.id === newRec.id);
       if (idx >= 0) updated[idx] = newRec;
       else updated.push(newRec);
     });
-    storage.set(tableName, updated);
+    storage.set(tableName, companyId, updated);
 
     try {
-      // Converte para snake_case antes de enviar para o Supabase
       const dbRecords = toSnakeCase(records);
       const { data, error } = await supabase.from(tableName).upsert(dbRecords).select();
-      
-      if (error) {
-        console.error(`Erro Supabase (${tableName}):`, error.message);
-      }
+      if (error) console.error(`Erro Supabase:`, error.message);
       return toCamelCase(data);
     } catch (e: any) {
       return record;
     }
   },
 
-  async delete(tableName: string, id: string) {
-    const current = storage.get(tableName) || [];
-    storage.set(tableName, current.filter((r: any) => r.id !== id));
+  async delete(tableName: string, companyId: string, id: string) {
+    const current = storage.get(tableName, companyId) || [];
+    storage.set(tableName, companyId, current.filter((r: any) => r.id !== id));
 
     try {
-      const { error } = await supabase.from(tableName).delete().eq('id', id);
-      if (error) throw error;
-    } catch (e: any) {
-      console.warn(`Erro ao deletar no banco (${tableName}).`);
-    }
+      await supabase.from(tableName).delete().eq('id', id).eq('company_id', companyId);
+    } catch (e: any) {}
   }
 };
 
@@ -105,69 +98,61 @@ export const userService = {
   async authenticate(email: string, pass: string) {
     try {
       const { data: users, error } = await supabase.from('users_profile').select('*').eq('email', email);
-      
       if (error || !users || users.length === 0) {
         if (email === 'admin@calcarioflow.com.br' && pass === '123456') {
-          return { id: 'u1', name: 'Admin (Offline)', email, role: 'Administrador', status: 'Ativo' };
+          return { id: 'u1', name: 'Master Admin', email, role: 'Administrador', status: 'Ativo' };
         }
         throw new Error("Usuário não encontrado");
       }
-      
       const user = toCamelCase(users[0]);
-      if (pass === '123456') { 
-        await supabase.from('users_profile').update({ last_access: new Date().toISOString() }).eq('id', user.id);
-        return user;
-      }
+      if (pass === '123456') return user;
       throw new Error("Senha inválida");
     } catch (e: any) {
       if (email === 'admin@calcarioflow.com.br' && pass === '123456') {
-         return { id: 'u1', name: 'Admin (Emergencial)', email, role: 'Administrador', status: 'Ativo' };
+         return { id: 'u1', name: 'Master Admin (Offline)', email, role: 'Administrador', status: 'Ativo' };
       }
       throw new Error(e.message || "Falha na autenticação");
     }
   },
 
   async getAll() {
-    return await db.getTable('users_profile');
+    // Lista de usuários é global ou filtrada por filial? 
+    // Para simplificar, Admin vê todos. Outros não acessam essa view.
+    const { data } = await supabase.from('users_profile').select('*');
+    return toCamelCase(data || []);
   },
 
   async sync(users: any[]) {
-    return await db.upsert('users_profile', users);
+    const dbUsers = toSnakeCase(users);
+    await supabase.from('users_profile').upsert(dbUsers);
   }
 };
 
 export const financeService = {
-  async getTransactions() {
-    return await db.getTable('transactions');
+  async getTransactions(companyId: string) {
+    return await db.getTable('transactions', companyId);
   },
-  
-  async saveTransactions(txs: any[]) {
-    return await db.upsert('transactions', txs);
+  async saveTransactions(companyId: string, txs: any[]) {
+    return await db.upsert('transactions', companyId, txs);
   }
 };
 
 export const inventoryService = {
-  async getInventory() {
-    return await db.getTable('inventory');
+  async getInventory(companyId: string) {
+    return await db.getTable('inventory', companyId);
   },
-  async updateStock(id: string, quantity: number) {
-    try {
-      const current = await this.getInventory();
-      const item = current.find((i: any) => i.id === id);
-      if (item) {
-        await db.upsert('inventory', { ...item, quantity });
-      }
-    } catch (e: any) {
-      console.error("Erro ao atualizar estoque:", e.message);
-    }
+  async updateStock(companyId: string, id: string, quantity: number) {
+    const current = await this.getInventory(companyId);
+    const item = current.find((i: any) => i.id === id);
+    if (item) await db.upsert('inventory', companyId, { ...item, quantity });
   }
 };
 
 export const orderService = {
-  async getOrders() {
-    return await db.getTable('sales_orders');
+  async getOrders(companyId: string) {
+    return await db.getTable('sales_orders', companyId);
   },
-  async saveOrders(orders: any[]) {
-    return await db.upsert('sales_orders', orders);
+  async saveOrders(companyId: string, orders: any[]) {
+    return await db.upsert('sales_orders', companyId, orders);
   }
 };
