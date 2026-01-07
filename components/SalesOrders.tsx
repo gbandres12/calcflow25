@@ -489,25 +489,25 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                <thead>
                   <tr style={{ background: '#F9FAFB', color: '#1B3C73', borderBottom: '2px solid #1B3C73' }}>
                      <th style={{ textAlign: 'left', padding: '10px 8px' }}>DESCRIÇÃO</th>
-                     <th style={{ textAlign: 'center', padding: '10px 8px' }}>QTD</th>
-                     <th style={{ textAlign: 'right', padding: '10px 8px' }}>UNITÁRIO</th>
-                     <th style={{ textAlign: 'right', padding: '10px 8px' }}>TOTAL</th>
+                     <th style={{ textAlign: 'center', padding: '10px 8px', width: '80px' }}>QTD</th>
+                     <th style={{ textAlign: 'right', padding: '10px 8px', width: '100px' }}>UNITÁRIO</th>
+                     <th style={{ textAlign: 'right', padding: '10px 8px', width: '100px' }}>TOTAL</th>
                   </tr>
                </thead>
                <tbody>
                   {printOrder.items.map((item, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                       <td style={{ padding: '8px', fontWeight: '700' }}>{item.productName}</td>
-                       <td style={{ padding: '8px', textAlign: 'center', fontWeight: '800' }}>{item.quantity} {item.unit}</td>
-                       <td style={{ padding: '8px', textAlign: 'right' }}>{formatBRL(item.unitPrice)}</td>
-                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(item.total)}</td>
+                       <td style={{ padding: '10px 8px', fontWeight: '700' }}>{item.productName}</td>
+                       <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '800' }}>{item.quantity} {item.unit}</td>
+                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{formatBRL(item.unitPrice)}</td>
+                       <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(item.total)}</td>
                     </tr>
                   ))}
                </tbody>
             </table>
           </div>
 
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
+          <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', alignItems: 'flex-start' }}>
              <div style={{ flex: 1 }}>
                 <h3 style={{ fontSize: '10px', fontWeight: '800', color: '#1B3C73', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginBottom: '10px', textTransform: 'uppercase' }}>
                    Condições de Pagamento
@@ -515,33 +515,61 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
                    <thead>
                       <tr style={{ background: '#F8FAFC' }}>
-                         <th style={{ textAlign: 'left', padding: '6px' }}>VENCIMENTO</th>
+                         <th style={{ textAlign: 'left', padding: '6px' }}>VENCIMENTO / PARCELA</th>
                          <th style={{ textAlign: 'right', padding: '6px' }}>VALOR</th>
                       </tr>
                    </thead>
                    <tbody>
                       {printOrder.payments.map((p, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                           <td style={{ padding: '6px' }}>{p.date}</td>
+                           <td style={{ padding: '6px' }}>{p.date} - {p.description || `Parcela ${idx + 1}`}</td>
                            <td style={{ padding: '6px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(p.amount)}</td>
                         </tr>
                       ))}
+                      {printOrder.payments.length === 0 && (
+                        <tr>
+                          <td colSpan={2} style={{ padding: '10px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>Condições a combinar</td>
+                        </tr>
+                      )}
                    </tbody>
                 </table>
              </div>
-             <div style={{ width: '200px', background: '#F0F4F8', padding: '15px', borderRadius: '10px' }}>
-                <table style={{ width: '100%', fontSize: '11px' }}>
+             <div style={{ width: '250px', background: '#F8FAFC', padding: '20px', borderRadius: '15px', border: '1px solid #E2E8F0' }}>
+                <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
                    <tbody>
-                      <tr style={{ fontSize: '16px', fontWeight: '900', color: '#1B3C73' }}>
-                         <td style={{ padding: '10px 0' }}>TOTAL:</td>
-                         <td style={{ textAlign: 'right', padding: '10px 0' }}>{formatBRL(printOrder.total)}</td>
+                      <tr>
+                        <td style={{ padding: '4px 0', color: '#64748b', fontWeight: '600' }}>Subtotal:</td>
+                        <td style={{ textAlign: 'right', padding: '4px 0', fontWeight: '700' }}>{formatBRL(printOrder.subtotal)}</td>
+                      </tr>
+                      {printOrder.discount > 0 && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#64748b', fontWeight: '600' }}>Desconto:</td>
+                          <td style={{ textAlign: 'right', padding: '4px 0', fontWeight: '700', color: '#ef4444' }}>- {formatBRL(printOrder.discount)}</td>
+                        </tr>
+                      )}
+                      {printOrder.shipping > 0 && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#64748b', fontWeight: '600' }}>Frete (+):</td>
+                          <td style={{ textAlign: 'right', padding: '4px 0', fontWeight: '700' }}>{formatBRL(printOrder.shipping)}</td>
+                        </tr>
+                      )}
+                      <tr style={{ borderTop: '1px solid #E2E8F0' }}>
+                         <td style={{ padding: '12px 0 0 0', fontSize: '14px', fontWeight: '900', color: '#1B3C73' }}>TOTAL GERAL:</td>
+                         <td style={{ textAlign: 'right', padding: '12px 0 0 0', fontSize: '18px', fontWeight: '900', color: '#1B3C73' }}>{formatBRL(printOrder.total)}</td>
                       </tr>
                    </tbody>
                 </table>
              </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', gap: '40px' }}>
+          {printOrder.notes && (
+            <div style={{ marginBottom: '30px', padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+              <p style={{ fontSize: '8px', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '5px' }}>Observações:</p>
+              <p style={{ fontSize: '9px', color: '#1e293b', margin: 0, whiteSpace: 'pre-wrap' }}>{printOrder.notes}</p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', gap: '40px' }}>
              <div style={{ flex: 1, borderTop: '1px solid #1B3C73', textAlign: 'center', paddingTop: '8px' }}>
                 <p style={{ fontSize: '9px', margin: 0, fontWeight: '800' }}>Assinatura do Cliente</p>
              </div>
