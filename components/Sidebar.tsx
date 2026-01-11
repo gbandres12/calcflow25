@@ -15,7 +15,8 @@ import {
   Wrench,
   Fuel,
   Boxes,
-  UserCog
+  UserCog,
+  Settings
 } from 'lucide-react';
 import { View, Company, UserRole, User } from '../types';
 
@@ -76,11 +77,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
       roles: [UserRole.ADMIN],
       items: [
         { id: 'users', label: 'Usuários e Equipe', icon: UserCog },
+        { id: 'settings', label: 'Configurações Gerais', icon: Settings },
       ]
     }
   ];
 
-  // Filtra os grupos baseado na role do usuário
   const groups = allGroups.filter(group => group.roles.includes(user.role));
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId);
@@ -88,12 +89,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, s
   return (
     <div className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 shadow-2xl z-50 print:hidden border-r border-slate-800 overflow-y-auto custom-scrollbar">
       <div className="p-6 border-b border-slate-800">
-        <h1 className="text-xl font-black flex items-center gap-2 mb-6 text-white tracking-tight">
-          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-purple-500/20">C</div>
+        <h1 className="text-xl font-black flex items-center gap-3 mb-6 text-white tracking-tight">
+          <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center p-1 border border-white/10 shadow-lg">
+            <img src="https://i.ibb.co/h9vDq8s/calcario-logo.png" alt="Logo" className="w-full h-auto object-contain" />
+          </div>
           CalcárioFlow
         </h1>
         
-        {/* Seletor de Filial - Apenas para Admin ou Managers (que podem ver outras filiais se permitido) */}
         <div className="relative group">
           <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border border-slate-700/50">
             <div className="flex items-center gap-2 overflow-hidden">

@@ -33,8 +33,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
       <div className="w-full max-w-md bg-white rounded-[3rem] shadow-2xl p-12 space-y-8 animate-in fade-in zoom-in duration-500">
         <div className="text-center space-y-2">
-          <div className="w-20 h-20 bg-purple-600 rounded-3xl flex items-center justify-center text-white mx-auto shadow-2xl shadow-purple-500/30 mb-6 rotate-3">
-            <span className="text-4xl font-black">C</span>
+          <div className="w-32 h-32 flex items-center justify-center mx-auto mb-6">
+            <img 
+              src="https://i.ibb.co/h9vDq8s/calcario-logo.png" 
+              alt="Calcário Amazônia Logo" 
+              className="w-full h-auto object-contain drop-shadow-xl"
+            />
           </div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">CalcárioFlow ERP</h1>
           <p className="text-slate-500 font-medium">Gestão inteligente de mineração</p>
@@ -84,7 +88,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </form>
 
         <div className="pt-4 text-center">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">© 2024 CalcárioFlow • Versão 2.5 Pro</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">© 2024 Calcário Amazônia • Versão 2.5 Pro</p>
         </div>
       </div>
     </div>

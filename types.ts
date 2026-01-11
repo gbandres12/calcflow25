@@ -44,6 +44,13 @@ export interface User {
   avatar?: string;
 }
 
+export interface Category {
+  id: string;
+  companyId: string;
+  name: string;
+  type: 'INFLOW' | 'OUTFLOW';
+}
+
 export interface CostCenter {
   id: string;
   name: string;
@@ -203,4 +210,4 @@ export interface SaleOrder {
   notes?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings';

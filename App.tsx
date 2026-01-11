@@ -13,6 +13,7 @@ import FleetManagement from './components/FleetManagement';
 import YardManagement from './components/YardManagement';
 import FuelManagement from './components/FuelManagement';
 import UserManagement from './components/UserManagement';
+import CategorySettings from './components/CategorySettings';
 import Login from './components/Login';
 import { Database, CloudCheck, RefreshCw } from 'lucide-react';
 import { 
@@ -34,7 +35,8 @@ import {
   FuelRecord,
   FuelPurchase,
   User,
-  UserRole
+  UserRole,
+  Category
 } from './types';
 import { 
   INITIAL_INVENTORY, 
@@ -43,7 +45,9 @@ import {
   INITIAL_COMPANIES,
   INITIAL_ACCOUNTS,
   INITIAL_COST_CENTERS,
-  INITIAL_USERS
+  INITIAL_USERS,
+  INFLOW_CATEGORIES,
+  OUTFLOW_CATEGORIES
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
 
@@ -53,7 +57,7 @@ const App: React.FC = () => {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(INITIAL_COMPANIES[0].id);
   const [syncing, setSyncing] = useState(false);
   
-  // States Locais (limpos a cada troca de filial)
+  // States Locais
   const [companies, setCompanies] = useState<Company[]>(INITIAL_COMPANIES);
   const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -67,6 +71,7 @@ const App: React.FC = () => {
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
   const [fuelPurchases, setFuelPurchases] = useState<FuelPurchase[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Carregamento de dados RESTRITO à filial selecionada
   useEffect(() => {
@@ -79,7 +84,8 @@ const App: React.FC = () => {
         const [
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
-          savedMaint, savedFuel, savedFuelPurchases, savedAccounts
+          savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
+          savedCategories
         ] = await Promise.all([
           financeService.getTransactions(cid),
           inventoryService.getInventory(cid),
@@ -90,7 +96,8 @@ const App: React.FC = () => {
           db.getTable('maintenance_records', cid),
           db.getTable('fuel_records', cid),
           db.getTable('fuel_purchases', cid),
-          db.getTable('financial_accounts', cid)
+          db.getTable('financial_accounts', cid),
+          db.getTable('categories', cid)
         ]);
 
         setTransactions(savedTxs);
@@ -103,6 +110,19 @@ const App: React.FC = () => {
         setFuelRecords(savedFuel);
         setFuelPurchases(savedFuelPurchases);
         setAccounts(savedAccounts.length > 0 ? savedAccounts : INITIAL_ACCOUNTS.filter(a => a.companyId === cid));
+        
+        // Inicializa categorias padrão se estiver vazio
+        if (savedCategories.length === 0) {
+           const defaults: Omit<Category, 'id'>[] = [
+             ...INFLOW_CATEGORIES.map(name => ({ companyId: cid, name, type: 'INFLOW' as const })),
+             ...OUTFLOW_CATEGORIES.map(name => ({ companyId: cid, name, type: 'OUTFLOW' as const }))
+           ];
+           const withIds = defaults.map(d => ({ ...d, id: `cat-${Math.random()}` }));
+           setCategories(withIds);
+           db.upsert('categories', cid, withIds);
+        } else {
+           setCategories(savedCategories);
+        }
 
       } catch (error) {
         console.error("Erro ao carregar filial:", error);
@@ -114,13 +134,24 @@ const App: React.FC = () => {
     loadCompanyData();
   }, [selectedCompanyId, currentUser]);
 
+  // Handlers para Categorias
+  const handleAddCategory = (name: string, type: 'INFLOW' | 'OUTFLOW') => {
+    const newCat: Category = { id: `cat-${Date.now()}`, companyId: selectedCompanyId, name, type };
+    setCategories(prev => [...prev, newCat]);
+    db.upsert('categories', selectedCompanyId, newCat);
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+    db.delete('categories', selectedCompanyId, id);
+  };
+
   // Ao logar, define a filial inicial baseada na role
   useEffect(() => {
     if (currentUser) {
       if (currentUser.role !== UserRole.ADMIN && currentUser.companyId) {
         setSelectedCompanyId(currentUser.companyId);
       }
-      // Carrega lista de usuários apenas para Admin
       if (currentUser.role === UserRole.ADMIN) {
         userService.getAll().then(setUsers);
       }
@@ -131,7 +162,7 @@ const App: React.FC = () => {
     companies.find(c => c.id === selectedCompanyId) || companies[0], 
   [companies, selectedCompanyId]);
 
-  // Handlers (Sempre injetando selectedCompanyId)
+  // Outros Handlers
   const handleAddMachine = (machineData: Omit<Machine, 'id' | 'companyId'>) => {
     const newMachine: Machine = { ...machineData, id: `mach-${Date.now()}`, companyId: selectedCompanyId };
     setMachines(prev => [...prev, newMachine]);
@@ -177,6 +208,7 @@ const App: React.FC = () => {
       date: purchaseData.date,
       type: TransactionType.EXPENSE,
       status: TransactionStatus.CONFIRMADO,
+      // Fix: changed 'purchaseForm.supplier' to 'purchaseData.supplier' to resolve reference error.
       description: `Compra Diesel ${purchaseData.fuelType} (${purchaseData.liters}L) - ${purchaseData.supplier}`,
       category: 'Combustível',
       amount: purchaseData.totalCost,
@@ -333,7 +365,7 @@ const App: React.FC = () => {
                {syncing ? (
                  <>
                    <RefreshCw size={14} className="text-blue-500 animate-spin" />
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Acessando {activeCompany.name}...</span>
+                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando {activeCompany.name}...</span>
                  </>
                ) : (
                  <>
@@ -356,13 +388,14 @@ const App: React.FC = () => {
           {currentView === 'inventory' && <Inventory inventory={inventory} customers={customers} onPurchase={(q, c) => { processStockChange('britado', q); handleAddTransaction({ accountId: accounts[0]?.id || '', date: new Date().toISOString().split('T')[0], type: TransactionType.PURCHASE, status: TransactionStatus.CONFIRMADO, description: `Compra Material (${q}T)`, category: 'Matéria Prima', amount: q * c, paidAmount: q * c }); }} onSale={(q, p, c) => handleAddOrder({ customerId: c, sellerName: currentUser.name, date: new Date().toISOString().split('T')[0], total: q * p, subtotal: q * p, discount: 0, shipping: 0, status: OrderStatus.FINALIZED, items: [{ productId: 'moido', productCode: '001', productName: 'Calcário Moído', unit: 'TON', quantity: q, unitPrice: p, discount: 0, total: q * p }], payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: new Date().toISOString().split('T')[0], status: TransactionStatus.CONFIRMADO, accountId: accounts[0]?.id || '', description: 'Venda à Vista' }] })} onAddProduct={handleAddInventoryItem} />}
           {currentView === 'milling' && <MillingProcess onMilling={(i, o) => { processStockChange('britado', -i); processStockChange('moido', o); }} availableBritado={inventory.find(it => it.id === 'britado')?.quantity || 0} />}
           {currentView === 'accounts' && <FinancialAccounts accounts={accounts} transactions={transactions} onUpdateAccount={handleUpdateAccount} onAddTransaction={handleAddTransaction} />}
-          {currentView === 'transactions' && <TransactionsArea transactions={transactions} accounts={accounts} costCenters={costCenters} onAddTransaction={handleAddTransaction} onUpdateTransaction={handleUpdateTransaction} onDeleteTransaction={handleDeleteTransaction} />}
+          {currentView === 'transactions' && <TransactionsArea transactions={transactions} accounts={accounts} costCenters={costCenters} categories={categories} onAddTransaction={handleAddTransaction} onUpdateTransaction={handleUpdateTransaction} onDeleteTransaction={handleDeleteTransaction} />}
           {currentView === 'customers' && <Customers customers={customers} onImportCustomers={handleImportCustomers} />}
-          {currentView === 'cashflow' && <CashFlow transactions={transactions} />}
+          {currentView === 'cashflow' && <CashFlow transactions={transactions} categories={categories} />}
           {currentView === 'users' && <UserManagement users={users} companies={companies} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} />}
           {currentView === 'fleet' && <FleetManagement machines={machines} onAddMachine={handleAddMachine} onUpdateHorimeter={handleUpdateHorimeter} />}
           {currentView === 'fuel' && <FuelManagement machines={machines} fuelRecords={fuelRecords} fuelPurchases={fuelPurchases} onAddFuel={handleAddFuel} onAddFuelPurchase={handleAddFuelPurchase} />}
           {currentView === 'yard' && <YardManagement machines={machines} storeItems={storeItems} maintenances={maintenances} onAddMaintenance={handleAddMaintenance} onAddStoreItem={handleAddStoreItem} onUpdateStoreItem={handleUpdateStoreItem} />}
+          {currentView === 'settings' && <CategorySettings categories={categories} onAddCategory={handleAddCategory} onDeleteCategory={handleDeleteCategory} />}
         </div>
       </main>
     </div>

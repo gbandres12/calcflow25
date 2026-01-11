@@ -10,7 +10,8 @@ export async function getBusinessInsights(
 ) {
   try {
     // Initializing the AI client with the provided environment variable.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    // Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY}); as per guidelines.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     // Aggregating some data to provide context to the model.
     const totalRevenue = transactions
