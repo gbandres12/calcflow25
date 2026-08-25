@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Regras de acesso para o CalcárioFlow ERP
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

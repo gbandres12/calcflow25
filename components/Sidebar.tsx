@@ -5,145 +5,153 @@ import {
   Package, 
   FileText, 
   Users, 
-  Factory,
-  Wallet,
-  Building2,
-  ChevronDown,
-  TrendingUp,
-  CreditCard,
-  Truck,
+  Factory, 
+  Wallet, 
+  TrendingUp, 
+  CreditCard, 
+  Truck, 
+  Fuel, 
+  Boxes, 
+  UserCog, 
+  Settings, 
+  LogOut, 
+  ShieldCheck, 
+  Briefcase, 
   Wrench,
-  Fuel,
-  Boxes,
-  UserCog,
-  Settings
+  FileCheck
 } from 'lucide-react';
-import { View, Company, UserRole, User } from '../types';
+import { View, UserRole, User } from '../types';
 
 interface SidebarProps {
   currentView: View;
   onNavigate: (view: View) => void;
-  companies: Company[];
-  selectedCompanyId: string;
-  onSelectCompany: (id: string) => void;
   user: User;
+  onLogout?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, companies, selectedCompanyId, onSelectCompany, user }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogout }) => {
   const allGroups = [
     {
-      title: 'Principal',
+      title: 'Visão Geral',
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
-        { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
+        { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard },
       ]
     },
     {
-      title: 'Comercial',
+      title: 'Comercial & Fiscal',
       roles: [UserRole.ADMIN, UserRole.MANAGER],
       items: [
         { id: 'orders', label: 'Vendas e Orçamentos', icon: FileText },
-        { id: 'customers', label: 'Clientes', icon: Users },
+        { id: 'fiscal', label: 'Fiscal & NotaAs (NF-e)', icon: FileCheck },
+        { id: 'customers', label: 'Clientes & Produtores', icon: Users },
       ]
     },
     {
-      title: 'Produção e Estoque',
+      title: 'Produção & Fábrica',
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
         { id: 'inventory', label: 'Estoque Mineral', icon: Package },
-        { id: 'milling', label: 'Moagem / Fábrica', icon: Factory },
+        { id: 'milling', label: 'Moagem / Britagem', icon: Factory },
       ]
     },
     {
-      title: 'Frota e Pátio',
+      title: 'Frota, Pátio & Suprimentos',
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
       items: [
         { id: 'fleet', label: 'Frota e Maquinário', icon: Truck },
-        { id: 'fuel', label: 'Combustível', icon: Fuel },
+        { id: 'fuel', label: 'Controle de Combustível', icon: Fuel },
         { id: 'yard', label: 'Pátio e Almoxarifado', icon: Boxes },
       ]
     },
     {
-      title: 'Financeiro',
+      title: 'Financeiro & Caixa',
       roles: [UserRole.ADMIN, UserRole.MANAGER],
       items: [
         { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
-        { id: 'transactions', label: 'Lançamentos', icon: CreditCard },
+        { id: 'transactions', label: 'Lançamentos / DRE', icon: CreditCard },
         { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
       ]
     },
     {
-      title: 'Configurações',
+      title: 'Gestão & Sistema',
       roles: [UserRole.ADMIN],
       items: [
-        { id: 'users', label: 'Usuários e Equipe', icon: UserCog },
-        { id: 'settings', label: 'Configurações Gerais', icon: Settings },
+        { id: 'users', label: 'Usuários & Equipe', icon: UserCog },
+        { id: 'settings', label: 'Categorias & Configs', icon: Settings },
       ]
     }
   ];
 
   const groups = allGroups.filter(group => group.roles.includes(user.role));
 
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+  const roleIcon = user.role === UserRole.ADMIN ? ShieldCheck : user.role === UserRole.MANAGER ? Briefcase : Wrench;
+  const RoleIconComponent = roleIcon;
 
   return (
     <div className="w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 shadow-2xl z-50 print:hidden border-r border-slate-800 overflow-y-auto custom-scrollbar">
-      <div className="p-6 border-b border-slate-800">
-        <h1 className="text-xl font-black flex items-center gap-3 mb-6 text-white tracking-tight">
-          <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center p-1 border border-white/10 shadow-lg">
-            <img src="https://i.ibb.co/h9vDq8s/calcario-logo.png" alt="Logo" className="w-full h-auto object-contain" />
+      {/* Brand Header */}
+      <div className="p-5 border-b border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-600/30 text-white shrink-0">
+            <Factory size={22} />
           </div>
-          CalcárioFlow
-        </h1>
-        
-        <div className="relative group">
-          <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border border-slate-700/50">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <Building2 size={16} className="text-purple-400 shrink-0" />
-              <span className="text-xs font-bold truncate text-slate-200">{selectedCompany?.name}</span>
-            </div>
-            {user.role === UserRole.ADMIN && <ChevronDown size={14} className="text-slate-500" />}
+          <div className="overflow-hidden">
+            <h1 className="text-base font-black text-white tracking-tight leading-tight">CalcárioFlow</h1>
+            <p className="text-[11px] text-purple-400 font-bold uppercase tracking-wider">Usina & Mineração</p>
           </div>
-          
-          {user.role === UserRole.ADMIN && (
-            <div className="absolute top-full left-0 w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-              {companies.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => onSelectCompany(c.id)}
-                  className={`w-full text-left px-4 py-3 text-xs hover:bg-purple-600 hover:text-white transition-colors border-b border-slate-700 last:border-0 ${c.id === selectedCompanyId ? 'bg-slate-700/50 text-purple-400 font-bold' : ''}`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-6">
+      {/* Navigation */}
+      <nav className="flex-1 p-3.5 space-y-5">
         {groups.map((group, gIdx) => (
-          <div key={gIdx} className="space-y-2">
-            <p className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-600">{group.title}</p>
+          <div key={gIdx} className="space-y-1">
+            <p className="px-3 text-[10px] font-black uppercase tracking-widest text-slate-500">{group.title}</p>
             {group.items.map((item) => (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id as View)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-150 ${
                   currentView === item.id 
                     ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/20' 
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
                 }`}
               >
-                <item.icon size={18} />
-                <span className="text-sm">{item.label}</span>
+                <item.icon size={17} />
+                <span className="text-xs font-semibold">{item.label}</span>
               </button>
             ))}
           </div>
         ))}
       </nav>
+
+      {/* User Footer Profile */}
+      <div className="p-3.5 border-t border-slate-800 bg-slate-950/40">
+        <div className="flex items-center justify-between gap-2 p-2 bg-slate-800/60 rounded-xl border border-slate-700/50">
+          <div className="flex items-center gap-2.5 overflow-hidden min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+              <RoleIconComponent size={16} />
+            </div>
+            <div className="overflow-hidden min-w-0">
+              <p className="text-xs font-bold text-slate-200 truncate">{user.name.split(' ')[0]}</p>
+              <p className="text-[10px] text-purple-400 uppercase font-black tracking-wider truncate">{user.role}</p>
+            </div>
+          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sair do Sistema"
+              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
 
 export default Sidebar;
+

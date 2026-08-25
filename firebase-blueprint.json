@@ -1,0 +1,171 @@
+{
+  "entities": {
+    "transactions": {
+      "title": "Transactions",
+      "description": "Financial revenue, expense, and purchase records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "accountId": { "type": "string" },
+        "costCenterId": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["PURCHASE", "SALE", "EXPENSE"] },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "quantity": { "type": "number" },
+        "customerId": { "type": "string" },
+        "orderId": { "type": "string" }
+      },
+      "required": ["id", "accountId", "date", "type", "amount"]
+    },
+    "inventory": {
+      "title": "Inventory Items",
+      "description": "Mineral inventory and raw material stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "minStock": { "type": "number" },
+        "unit": { "type": "string" },
+        "ncm": { "type": "string" },
+        "cfop": { "type": "string" }
+      },
+      "required": ["id", "name", "quantity", "unitPrice"]
+    },
+    "customers": {
+      "title": "Customers",
+      "description": "Farms, distributors, and agro buyers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "document": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "totalSpent": { "type": "number" },
+        "ie": { "type": "string" },
+        "isentoIE": { "type": "boolean" },
+        "tipoPessoa": { "type": "string" }
+      },
+      "required": ["id", "name", "document"]
+    },
+    "sales_orders": {
+      "title": "Sales Orders",
+      "description": "Sales orders and quotes with NF-e fiscal statuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reference": { "type": "string" },
+        "customerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "date": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string" },
+        "nfeStatus": { "type": "string" },
+        "nfeChave": { "type": "string" },
+        "nfeNumero": { "type": "string" },
+        "nfeSerie": { "type": "string" },
+        "nfeProtocolo": { "type": "string" }
+      },
+      "required": ["id", "reference", "customerId", "date", "total", "status"]
+    },
+    "financial_accounts": {
+      "title": "Financial Accounts",
+      "description": "Bank accounts and cash drawers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "initialBalance": { "type": "number" }
+      },
+      "required": ["id", "name", "type", "initialBalance"]
+    },
+    "machines": {
+      "title": "Machines & Heavy Fleet",
+      "description": "Crushers, mills, tractors and wheel loaders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "plateOrId": { "type": "string" },
+        "currentHorimeter": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "plateOrId"]
+    },
+    "fiscal_config": {
+      "title": "Fiscal Configuration",
+      "description": "NotaAs API and SEFAZ configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "apiKey": { "type": "string" },
+        "environment": { "type": "string", "enum": ["sandbox", "production"] },
+        "serieNFe": { "type": "string" },
+        "proxNumeroNFe": { "type": "number" }
+      },
+      "required": ["id", "environment"]
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "transactions",
+      "description": "Financial transactions"
+    },
+    "/inventory/{itemId}": {
+      "schema": "inventory",
+      "description": "Inventory products"
+    },
+    "/customers/{customerId}": {
+      "schema": "customers",
+      "description": "Customers list"
+    },
+    "/sales_orders/{orderId}": {
+      "schema": "sales_orders",
+      "description": "Sales and NF-e orders"
+    },
+    "/financial_accounts/{accountId}": {
+      "schema": "financial_accounts",
+      "description": "Bank and cash accounts"
+    },
+    "/machines/{machineId}": {
+      "schema": "machines",
+      "description": "Equipment registry"
+    },
+    "/store_items/{itemId}": {
+      "schema": "inventory",
+      "description": "Yard and maintenance parts"
+    },
+    "/fuel_records/{recordId}": {
+      "schema": "transactions",
+      "description": "Fuel consumption logs"
+    },
+    "/fuel_purchases/{purchaseId}": {
+      "schema": "transactions",
+      "description": "Fuel bulk purchases"
+    },
+    "/maintenance_records/{recordId}": {
+      "schema": "transactions",
+      "description": "Equipment maintenance records"
+    },
+    "/categories/{categoryId}": {
+      "schema": "transactions",
+      "description": "Financial categories"
+    },
+    "/users/{userId}": {
+      "schema": "transactions",
+      "description": "System users profile"
+    },
+    "/fiscal_config/{configId}": {
+      "schema": "fiscal_config",
+      "description": "Fiscal and NotaAs API parameters"
+    }
+  }
+}

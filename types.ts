@@ -35,20 +35,20 @@ export type FuelType = 'S10' | 'S500';
 
 export interface User {
   id: string;
-  companyId?: string; // Opcional para Admins Globais, Obrigatório para Operadores de Filial
   name: string;
   email: string;
   role: UserRole;
   status: 'Ativo' | 'Inativo';
   lastAccess?: string;
   avatar?: string;
+  companyId?: string;
 }
 
 export interface Category {
   id: string;
-  companyId: string;
   name: string;
   type: 'INFLOW' | 'OUTFLOW';
+  companyId?: string;
 }
 
 export interface CostCenter {
@@ -71,68 +71,82 @@ export interface Company {
 
 export interface FinancialAccount {
   id: string;
-  companyId: string;
   name: string;
   type: AccountType;
   bankName?: string;
   accountNumber?: string;
   initialBalance: number;
+  companyId?: string;
 }
 
 export interface Customer {
   id: string;
-  companyId: string;
   name: string;
   document: string;
   email: string;
   phone: string;
   totalSpent: number;
+  companyId?: string;
+  tipoPessoa?: 'PJ' | 'PF' | 'PRODUTOR';
+  ie?: string;
+  isentoIE?: boolean;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  ibgeCode?: string;
 }
 
 export interface InventoryItem {
   id: 'britado' | 'moido' | string;
-  companyId: string;
   name: string;
   quantity: number;
   unitPrice: number;
   minStock: number;
+  unit?: string;
+  companyId?: string;
+  ncm?: string;
+  cfop?: string;
+  origem?: string;
+  unidadeTributavel?: string;
 }
 
 export interface Machine {
   id: string;
-  companyId: string;
   name: string;
   type: 'Trator' | 'Caminhão' | 'Britador' | 'Pá Carregadeira' | 'Escavadeira' | 'Outros';
   plateOrId: string;
   currentHorimeter: number;
   status: 'Operacional' | 'Manutenção' | 'Parado';
   lastMaintenance?: string;
+  companyId?: string;
 }
 
 export interface StoreItem {
   id: string;
-  companyId: string;
   name: string;
   category: 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Outros';
   quantity: number;
   unit: string;
   minStock: number;
+  companyId?: string;
 }
 
 export interface MaintenanceRecord {
   id: string;
-  companyId: string;
   machineId: string;
   date: string;
   description: string;
   cost: number;
   type: 'Preventiva' | 'Corretiva';
   horimeter: number;
+  companyId?: string;
 }
 
 export interface FuelRecord {
   id: string;
-  companyId: string;
   machineId: string;
   date: string;
   liters: number;
@@ -140,17 +154,18 @@ export interface FuelRecord {
   totalCost: number;
   horimeter: number;
   fuelType: FuelType;
+  companyId?: string;
 }
 
 export interface FuelPurchase {
   id: string;
-  companyId: string;
   date: string;
   liters: number;
   pricePerLiter: number;
   totalCost: number;
   supplier: string;
   fuelType: FuelType;
+  companyId?: string;
 }
 
 export interface SalePayment {
@@ -165,7 +180,6 @@ export interface SalePayment {
 
 export interface Transaction {
   id: string;
-  companyId: string;
   accountId: string;
   costCenterId?: string;
   date: string;
@@ -180,12 +194,14 @@ export interface Transaction {
   customerId?: string;
   orderId?: string;
   notes?: string;
+  companyId?: string;
 }
+
+export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
 
 export interface SaleOrder {
   id: string;
   reference: string;
-  companyId: string;
   customerId: string;
   sellerName: string;
   date: string;
@@ -200,6 +216,8 @@ export interface SaleOrder {
     unitPrice: number;
     discount: number;
     total: number;
+    ncm?: string;
+    cfop?: string;
   }[];
   subtotal: number;
   discount: number;
@@ -208,6 +226,39 @@ export interface SaleOrder {
   status: OrderStatus;
   payments: SalePayment[];
   notes?: string;
+  companyId?: string;
+  // Fiscal / NotaAs fields
+  nfeStatus?: NfeStatus;
+  nfeId?: string;
+  nfeChave?: string;
+  nfeNumero?: string;
+  nfeSerie?: string;
+  nfeProtocolo?: string;
+  nfeDanfeUrl?: string;
+  nfeXmlUrl?: string;
+  nfeEmissao?: string;
+  nfeErro?: string;
+  nfeNaturezaOperacao?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings';
+export interface FiscalConfig {
+  id: string;
+  apiKey: string;
+  environment: 'sandbox' | 'production';
+  cnpjEmitente: string;
+  inscricaoEstadual: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  regimeTributario: '1' | '2' | '3'; // 1 = Simples Nacional, 2 = Simples Nacional Excesso, 3 = Regime Normal
+  serieNFe: string;
+  proxNumeroNFe: number;
+  naturezaOperacaoPadrao: string;
+  cfopPadraoEstadual: string;
+  cfopPadraoInterestadual: string;
+  aliquotaIcmsPadrao?: number;
+  observacoesFiscaisPadrao?: string;
+  autoEmitirAoFinalizar?: boolean;
+}
+
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal';
+

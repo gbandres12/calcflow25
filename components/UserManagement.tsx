@@ -1,21 +1,20 @@
 
 import React, { useState } from 'react';
-import { User, UserRole, Company } from '../types';
+import { User, UserRole } from '../types';
 import { 
   Users, UserPlus, Shield, Mail, 
-  Lock, MoreVertical, CheckCircle2, 
-  XCircle, Edit, Trash2, X, ShieldCheck, 
-  Search, ShieldAlert, KeyRound, Building2
+  CheckCircle2, 
+  XCircle, Edit, X, ShieldCheck, 
+  Search, KeyRound
 } from 'lucide-react';
 
 interface UserManagementProps {
   users: User[];
-  companies: Company[];
   onAddUser: (user: Omit<User, 'id'>) => void;
   onUpdateUser: (user: User) => void;
 }
 
-const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAddUser, onUpdateUser }) => {
+const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onUpdateUser }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,13 +24,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
     email: string;
     role: UserRole;
     status: 'Ativo' | 'Inativo';
-    companyId: string;
   }>({
     name: '',
     email: '',
     role: UserRole.OPERATOR,
-    status: 'Ativo',
-    companyId: companies[0]?.id || ''
+    status: 'Ativo'
   });
 
   const filteredUsers = users.filter(u => 
@@ -55,8 +52,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
       name: user.name,
       email: user.email,
       role: user.role,
-      status: user.status,
-      companyId: user.companyId || companies[0]?.id || ''
+      status: user.status
     });
     setIsModalOpen(true);
   };
@@ -64,7 +60,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
   const handleClose = () => {
     setIsModalOpen(false);
     setEditingUser(null);
-    setFormData({ name: '', email: '', role: UserRole.OPERATOR, status: 'Ativo', companyId: companies[0]?.id || '' });
+    setFormData({ name: '', email: '', role: UserRole.OPERATOR, status: 'Ativo' });
   };
 
   const getRoleBadge = (role: UserRole) => {
@@ -79,8 +75,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
     <div className="space-y-6">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Equipe e Acessos</h2>
-          <p className="text-slate-500 text-sm font-medium">Controle quem pode acessar e operar o CalcárioFlow</p>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Equipe e Permissões</h2>
+          <p className="text-slate-500 text-sm font-medium">Controle de acessos, funções e operadores do sistema</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -108,7 +104,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                <th className="px-8 py-4">Usuário / Filial</th>
+                <th className="px-8 py-4">Usuário</th>
                 <th className="px-6 py-4">Nível de Acesso</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Último Login</th>
@@ -131,10 +127,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
                         <div>
                           <p className="text-sm font-black text-slate-800 uppercase tracking-tight">{user.name}</p>
                           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
-                             <span className="flex items-center gap-1 uppercase bg-slate-100 px-1.5 py-0.5 rounded text-[8px] tracking-widest">
-                               <Building2 size={10} className="text-purple-500" />
-                               {companies.find(c => c.id === user.companyId)?.code || 'Global'}
-                             </span>
                              <span className="flex items-center gap-1"><Mail size={10} /> {user.email}</span>
                           </div>
                         </div>
@@ -152,7 +144,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
                       </span>
                     </td>
                     <td className="px-6 py-5 text-[10px] font-bold text-slate-400">
-                      {user.lastAccess ? new Date(user.lastAccess).toLocaleString('pt-BR') : 'Nunca acessou'}
+                      {user.lastAccess ? new Date(user.lastAccess).toLocaleString('pt-BR') : 'Hoje'}
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex justify-center gap-2">
@@ -188,21 +180,14 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail de Acesso</label>
                    <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" placeholder="lucas@calcarioflow.com.br" />
                 </div>
-                
-                <div className="space-y-1.5">
-                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filial Vinculada</label>
-                   <select required value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm">
-                      {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
-                   </select>
-                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Papel / Nível</label>
                       <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm">
-                         <option value={UserRole.ADMIN}>Administrador (Total)</option>
-                         <option value={UserRole.MANAGER}>Gerente (Filial)</option>
-                         <option value={UserRole.OPERATOR}>Operador (Pátio)</option>
+                         <option value={UserRole.ADMIN}>Administrador (Acesso Total)</option>
+                         <option value={UserRole.MANAGER}>Gerente (Produção / Vendas)</option>
+                         <option value={UserRole.OPERATOR}>Operador (Balança / Pátio)</option>
                       </select>
                    </div>
                    <div className="space-y-1.5">
@@ -217,15 +202,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
                 <div className="p-6 bg-slate-900 rounded-[2.5rem] mt-6 border border-slate-800 shadow-xl">
                    <div className="flex items-center gap-3 text-amber-400 mb-2">
                       <ShieldCheck size={20} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Segurança de Dados</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Segurança de Acesso</span>
                    </div>
-                   <p className="text-[10px] text-slate-400 leading-relaxed uppercase font-bold tracking-tight">
-                     Uma senha provisória padrão (123456) será atribuída. O usuário poderá alterá-la após o primeiro acesso ao painel.
+                   <p className="text-[10px] text-slate-400 leading-relaxed font-bold tracking-tight">
+                     A senha provisória inicial atribuída é <strong>123456</strong>.
                    </p>
                 </div>
 
                 <button type="submit" className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black shadow-xl mt-4 uppercase tracking-widest text-xs hover:bg-purple-700 transition-all active:scale-95">
-                  {editingUser ? 'Salvar Alterações' : 'Confirmar e Convidar'}
+                  {editingUser ? 'Salvar Alterações' : 'Confirmar e Cadastrar'}
                 </button>
              </form>
           </div>
@@ -236,3 +221,4 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, companies, onAdd
 };
 
 export default UserManagement;
+

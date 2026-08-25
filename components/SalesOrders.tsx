@@ -1,11 +1,15 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { SaleOrder, Customer, InventoryItem, OrderStatus, Company, SalePayment, TransactionStatus, FinancialAccount } from '../types';
+import { SaleOrder, Customer, InventoryItem, OrderStatus, Company, SalePayment, TransactionStatus, FinancialAccount, FiscalConfig } from '../types';
 import { 
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
-  PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint
+  PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye
 } from 'lucide-react';
+import { EmitirNfeModal } from './EmitirNfeModal';
+import { DanfeModal } from './DanfeModal';
+import { fiscalService } from '../services/fiscalService';
+import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -35,6 +39,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [selectedOrderToDelete, setSelectedOrderToDelete] = useState<SaleOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<SaleOrder | null>(null);
   const [printOrder, setPrintOrder] = useState<SaleOrder | null>(null);
+  
+  // NF-e Modals state
+  const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
+  const [orderToViewDanfe, setOrderToViewDanfe] = useState<SaleOrder | null>(null);
+  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
+
+  useEffect(() => {
+    fiscalService.getConfig().then(cfg => setFiscalConfig(cfg));
+  }, []);
   
   // Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -267,39 +280,71 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                <th className="px-8 py-4">Data</th>
+                <th className="px-6 py-4">Data</th>
                 <th className="px-6 py-4">Cliente / Referência</th>
-                <th className="px-6 py-4">Status</th>
+                <th className="px-4 py-4">Status Venda</th>
+                <th className="px-4 py-4">Status NF-e (SEFAZ)</th>
                 <th className="px-6 py-4 text-right">Total</th>
-                <th className="px-8 py-4 text-center">Ações</th>
+                <th className="px-6 py-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-20 text-slate-400 text-sm italic font-medium tracking-tight">Nenhuma movimentação comercial registrada.</td>
+                  <td colSpan={6} className="text-center py-20 text-slate-400 text-sm italic font-medium tracking-tight">Nenhuma movimentação comercial registrada.</td>
                 </tr>
               ) : (
                 orders.slice().reverse().map(order => (
                   <tr key={order.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5 text-xs font-bold text-slate-500">{order.date}</td>
+                    <td className="px-6 py-5 text-xs font-bold text-slate-500">{order.date}</td>
                     <td className="px-6 py-5">
                       <p className="text-sm font-black text-slate-800">{customers.find(c => c.id === order.customerId)?.name || 'Cliente Geral'}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">REF: {order.reference}</p>
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-4 py-5">
                       <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase border ${
                         order.status === OrderStatus.BUDGET ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
                       }`}>
                         {order.status}
                       </span>
                     </td>
+                    <td className="px-4 py-5">
+                      {order.status === OrderStatus.FINALIZED ? (
+                        order.nfeStatus === 'autorizada' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-black px-2.5 py-1 rounded-full uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                              <FileCheck size={10} /> NF-e Nº {order.nfeNumero || '1041'}
+                            </span>
+                            <button
+                              onClick={() => setOrderToViewDanfe(order)}
+                              className="text-[10px] font-bold text-purple-600 hover:text-purple-700 hover:underline flex items-center gap-0.5"
+                              title="Visualizar DANFE"
+                            >
+                              <Eye size={12} /> DANFE
+                            </button>
+                          </div>
+                        ) : order.nfeStatus === 'cancelada' ? (
+                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full uppercase bg-rose-50 text-rose-700 border border-rose-200">
+                            Cancelada
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setOrderToEmitNfe(order)}
+                            className="flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-bold shadow-sm shadow-purple-100 transition-all hover:scale-105"
+                          >
+                            <Send size={10} /> Emitir NF-e (NotaAs)
+                          </button>
+                        )
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium italic">Orçamento</span>
+                      )}
+                    </td>
                     <td className="px-6 py-5 text-right font-black text-slate-800 text-sm">
                       {formatBRL(order.total)}
                     </td>
-                    <td className="px-8 py-5">
+                    <td className="px-6 py-5">
                       <div className="flex justify-center gap-1">
-                        <button onClick={() => handlePrint(order)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title="Imprimir PDF"><Printer size={16} /></button>
+                        <button onClick={() => handlePrint(order)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all" title="Imprimir Pedido"><Printer size={16} /></button>
                         <button onClick={() => setEditingOrder(order)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Pencil size={16} /></button>
                         <button onClick={() => { setSelectedOrderToDelete(order); setIsDeleteModalOpen(true); }} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all" title="Excluir"><Trash2 size={16} /></button>
                       </div>
@@ -650,6 +695,37 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
              </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Emissão de NF-e via NotaAs */}
+      {orderToEmitNfe && (
+        <EmitirNfeModal
+          order={orderToEmitNfe}
+          customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
+          config={fiscalConfig}
+          company={company}
+          onClose={() => setOrderToEmitNfe(null)}
+          onSuccess={(updatedOrder) => {
+            onUpdateOrder(updatedOrder);
+            setOrderToEmitNfe(null);
+            setOrderToViewDanfe(updatedOrder);
+          }}
+        />
+      )}
+
+      {/* Modal de Visualização e Impressão de DANFE */}
+      {orderToViewDanfe && (
+        <DanfeModal
+          order={orderToViewDanfe}
+          customer={customers.find(c => c.id === orderToViewDanfe.customerId) || customers[0]}
+          config={fiscalConfig}
+          company={company}
+          onClose={() => setOrderToViewDanfe(null)}
+          onOrderUpdated={(updatedOrder) => {
+            onUpdateOrder(updatedOrder);
+            setOrderToViewDanfe(updatedOrder);
+          }}
+        />
       )}
 
       {/* Confirmação de Exclusão */}

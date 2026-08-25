@@ -10,14 +10,35 @@ import {
 interface CustomersProps {
   customers: Customer[];
   onImportCustomers: (newCustomers: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>[]) => void;
+  onAddCustomer?: (newCustomer: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => void;
 }
 
-const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) => {
+const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers, onAddCustomer }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    document: '',
+    email: '',
+    phone: ''
+  });
+
+  const handleAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerForm.name || !customerForm.document) return;
+    if (onAddCustomer) {
+      onAddCustomer(customerForm);
+    } else {
+      onImportCustomers([customerForm]);
+    }
+    setIsAddModalOpen(false);
+    setCustomerForm({ name: '', document: '', email: '', phone: '' });
+  };
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -110,7 +131,10 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
           >
             <FileUp size={18} /> Importar Base
           </button>
-          <button className="bg-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg shadow-purple-100 text-sm">
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg shadow-purple-100 text-sm"
+          >
             <UserPlus size={18} /> Novo Cliente
           </button>
         </div>
@@ -269,6 +293,96 @@ const Customers: React.FC<CustomersProps> = ({ customers, onImportCustomers }) =
                  Dica: Use ponto e vírgula (;) ou vírgula (,) como separador.
                </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cadastro Manual de Cliente */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl space-y-6 animate-in zoom-in-95">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl">
+                  <UserPlus size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 tracking-tight">Cadastrar Novo Cliente</h3>
+                  <p className="text-xs text-slate-500 font-medium">Produtor rural, revenda ou parceiro</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome Completo / Razão Social</label>
+                <input 
+                  required 
+                  type="text" 
+                  value={customerForm.name} 
+                  onChange={e => setCustomerForm({...customerForm, name: e.target.value})} 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" 
+                  placeholder="Ex: Fazenda Boa Esperança Ltda" 
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF ou CNPJ</label>
+                <input 
+                  required 
+                  type="text" 
+                  value={customerForm.document} 
+                  onChange={e => setCustomerForm({...customerForm, document: e.target.value})} 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-mono font-bold text-sm" 
+                  placeholder="00.000.000/0000-00 ou 000.000.000-00" 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail</label>
+                  <input 
+                    type="email" 
+                    value={customerForm.email} 
+                    onChange={e => setCustomerForm({...customerForm, email: e.target.value})} 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" 
+                    placeholder="contato@empresa.com" 
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Telefone / WhatsApp</label>
+                  <input 
+                    type="text" 
+                    value={customerForm.phone} 
+                    onChange={e => setCustomerForm({...customerForm, phone: e.target.value})} 
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" 
+                    placeholder="(93) 99999-9999" 
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="button" 
+                  onClick={() => setIsAddModalOpen(false)} 
+                  className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-[2] py-4 bg-purple-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-purple-100 hover:bg-purple-700 transition-all"
+                >
+                  Salvar Cliente
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
