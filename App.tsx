@@ -28,6 +28,7 @@ import {
   SaleOrder,
   OrderStatus,
   SalePayment,
+  PaymentReceipt,
   CostCenter,
   Machine,
   StoreItem,
@@ -329,6 +330,25 @@ const App: React.FC = () => {
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, payments, status: OrderStatus.FINALIZED } : o));
   };
 
+  const handlePaymentReceived = (receipt: PaymentReceipt, _updatedOrder: SaleOrder) => {
+    handleAddTransaction({
+      accountId: receipt.accountId || accounts[0]?.id || 'acc-1',
+      costCenterId: 'cc4',
+      date: receipt.date,
+      type: TransactionType.SALE,
+      status: TransactionStatus.CONFIRMADO,
+      description: `${receipt.description} - ${receipt.customerName}`,
+      category: 'Venda Calcário Moído Granel',
+      amount: receipt.amount,
+      paidAmount: receipt.amount,
+      customerId: receipt.customerId,
+      orderId: receipt.orderId,
+      receiptId: receipt.id,
+      paymentMethod: receipt.paymentMethod,
+      notes: receipt.notes
+    });
+  };
+
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
@@ -400,6 +420,7 @@ const App: React.FC = () => {
               onUpdateOrder={handleUpdateOrder} 
               onDeleteOrder={(id) => db.delete('sales_orders', 'main', id)} 
               onFinalizeOrder={(oid, p) => finalizeSale(orders.find(o => o.id === oid)!, p)} 
+              onPaymentReceived={handlePaymentReceived}
             />
           )}
           {currentView === 'fiscal' && (
@@ -465,6 +486,8 @@ const App: React.FC = () => {
               accounts={accounts} 
               costCenters={costCenters} 
               categories={categories} 
+              company={COMPANY_INFO}
+              customers={customers}
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 

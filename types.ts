@@ -168,6 +168,49 @@ export interface FuelPurchase {
   companyId?: string;
 }
 
+export interface PaymentReceipt {
+  id: string;
+  orderId?: string;
+  orderReference?: string;
+  customerId: string;
+  customerName: string;
+  customerDocument?: string;
+  amount: number;
+  date: string;
+  paymentMethod: string; // 'Dinheiro' | 'PIX' | 'Transferência Bancária' | 'Boleto' | 'Cartão de Débito' | 'Cartão de Crédito' | 'Cheque'
+  accountId?: string;
+  accountName?: string;
+  receivedBy?: string;
+  description: string;
+  type: 'ENTRADA' | 'PARCELA' | 'ABATIMENTO' | 'AVULSO';
+  totalOrderAmount?: number;
+  totalPaidSoFar?: number;
+  remainingDebt?: number;
+  notes?: string;
+}
+
+export interface OrderWithdrawal {
+  id: string;
+  orderId: string;
+  orderReference?: string;
+  date: string;
+  driverName: string;
+  driverCpf?: string;
+  driverDocument?: string;
+  plateNumber: string;
+  truckModel?: string;
+  truckType?: string;
+  quantityWithdrawn: number; // Toneladas retiradas
+  productName?: string;
+  weighTicketNumber?: string;
+  totalOrderQuantity?: number;
+  totalWithdrawnSoFar?: number;
+  remainingBalanceQuantity?: number;
+  loadedBy?: string;
+  operatorName?: string;
+  notes?: string;
+}
+
 export interface SalePayment {
   id: string;
   amount: number;
@@ -176,6 +219,7 @@ export interface SalePayment {
   status: TransactionStatus;
   accountId: string;
   description?: string;
+  paymentMethod?: string;
 }
 
 export interface Transaction {
@@ -195,6 +239,8 @@ export interface Transaction {
   orderId?: string;
   notes?: string;
   companyId?: string;
+  receiptId?: string;
+  paymentMethod?: string;
 }
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
@@ -225,6 +271,8 @@ export interface SaleOrder {
   total: number;
   status: OrderStatus;
   payments: SalePayment[];
+  receipts?: PaymentReceipt[];
+  withdrawals?: OrderWithdrawal[];
   notes?: string;
   companyId?: string;
   // Fiscal / NotaAs fields

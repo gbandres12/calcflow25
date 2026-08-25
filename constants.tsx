@@ -371,18 +371,18 @@ export const INITIAL_ORDERS: SaleOrder[] = [
         productCode: 'CALC-MOI',
         productName: 'Calcário Agrícola Calcítico Moído (Granel)',
         unit: 'Ton',
-        quantity: 120,
-        unitPrice: 98.00,
+        quantity: 500,
+        unitPrice: 100.00,
         discount: 0,
-        total: 11760.00,
+        total: 50000.00,
         ncm: '2517.10.00',
         cfop: '5101'
       }
     ],
-    subtotal: 11760.00,
+    subtotal: 50000.00,
     discount: 0,
-    shipping: 1200.00,
-    total: 12960.00,
+    shipping: 0,
+    total: 50000.00,
     status: OrderStatus.FINALIZED,
     nfeStatus: 'autorizada',
     nfeNumero: '1041',
@@ -391,18 +391,87 @@ export const INITIAL_ORDERS: SaleOrder[] = [
     nfeProtocolo: '115260004928192',
     nfeEmissao: '2026-08-22T14:35:00.000Z',
     nfeNaturezaOperacao: 'Venda de produção do estabelecimento',
+    receipts: [
+      {
+        id: 'REC-2026-0042',
+        orderId: 'ord-1',
+        customerId: 'cust-1',
+        customerName: 'Fazenda Planalto Agropecuária Ltda',
+        customerDocument: '12.894.541/0001-88',
+        amount: 5000.00,
+        date: '2026-08-22',
+        paymentMethod: 'PIX',
+        accountId: 'acc-1',
+        accountName: 'Banco do Brasil - Conta Movimento Agro',
+        receivedBy: 'Mariana Rocha (Comercial)',
+        description: 'Entrada / Sinal de Venda - PED-2026-0101',
+        type: 'ENTRADA',
+        totalOrderAmount: 50000.00,
+        totalPaidSoFar: 5000.00,
+        remainingDebt: 45000.00,
+        notes: 'Entrada referente a 10% do lote de 500 Toneladas de Calcário Moído.'
+      }
+    ],
+    withdrawals: [
+      {
+        id: 'with-1',
+        orderId: 'ord-1',
+        date: '2026-08-23',
+        driverName: 'Marcos Vinicius de Souza',
+        driverDocument: '712.940.112-04',
+        plateNumber: 'OBX-9821',
+        truckType: 'Bitrem 9 Eixos',
+        weighTicketNumber: 'TB-8941',
+        quantityWithdrawn: 48.5,
+        remainingBalanceQuantity: 451.5,
+        operatorName: 'José Balança',
+        notes: 'Carregamento liberado conforme entrada'
+      },
+      {
+        id: 'with-2',
+        orderId: 'ord-1',
+        date: '2026-08-24',
+        driverName: 'Claudemir Antunes Pereira',
+        driverDocument: '501.229.482-19',
+        plateNumber: 'QVR-3290',
+        truckType: 'Carreta Caçamba 3 Eixos',
+        weighTicketNumber: 'TB-8956',
+        quantityWithdrawn: 34.0,
+        remainingBalanceQuantity: 417.5,
+        operatorName: 'José Balança',
+        notes: 'Segunda viagem da Fazenda Planalto'
+      }
+    ],
     payments: [
       {
         id: 'pay-1',
-        amount: 12960.00,
-        paidAmount: 12960.00,
+        amount: 5000.00,
+        paidAmount: 5000.00,
         date: '2026-08-22',
         status: TransactionStatus.CONFIRMADO,
         accountId: 'acc-1',
-        description: 'Recebimento TED / Banco do Brasil'
+        description: 'Entrada / PIX no ato'
+      },
+      {
+        id: 'pay-2',
+        amount: 22500.00,
+        paidAmount: 0,
+        date: '2026-09-22',
+        status: TransactionStatus.PENDENTE,
+        accountId: 'acc-1',
+        description: '1ª Parcela (30 dias)'
+      },
+      {
+        id: 'pay-3',
+        amount: 22500.00,
+        paidAmount: 0,
+        date: '2026-10-22',
+        status: TransactionStatus.PENDENTE,
+        accountId: 'acc-1',
+        description: '2ª Parcela (60 dias)'
       }
     ],
-    notes: 'Entrega na Fazenda Planalto - Talhão 04'
+    notes: 'Contrato Safra: Entrada de R$ 5.000 paga no ato + 2 parcelas de R$ 22.500. Retiradas parciais de calcário na balança conforme cronograma da fazenda.'
   },
   {
     id: 'ord-2',
