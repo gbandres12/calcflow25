@@ -163,22 +163,32 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   // Lógica de busca de clientes
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch || (selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.name === customerSearch)) {
-       if (!customerSearch) return customers;
+    const trimmedSearch = customerSearch.trim();
+    if (!trimmedSearch) return customers;
+
+    if (selectedCustomerId) {
+      const selected = customers.find(c => c.id === selectedCustomerId);
+      if (selected && selected.name.toLowerCase() === trimmedSearch.toLowerCase()) {
+        return customers;
+      }
     }
-    const lowerSearch = customerSearch.toLowerCase().replace(/\D/g, '');
-    const lowerSearchText = customerSearch.toLowerCase();
+
+    const lowerSearchText = trimmedSearch.toLowerCase();
+    const digitsOnlySearch = trimmedSearch.replace(/\D/g, '');
 
     return customers.filter(c => {
-      const docClean = c.document.replace(/\D/g, '');
-      const phoneClean = c.phone.replace(/\D/g, '');
-      return (
-        c.name.toLowerCase().includes(lowerSearchText) || 
-        docClean.includes(lowerSearch) || 
-        phoneClean.includes(lowerSearch) ||
-        c.document.includes(customerSearch) ||
-        c.phone.includes(customerSearch)
-      );
+      const nameMatch = c.name ? c.name.toLowerCase().includes(lowerSearchText) : false;
+      const emailMatch = c.email ? c.email.toLowerCase().includes(lowerSearchText) : false;
+      const cityState = c.city ? `${c.city}/${c.state || ''}`.toLowerCase() : '';
+      const cityMatch = cityState ? cityState.includes(lowerSearchText) : false;
+
+      const docClean = c.document ? c.document.replace(/\D/g, '') : '';
+      const phoneClean = c.phone ? c.phone.replace(/\D/g, '') : '';
+
+      const docMatch = digitsOnlySearch ? docClean.includes(digitsOnlySearch) : (c.document ? c.document.toLowerCase().includes(lowerSearchText) : false);
+      const phoneMatch = digitsOnlySearch ? phoneClean.includes(digitsOnlySearch) : (c.phone ? c.phone.toLowerCase().includes(lowerSearchText) : false);
+
+      return nameMatch || emailMatch || cityMatch || docMatch || phoneMatch;
     });
   }, [customers, customerSearch, selectedCustomerId]);
 
