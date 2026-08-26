@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/webhooks/notaas", "destination": "/api/webhooks/notaas" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
