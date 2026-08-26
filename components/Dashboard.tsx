@@ -4,21 +4,35 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Transaction, InventoryItem, Customer, TransactionType, View } from '../types';
+import { Transaction, InventoryItem, Customer, TransactionType, View, User, SaleOrder, FinancialAccount } from '../types';
 import { getBusinessInsights } from '../services/geminiService';
 import { 
   Brain, TrendingUp, TrendingDown, DollarSign, Package, AlertCircle, 
   ZapOff, Zap, UserPlus, ShoppingCart, Factory, ChevronRight 
 } from 'lucide-react';
+import { OnboardingChecklist } from './OnboardingChecklist';
 
 interface DashboardProps {
   transactions: Transaction[];
   inventory: InventoryItem[];
   customers: Customer[];
+  orders?: SaleOrder[];
+  accounts?: FinancialAccount[];
+  user?: User | null;
   onNavigate?: (view: View) => void;
+  onOpenOnboardingModal?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customers, onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+  transactions, 
+  inventory, 
+  customers, 
+  orders = [],
+  accounts = [],
+  user,
+  onNavigate,
+  onOpenOnboardingModal
+}) => {
   const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
 
@@ -63,6 +77,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, inventory, customer
 
   return (
     <div className="space-y-8">
+      {/* Widget de Onboarding e Primeiros Passos do SaaS */}
+      {user && (
+        <OnboardingChecklist 
+          user={user}
+          customers={customers}
+          orders={orders}
+          transactions={transactions}
+          accounts={accounts}
+          onNavigate={onNavigate}
+          onOpenOnboardingModal={onOpenOnboardingModal}
+        />
+      )}
+
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Painel Operacional</h2>

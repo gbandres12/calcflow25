@@ -1,6 +1,6 @@
 {
   "name": "CalcárioFlow ERP",
-  "description": "Um sistema de gestão completo para empresas de calcário, focado na transformação de calcário britado em moído, controle de estoque, fluxo de caixa e gestão de clientes.",
+  "description": "Sistema SaaS completo de gestão para usinas e minerações de calcário, com onboarding guiado, transformação de calcário britado em moído, balança rodoviária, romaneios, pedidos de venda, controle fiscal e financeiro.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

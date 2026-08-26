@@ -16,13 +16,14 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { DanfeModal } from './DanfeModal';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
+import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
@@ -39,6 +40,32 @@ interface SalesOrdersProps {
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
 }
 
+export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE';
+
+export const calculateOrderPayment = (order: SaleOrder) => {
+  const receiptsPaid = (order.receipts || []).reduce((s, r) => s + r.amount, 0);
+  const scheduledPaid = (order.payments || []).reduce((s, p) => (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO ? s + p.amount : s + (p.paidAmount || 0)), 0);
+  const totalPaid = Math.max(receiptsPaid, scheduledPaid);
+  const remainingDebt = Math.max(0, order.total - totalPaid);
+  const financialProgress = order.total > 0 ? Math.min(100, (totalPaid / order.total) * 100) : 0;
+
+  let paymentStatus: PaymentStatusType = 'PENDENTE';
+  if (order.total > 0 && totalPaid >= order.total - 0.01) {
+    paymentStatus = 'PAGO';
+  } else if (totalPaid > 0 && remainingDebt > 0.01) {
+    paymentStatus = 'PARCIAL';
+  } else {
+    paymentStatus = 'PENDENTE';
+  }
+
+  return {
+    totalPaid,
+    remainingDebt,
+    financialProgress,
+    paymentStatus
+  };
+};
+
 const SalesOrders: React.FC<SalesOrdersProps> = ({ 
   orders, 
   customers, 
@@ -51,7 +78,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onFinalizeOrder,
   onPaymentReceived 
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'BUDGET'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modals de Ação Principal
@@ -88,6 +115,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(false);
   const [notes, setNotes] = useState('');
+
+  // Barter / Permuta em Grãos
+  const [isBarter, setIsBarter] = useState(false);
+  const [barterCommodityType, setBarterCommodityType] = useState<'MILHO' | 'SOJA'>('MILHO');
+  const [cornPricePerTon, setCornPricePerTon] = useState('1100'); // R$ 1.100 por tonelada (ou ~R$ 66/sc)
   
   // Entrada e Parcelas no Formulário
   const [downPayment, setDownPayment] = useState('0');
@@ -104,6 +136,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const totalOrderValue = useMemo(() => {
     return subtotalValue - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0);
   }, [subtotalValue, discount, shipping]);
+
+  // Cálculo Automático de Toneladas e Sacas de Grãos (Barter)
+  const grainTonsEquivalent = useMemo(() => {
+    const grainPrice = parseFloat(cornPricePerTon) || 0;
+    if (grainPrice <= 0 || totalOrderValue <= 0) return 0;
+    return totalOrderValue / grainPrice;
+  }, [totalOrderValue, cornPricePerTon]);
+
+  const grainBagsEquivalent = grainTonsEquivalent * (1000 / 60); // 1 Ton = 16.666 sacas de 60kg
 
   const downPaymentNum = parseFloat(downPayment) || 0;
   const balanceToSchedule = Math.max(0, totalOrderValue - downPaymentNum);
@@ -267,11 +308,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       shipping: parseFloat(shipping) || 0,
       total: totalOrderValue,
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
+      isBarter: isBarter,
+      barterCommodityType: isBarter ? barterCommodityType : undefined,
+      cornTons: isBarter ? grainTonsEquivalent : undefined,
+      cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
       items: [itemData],
       payments: payments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
-      notes: notes
+      notes: isBarter 
+        ? `[OPERAÇÃO DE BARTER / PERMUTA] Grão: ${barterCommodityType} | Equivalência: ${grainTonsEquivalent.toFixed(2)} TON (${grainBagsEquivalent.toFixed(0)} SC) @ ${formatBRL(parseFloat(cornPricePerTon))}/TON. ${notes}`
+        : notes
     };
 
     if (editingOrder) {
@@ -283,6 +330,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       }
     }
     handleCloseModal();
+  };
+
+  // Conversão Direta de Orçamento para Venda (Quote to Sale)
+  const handleConvertToSale = (order: SaleOrder) => {
+    const updatedOrder: SaleOrder = {
+      ...order,
+      status: OrderStatus.FINALIZED,
+      notes: `${order.notes || ''}\n[${new Date().toLocaleDateString('pt-BR')}] Orçamento convertido em Venda Confirmada.`
+    };
+    onUpdateOrder(updatedOrder);
   };
 
   const handleCloseModal = () => {
@@ -299,6 +356,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setDiscount('0');
     setShipping('0');
     setNotes('');
+    setIsBarter(false);
+    setBarterCommodityType('MILHO');
+    setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
   };
@@ -351,9 +411,35 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const totalOutstandingGlobal = Math.max(0, totalOrdersAmount - totalPaidGlobal);
 
+  // Contadores para abas de status de pagamento
+  const { countPaid, countPartial, countPending, countBudget } = useMemo(() => {
+    let paid = 0;
+    let partial = 0;
+    let pending = 0;
+    let budget = 0;
+
+    orders.forEach(o => {
+      if (o.status === OrderStatus.BUDGET) {
+        budget++;
+      } else {
+        const { paymentStatus } = calculateOrderPayment(o);
+        if (paymentStatus === 'PAGO') paid++;
+        else if (paymentStatus === 'PARCIAL') partial++;
+        else pending++;
+      }
+    });
+
+    return { countPaid: paid, countPartial: partial, countPending: pending, countBudget: budget };
+  }, [orders]);
+
   // Filtragem dos Pedidos
   const filteredOrders = orders.filter(o => {
+    const { paymentStatus } = calculateOrderPayment(o);
+
     if (activeFilter === 'FINALIZED' && o.status !== OrderStatus.FINALIZED) return false;
+    if (activeFilter === 'PAID' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PAGO')) return false;
+    if (activeFilter === 'PARTIAL' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PARCIAL')) return false;
+    if (activeFilter === 'PENDING' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PENDENTE')) return false;
     if (activeFilter === 'BUDGET' && o.status !== OrderStatus.BUDGET) return false;
 
     if (searchQuery.trim()) {
@@ -361,7 +447,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       const customer = customers.find(c => c.id === o.customerId);
       const matchCust = customer?.name.toLowerCase().includes(q) || customer?.document.includes(q);
       const matchRef = o.reference.toLowerCase().includes(q);
-      return matchCust || matchRef;
+      const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
+      return matchCust || matchRef || matchPaymentStatus;
     }
     return true;
   });
@@ -428,37 +515,79 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         </div>
       </div>
 
-      {/* Barra de Filtros e Busca */}
-      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between print:hidden">
+      {/* Barra de Filtros por Status de Pagamento e Busca */}
+      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between print:hidden">
         
-        {/* Abas */}
-        <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
+        {/* Abas com badges de contagem */}
+        <div className="flex flex-wrap p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+            }`}
           >
-            Todos ({orders.length})
+            Todos <span className="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 text-[10px]">{orders.length}</span>
           </button>
+
           <button
-            onClick={() => setActiveFilter('FINALIZED')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${activeFilter === 'FINALIZED' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-emerald-700'}`}
+            onClick={() => setActiveFilter('PAID')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              activeFilter === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'
+            }`}
           >
-            <CheckCircle2 size={14} /> Vendas Confirmadas
+            <CheckCircle2 size={13} className={activeFilter === 'PAID' ? 'text-white' : 'text-emerald-600'} />
+            Pagos / Quitados
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+              {countPaid}
+            </span>
           </button>
+
+          <button
+            onClick={() => setActiveFilter('PARTIAL')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              activeFilter === 'PARTIAL' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'
+            }`}
+          >
+            <Clock size={13} className={activeFilter === 'PARTIAL' ? 'text-white' : 'text-amber-600'} />
+            Parciais
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PARTIAL' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
+              {countPartial}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveFilter('PENDING')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              activeFilter === 'PENDING' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-rose-700'
+            }`}
+          >
+            <AlertTriangle size={13} className={activeFilter === 'PENDING' ? 'text-white' : 'text-rose-600'} />
+            Débitos Pendentes
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PENDING' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'}`}>
+              {countPending}
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveFilter('BUDGET')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${activeFilter === 'BUDGET' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-amber-600'}`}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              activeFilter === 'BUDGET' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <FileText size={14} /> Orçamentos
+            <FileText size={13} />
+            Orçamentos
+            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'BUDGET' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+              {countBudget}
+            </span>
           </button>
         </div>
 
         {/* Input de Busca */}
-        <div className="relative flex-1 w-full md:w-auto max-w-md">
+        <div className="relative flex-1 w-full xl:w-auto max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
-            placeholder="Buscar por cliente, CPF/CNPJ ou Nº Pedido..."
+            placeholder="Buscar por cliente, CPF/CNPJ, ref ou status..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs focus:border-purple-500"
@@ -467,50 +596,79 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
       </div>
 
-      {/* Lista de Pedidos em Cards Modernos & Elegantes */}
+      {/* Lista de Pedidos em Cards Modernos & Elegantes com Indicador Visual de Pagamento */}
       <div className="space-y-4 print:hidden">
         {filteredOrders.length === 0 ? (
           <div className="bg-white rounded-[2rem] p-16 text-center border border-slate-100 text-slate-400 space-y-2">
             <ShoppingCart size={40} className="mx-auto opacity-20" />
-            <p className="text-sm font-bold">Nenhum pedido de venda encontrado</p>
+            <p className="text-sm font-bold">Nenhum pedido de venda encontrado para o filtro selecionado</p>
           </div>
         ) : (
           filteredOrders.slice().reverse().map(order => {
             const customer = customers.find(c => c.id === order.customerId);
             const totalQty = order.items.reduce((s, it) => s + (it.quantity || 0), 0);
             
-            // Cálculos Financeiros do Pedido
-            const receiptsPaid = (order.receipts || []).reduce((s, r) => s + r.amount, 0);
-            const scheduledPaid = (order.payments || []).reduce((s, p) => (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO ? s + p.amount : s + (p.paidAmount || 0)), 0);
-            const totalPaid = Math.max(receiptsPaid, scheduledPaid);
-            const remainingDebt = Math.max(0, order.total - totalPaid);
-            const financialProgress = order.total > 0 ? Math.min(100, (totalPaid / order.total) * 100) : 0;
+            // Cálculos Financeiros e Status do Pedido
+            const { totalPaid, remainingDebt, financialProgress, paymentStatus } = calculateOrderPayment(order);
 
             // Cálculos de Retiradas de Carga
             const totalWithdrawn = (order.withdrawals || []).reduce((s, w) => s + (w.quantityWithdrawn || 0), 0);
             const remainingWithdraw = Math.max(0, totalQty - totalWithdrawn);
             const withdrawalProgress = totalQty > 0 ? Math.min(100, (totalWithdrawn / totalQty) * 100) : 0;
 
+            // Borda lateral e estilos conforme status de pagamento
+            let cardBorderLeft = 'border-l-[6px] border-l-slate-300';
+            if (order.status === OrderStatus.FINALIZED) {
+              if (paymentStatus === 'PAGO') cardBorderLeft = 'border-l-[6px] border-l-emerald-500';
+              else if (paymentStatus === 'PARCIAL') cardBorderLeft = 'border-l-[6px] border-l-amber-500';
+              else cardBorderLeft = 'border-l-[6px] border-l-rose-500';
+            }
+
             return (
               <div 
                 key={order.id} 
-                className="bg-white rounded-[2.5rem] border border-slate-200/80 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6"
+                className={`bg-white rounded-[2.5rem] border border-slate-200/80 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6 ${cardBorderLeft}`}
               >
                 
-                {/* Linha Superior: Cabeçalho do Pedido e Badges */}
+                {/* Linha Superior: Cabeçalho do Pedido, Cliente e Badges de Pagamento */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-100">
                   <div className="flex items-center gap-4">
-                    <div className={`p-3.5 rounded-2xl ${order.status === OrderStatus.FINALIZED ? 'bg-purple-50 text-purple-700' : 'bg-amber-50 text-amber-600'}`}>
+                    <div className={`p-3.5 rounded-2xl ${
+                      order.status === OrderStatus.BUDGET
+                        ? 'bg-amber-50 text-amber-600'
+                        : paymentStatus === 'PAGO'
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : paymentStatus === 'PARCIAL'
+                        ? 'bg-amber-50 text-amber-600'
+                        : 'bg-rose-50 text-rose-600'
+                    }`}>
                       <ShoppingCart size={22} />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-black text-lg text-slate-900 tracking-tight">
                           {customer?.name || 'Cliente Geral'}
                         </h3>
                         <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-600">
                           {order.reference}
                         </span>
+
+                        {/* Tag de Alerta de Débito junto ao nome do cliente */}
+                        {order.status === OrderStatus.FINALIZED && (
+                          paymentStatus === 'PENDENTE' ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200">
+                              <AlertTriangle size={10} /> Débito Total ({formatBRL(remainingDebt)})
+                            </span>
+                          ) : paymentStatus === 'PARCIAL' ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                              <Clock size={10} /> Débito Restante: {formatBRL(remainingDebt)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={10} /> Quitado
+                            </span>
+                          )
+                        )}
                       </div>
                       <p className="text-xs text-slate-400 font-bold uppercase tracking-wider text-[10px] pt-0.5">
                         Doc: {customer?.document || 'N/I'} • Emissão: {order.date}
@@ -518,13 +676,32 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     </div>
                   </div>
 
-                  {/* Status Badges e NF-e */}
+                  {/* Status Badges: Badge de Pagamento Colorido e NF-e */}
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border ${
-                      order.status === OrderStatus.BUDGET ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    }`}>
-                      {order.status}
-                    </span>
+                    {/* Badge de Orçamento */}
+                    {order.status === OrderStatus.BUDGET ? (
+                      <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1.5 shadow-sm shadow-amber-50">
+                        <FileText size={13} /> Orçamento
+                      </span>
+                    ) : (
+                      /* Badge Colorido de Status de Pagamento */
+                      paymentStatus === 'PAGO' ? (
+                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1.5 shadow-sm shadow-emerald-50">
+                          <CheckCircle2 size={13} className="text-emerald-600" />
+                          <span>Pago / Quitado</span>
+                        </span>
+                      ) : paymentStatus === 'PARCIAL' ? (
+                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1.5 shadow-sm shadow-amber-50">
+                          <Clock size={13} className="text-amber-600" />
+                          <span>Pagamento Parcial</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1.5 shadow-sm shadow-rose-50 animate-pulse">
+                          <AlertTriangle size={13} className="text-rose-600" />
+                          <span>Pagamento Pendente</span>
+                        </span>
+                      )
+                    )}
 
                     {order.status === OrderStatus.FINALIZED && (
                       order.nfeStatus === 'autorizada' ? (
@@ -552,6 +729,21 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 </div>
 
                 {/* Bloco Central: Painéis de Saldo Financeiro e Saldo de Retirada */}
+                {order.isBarter && (
+                  <div className="p-3.5 bg-amber-50/90 border border-amber-300 rounded-2xl flex items-center justify-between gap-3 text-amber-950">
+                    <div className="flex items-center gap-2 text-xs font-bold">
+                      <Wheat size={18} className="text-amber-600 shrink-0" />
+                      <span>
+                        <b>Operação de Barter / Permuta em Grãos:</b> {(order.cornTons || 0).toFixed(2)} TON de {order.barterCommodityType || 'Milho'} 
+                        {order.cornPricePerTon ? ` (@ ${formatBRL(order.cornPricePerTon)}/TON)` : ''}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-lg bg-amber-200/70 text-amber-900">
+                      Permuta Grãos
+                    </span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
                   {/* Painel 1: Financeiro (Entradas, Abatimentos e Saldo Devedor) */}
@@ -639,21 +831,33 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   
                   {/* Botões Operacionais Primários */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => setOrderForPayment(order)}
-                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-emerald-100 hover:scale-105"
-                      title="Registrar Entrada ou Abatimento e Emitir Recibo"
-                    >
-                      <DollarSign size={14} /> Receber Entrada / Abatimento
-                    </button>
+                    {order.status === OrderStatus.BUDGET ? (
+                      <button
+                        onClick={() => handleConvertToSale(order)}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-amber-100 hover:scale-105"
+                        title="Converter este orçamento em uma venda confirmada"
+                      >
+                        <Zap size={14} className="fill-current" /> Converter em Venda
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setOrderForPayment(order)}
+                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-emerald-100 hover:scale-105"
+                          title="Registrar Entrada ou Abatimento e Emitir Recibo"
+                        >
+                          <DollarSign size={14} /> Receber Entrada / Abatimento
+                        </button>
 
-                    <button
-                      onClick={() => setOrderForWithdrawal(order)}
-                      className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-slate-200 hover:scale-105"
-                      title="Registrar saída de caminhão e emitir ticket"
-                    >
-                      <Truck size={14} /> Registrar Retirada (Caminhão)
-                    </button>
+                        <button
+                          onClick={() => setOrderForWithdrawal(order)}
+                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-slate-200 hover:scale-105"
+                          title="Registrar saída de caminhão e emitir ticket"
+                        >
+                          <Truck size={14} /> Registrar Retirada (Caminhão)
+                        </button>
+                      </>
+                    )}
 
                     {(order.receipts && order.receipts.length > 0) && (
                       <button
@@ -802,6 +1006,58 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </div>
                     </div>
 
+                    {/* Switch e Detalhes de Barter / Permuta */}
+                    <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-2 cursor-pointer">
+                          <Wheat size={16} className="text-amber-600" />
+                          <span>Operação Barter / Permuta em Grãos</span>
+                        </label>
+                        <input 
+                          type="checkbox" 
+                          checked={isBarter} 
+                          onChange={e => setIsBarter(e.target.checked)}
+                          className="w-5 h-5 accent-amber-600 cursor-pointer rounded"
+                        />
+                      </div>
+
+                      {isBarter && (
+                        <div className="pt-2 border-t border-amber-200/80 space-y-3 animate-in fade-in duration-200">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[9px] font-black text-amber-800 uppercase">Grão da Permuta</label>
+                              <select 
+                                value={barterCommodityType} 
+                                onChange={e => setBarterCommodityType(e.target.value as 'MILHO' | 'SOJA')}
+                                className="w-full p-2.5 bg-white border border-amber-200 rounded-xl outline-none font-bold text-xs"
+                              >
+                                <option value="MILHO">🌽 Milho Granel</option>
+                                <option value="SOJA">🌱 Soja Granel</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-black text-amber-800 uppercase">Cotação (R$ / Tonelada)</label>
+                              <input 
+                                type="number" 
+                                step="1" 
+                                value={cornPricePerTon} 
+                                onChange={e => setCornPricePerTon(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-amber-200 rounded-xl outline-none font-bold text-xs text-amber-950 font-mono"
+                                placeholder="Ex: 1100.00"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-3 bg-white/90 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 flex justify-between items-center">
+                            <span>Equivalência Calculada:</span>
+                            <span className="font-mono text-sm text-amber-800 font-black">
+                              {grainTonsEquivalent.toFixed(2)} TON ({grainBagsEquivalent.toFixed(0)} Sacas de 60kg)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações do Pedido</label>
                       <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[70px] resize-none" placeholder="Detalhes da entrega ou condições especiais..." />
@@ -927,20 +1183,43 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       )}
 
       {/* Modal de Histórico de Recibos & Retiradas do Pedido */}
-      {selectedOrderDetails && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95">
-            <div className="flex justify-between items-center border-b pb-4">
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Extrato & Romaneios do Pedido</h3>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                  REF: {selectedOrderDetails.reference} • Cliente: {customers.find(c => c.id === selectedOrderDetails.customerId)?.name}
-                </p>
+      {selectedOrderDetails && (() => {
+        const { totalPaid, remainingDebt, paymentStatus } = calculateOrderPayment(selectedOrderDetails);
+        const modalCustomer = customers.find(c => c.id === selectedOrderDetails.customerId);
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95">
+              <div className="flex justify-between items-start border-b pb-4">
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="text-xl font-black text-slate-900">Extrato & Romaneios do Pedido</h3>
+                    {selectedOrderDetails.status === OrderStatus.BUDGET ? (
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-amber-50 text-amber-700 border border-amber-300">
+                        Orçamento
+                      </span>
+                    ) : paymentStatus === 'PAGO' ? (
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Quitado (100%)
+                      </span>
+                    ) : paymentStatus === 'PARCIAL' ? (
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                        <Clock size={12} /> Parcial (Débito: {formatBRL(remainingDebt)})
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
+                        <AlertTriangle size={12} /> Pendente (Débito: {formatBRL(remainingDebt)})
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider text-[10px] pt-1">
+                    REF: {selectedOrderDetails.reference} • Cliente: {modalCustomer?.name} • Valor Total: {formatBRL(selectedOrderDetails.total)} • Quitado: {formatBRL(totalPaid)}
+                  </p>
+                </div>
+                <button onClick={() => setSelectedOrderDetails(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
+                  <X size={20} />
+                </button>
               </div>
-              <button onClick={() => setSelectedOrderDetails(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
 
             {/* Recibos de Pagamento */}
             <div className="space-y-3">
@@ -1020,7 +1299,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             </div>
           </div>
         </div>
-      )}
+      );
+    })()}
 
       {/* Modal Registrar Pagamento / Entrada / Abatimento */}
       {orderForPayment && (
@@ -1085,25 +1365,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         />
       )}
 
-      {/* Confirmação de Exclusão */}
-      {isDeleteModalOpen && selectedOrderToDelete && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[120] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl text-center space-y-6 animate-in zoom-in-95">
-            <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-              <AlertTriangle size={40} />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight">Excluir Documento?</h3>
-              <p className="text-sm text-slate-500 font-medium">
-                Deseja remover <b>REF: {selectedOrderToDelete.reference}</b>?
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl">Cancelar</button>
-              <button onClick={handleConfirmDeletion} className="flex-1 py-4 bg-rose-600 text-white text-xs font-black uppercase rounded-2xl shadow-xl">Confirmar</button>
-            </div>
-          </div>
-        </div>
+      {/* Confirmação de Exclusão com Senha de 5 dígitos */}
+      {selectedOrderToDelete && (
+        <DeletionPasswordModal
+          isOpen={isDeleteModalOpen}
+          title="Excluir Pedido / Orçamento"
+          description={`Tem certeza que deseja excluir o documento REF: ${selectedOrderToDelete.reference}? Esta ação removerá os lançamentos financeiros vinculados.`}
+          itemDescription={`Pedido REF: ${selectedOrderToDelete.reference}`}
+          onConfirm={handleConfirmDeletion}
+          onClose={() => {
+            setIsDeleteModalOpen(false);
+            setSelectedOrderToDelete(null);
+          }}
+        />
       )}
 
       {/* Template de Impressão A4 Profissional e Elegante */}

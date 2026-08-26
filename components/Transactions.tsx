@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, Search, ArrowUpRight, ArrowDownLeft, DollarSign, Calendar, 
+  CreditCard, Tag, Landmark, User, Sparkles, Filter, CheckCircle2, 
+  Clock, AlertCircle, Trash2, Pencil, RotateCcw, CalendarRange, 
+  Receipt, FileText, Zap, ShieldCheck
+} from 'lucide-react';
 import { 
   Transaction, 
   TransactionType, 
@@ -6,229 +12,215 @@ import {
   FinancialAccount, 
   CostCenter, 
   Category, 
+  Customer, 
+  Company, 
   PaymentReceipt,
-  Company,
-  Customer
+  TransactionPayment 
 } from '../types';
-import { 
-  Plus, Search, TrendingUp, TrendingDown, Calendar, CreditCard, Tag, 
-  X, CheckCircle2, Clock, AlertCircle, Pencil, Trash2, DollarSign,
-  FileText, Printer, Filter, Landmark, ArrowUpRight, ArrowDownLeft, Receipt
-} from 'lucide-react';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
+import { TransactionFormDialog } from './TransactionFormDialog';
+import { QuickEntryDialog } from './QuickEntryDialog';
+import { ReceivePayDialog } from './ReceivePayDialog';
+import { DailyFinancialReport } from './DailyFinancialReport';
+import { DeletionPasswordModal } from './DeletionPasswordModal';
 
 interface TransactionsProps {
   transactions: Transaction[];
   accounts: FinancialAccount[];
   costCenters: CostCenter[];
   categories: Category[];
-  company: Company;
   customers: Customer[];
-  onAddTransaction: (tx: Omit<Transaction, 'id' | 'companyId'>) => void;
-  onUpdateTransaction: (tx: Transaction) => void;
-  onDeleteTransaction: (id: string) => void;
+  company: Company;
+  onAddTransaction: (transaction: Omit<Transaction, 'id' | 'companyId'>) => Promise<void> | void;
+  onUpdateTransaction: (transaction: Transaction) => Promise<void> | void;
+  onDeleteTransaction: (id: string) => Promise<void> | void;
 }
 
-const Transactions: React.FC<TransactionsProps> = ({ 
-  transactions, 
-  accounts, 
-  costCenters, 
+export const Transactions: React.FC<TransactionsProps> = ({
+  transactions,
+  accounts,
+  costCenters,
   categories,
-  company,
   customers,
+  company,
   onAddTransaction,
   onUpdateTransaction,
   onDeleteTransaction
 }) => {
-  const [activeTab, setActiveTab] = useState<'ALL' | 'INFLOW' | 'OUTFLOW'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterAccount, setFilterAccount] = useState<string>('ALL');
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
-  
-  // Modals
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modais de Controle
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [formModalType, setFormModalType] = useState<TransactionType>(TransactionType.SALE);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
+  const [isReceivePayOpen, setIsReceivePayOpen] = useState(false);
+  const [selectedTxForSettlement, setSelectedTxForSettlement] = useState<Transaction | null>(null);
+
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+
   const [viewingReceipt, setViewingReceipt] = useState<PaymentReceipt | null>(null);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    description: '',
-    amount: '',
-    paidAmount: '',
-    date: new Date().toISOString().split('T')[0],
-    type: TransactionType.EXPENSE,
-    accountId: accounts[0]?.id || '',
-    costCenterId: costCenters[0]?.id || '',
-    category: 'Outros',
-    status: TransactionStatus.CONFIRMADO,
-    customerId: '',
-    paymentMethod: 'PIX',
-    notes: '',
-    generateReceipt: false
-  });
+  // Modal de Exclusão Segura
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
-  const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  // Filtros Avançados
+  const [activeTab, setActiveTab] = useState<'ALL' | 'INFLOW' | 'OUTFLOW' | 'PENDING'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterAccount, setFilterAccount] = useState('ALL');
+  const [filterCostCenter, setFilterCostCenter] = useState('ALL');
+  const [filterCustomer, setFilterCustomer] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('ALL');
 
-  useEffect(() => {
-    const total = parseFloat(formData.amount) || 0;
-    if (formData.status === TransactionStatus.CONFIRMADO || formData.status === TransactionStatus.PAGO) {
-      setFormData(prev => ({ ...prev, paidAmount: total.toString() }));
-    } else if (formData.status === TransactionStatus.PENDENTE || formData.status === TransactionStatus.ATRASADO) {
-      setFormData(prev => ({ ...prev, paidAmount: '0' }));
-    }
-  }, [formData.status, formData.amount]);
+  // Filtro por Data
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [activeDatePreset, setActiveDatePreset] = useState<'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL');
 
-  useEffect(() => {
-    if (editingTransaction) {
-      setFormData({
-        description: editingTransaction.description,
-        amount: editingTransaction.amount.toString(),
-        paidAmount: editingTransaction.paidAmount.toString(),
-        date: editingTransaction.date,
-        type: editingTransaction.type,
-        accountId: editingTransaction.accountId,
-        costCenterId: editingTransaction.costCenterId || '',
-        category: editingTransaction.category,
-        status: editingTransaction.status,
-        customerId: editingTransaction.customerId || '',
-        paymentMethod: editingTransaction.paymentMethod || 'PIX',
-        notes: editingTransaction.notes || '',
-        generateReceipt: false
-      });
-      setIsModalOpen(true);
-    }
-  }, [editingTransaction]);
+  const formatBRL = (val?: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  const openNewModal = (type: TransactionType) => {
-    setEditingTransaction(null);
-    const firstCat = categories.find(c => c.type === (type === TransactionType.SALE ? 'INFLOW' : 'OUTFLOW'))?.name || 'Outros';
-    setFormData({
-      description: '',
-      amount: '',
-      paidAmount: '',
-      date: new Date().toISOString().split('T')[0],
-      type,
-      accountId: accounts[0]?.id || '',
-      costCenterId: costCenters[0]?.id || '',
-      category: firstCat,
-      status: TransactionStatus.CONFIRMADO,
-      customerId: '',
-      paymentMethod: 'PIX',
-      notes: '',
-      generateReceipt: type === TransactionType.SALE
-    });
-    setIsModalOpen(true);
+  const formatDateBR = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dateStr;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountNum = parseFloat(formData.amount);
-    const paidAmountNum = parseFloat(formData.paidAmount) || 0;
-    
-    if (paidAmountNum > amountNum) {
-      alert('Erro: O valor pago não pode ser superior ao valor total.');
-      return;
+  // Presets de Data
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH') => {
+    setActiveDatePreset(preset);
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (preset === 'ALL') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'TODAY') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === '7DAYS') {
+      const past7 = new Date();
+      past7.setDate(today.getDate() - 7);
+      setStartDate(past7.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (preset === 'THIS_MONTH') {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      setStartDate(firstDay.toISOString().split('T')[0]);
+      setEndDate(lastDay.toISOString().split('T')[0]);
     }
-
-    const receiptId = formData.generateReceipt ? `REC-${Date.now()}` : undefined;
-
-    if (editingTransaction) {
-      onUpdateTransaction({ 
-        ...editingTransaction, 
-        ...formData, 
-        amount: amountNum, 
-        paidAmount: paidAmountNum,
-        receiptId: editingTransaction.receiptId || receiptId
-      });
-    } else {
-      onAddTransaction({ 
-        ...formData, 
-        amount: amountNum, 
-        paidAmount: paidAmountNum,
-        receiptId
-      });
-
-      // Se marcou para gerar recibo, abre o modal de recibo
-      if (formData.generateReceipt && formData.type === TransactionType.SALE) {
-        const cust = customers.find(c => c.id === formData.customerId);
-        const receipt: PaymentReceipt = {
-          id: receiptId || `REC-${Date.now()}`,
-          customerId: formData.customerId || 'general',
-          customerName: cust?.name || 'Cliente Geral',
-          customerDocument: cust?.document,
-          amount: paidAmountNum > 0 ? paidAmountNum : amountNum,
-          date: formData.date,
-          paymentMethod: formData.paymentMethod,
-          accountId: formData.accountId,
-          accountName: accounts.find(a => a.id === formData.accountId)?.name,
-          receivedBy: 'Caixa / Financeiro',
-          description: formData.description,
-          type: 'ENTRADA',
-          notes: formData.notes
-        };
-        setViewingReceipt(receipt);
-      }
-    }
-    handleCloseModal();
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingTransaction(null);
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    setActiveDatePreset('CUSTOM');
+    if (type === 'start') setStartDate(value);
+    if (type === 'end') setEndDate(value);
   };
 
-  // Cálculos dos Cards Financeiros
-  const totalInflows = transactions
-    .filter(t => t.type === TransactionType.SALE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO))
-    .reduce((acc, t) => acc + (t.paidAmount || t.amount || 0), 0);
+  const handleResetFilters = () => {
+    setActiveTab('ALL');
+    setSearchQuery('');
+    setFilterAccount('ALL');
+    setFilterCostCenter('ALL');
+    setFilterCustomer('ALL');
+    setFilterStatus('ALL');
+    applyDatePreset('ALL');
+  };
 
-  const totalOutflows = transactions
-    .filter(t => t.type === TransactionType.EXPENSE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO))
-    .reduce((acc, t) => acc + (t.paidAmount || t.amount || 0), 0);
+  const hasActiveFilters = 
+    activeTab !== 'ALL' || 
+    searchQuery !== '' || 
+    filterAccount !== 'ALL' || 
+    filterCostCenter !== 'ALL' || 
+    filterCustomer !== 'ALL' || 
+    filterStatus !== 'ALL' || 
+    startDate !== '' || 
+    endDate !== '';
+
+  // Cálculos Globais de Métricas
+  const totalInflows = useMemo(() => {
+    return transactions
+      .filter(t => t.type === TransactionType.SALE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL))
+      .reduce((acc, t) => acc + (t.paidAmount || (t.status === TransactionStatus.PAGO ? t.amount : 0)), 0);
+  }, [transactions]);
+
+  const totalOutflows = useMemo(() => {
+    return transactions
+      .filter(t => t.type === TransactionType.EXPENSE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL))
+      .reduce((acc, t) => acc + (t.paidAmount || (t.status === TransactionStatus.PAGO ? t.amount : 0)), 0);
+  }, [transactions]);
 
   const netBalance = totalInflows - totalOutflows;
 
-  const totalPendingInflows = transactions
-    .filter(t => t.type === TransactionType.SALE && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL))
-    .reduce((acc, t) => acc + (t.amount - (t.paidAmount || 0)), 0);
+  const totalPendingInflows = useMemo(() => {
+    return transactions
+      .filter(t => t.type === TransactionType.SALE && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL || t.status === TransactionStatus.ATRASADO))
+      .reduce((acc, t) => acc + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
+  }, [transactions]);
 
   // Filtragem de Transações
-  const filteredTransactions = transactions.filter(t => {
-    // Filtro de Tipo
-    if (activeTab === 'INFLOW' && t.type !== TransactionType.SALE) return false;
-    if (activeTab === 'OUTFLOW' && t.type !== TransactionType.EXPENSE) return false;
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      if (activeTab === 'INFLOW' && t.type !== TransactionType.SALE) return false;
+      if (activeTab === 'OUTFLOW' && t.type !== TransactionType.EXPENSE) return false;
+      if (activeTab === 'PENDING' && t.status !== TransactionStatus.PENDENTE && t.status !== TransactionStatus.PARCIAL && t.status !== TransactionStatus.ATRASADO) return false;
 
-    // Filtro de Conta
-    if (filterAccount !== 'ALL' && t.accountId !== filterAccount) return false;
+      if (startDate && t.date < startDate) return false;
+      if (endDate && t.date > endDate) return false;
 
-    // Filtro de Status
-    if (filterStatus !== 'ALL' && t.status !== filterStatus) return false;
+      if (filterCustomer !== 'ALL' && t.customerId !== filterCustomer && t.contactId !== filterCustomer) return false;
+      if (filterAccount !== 'ALL' && t.accountId !== filterAccount) return false;
+      if (filterCostCenter !== 'ALL' && t.costCenterId !== filterCostCenter) return false;
+      if (filterStatus !== 'ALL' && t.status !== filterStatus) return false;
 
-    // Filtro de Busca
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchDesc = t.description?.toLowerCase().includes(q);
-      const matchCat = t.category?.toLowerCase().includes(q);
-      const matchCust = customers.find(c => c.id === t.customerId)?.name.toLowerCase().includes(q);
-      const matchAccount = accounts.find(a => a.id === t.accountId)?.name.toLowerCase().includes(q);
-      return matchDesc || matchCat || matchCust || matchAccount;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchDesc = t.description?.toLowerCase().includes(q);
+        const matchCat = t.category?.toLowerCase().includes(q);
+        const matchCust = customers.find(c => c.id === t.customerId || c.id === t.contactId)?.name.toLowerCase().includes(q);
+        const matchContact = t.contactName?.toLowerCase().includes(q);
+        const matchAccount = accounts.find(a => a.id === t.accountId)?.name.toLowerCase().includes(q);
+        const matchCostCenter = costCenters.find(cc => cc.id === t.costCenterId)?.name.toLowerCase().includes(q) || t.costCenter?.toLowerCase().includes(q);
+        const matchMethod = t.paymentMethod?.toLowerCase().includes(q);
+        const matchReceipt = t.receiptId?.toLowerCase().includes(q);
+        return matchDesc || matchCat || matchCust || matchContact || matchAccount || matchCostCenter || matchMethod || matchReceipt;
+      }
+
+      return true;
+    });
+  }, [transactions, activeTab, startDate, endDate, filterCustomer, filterAccount, filterCostCenter, filterStatus, searchQuery, customers, accounts, costCenters]);
+
+  // Salvar formulário completo
+  const handleSaveForm = async (txData: Transaction | Omit<Transaction, 'id' | 'companyId'>) => {
+    if ('id' in txData && txData.id) {
+      await onUpdateTransaction(txData as Transaction);
+    } else {
+      await onAddTransaction(txData);
     }
+  };
 
-    return true;
-  });
+  // Abrir Modal de Liquidação / Abatimento
+  const handleOpenReceivePay = (t: Transaction) => {
+    setSelectedTxForSettlement(t);
+    setIsReceivePayOpen(true);
+  };
 
+  const handleConfirmSettlement = async (updatedTransaction: Transaction) => {
+    await onUpdateTransaction(updatedTransaction);
+  };
+
+  // Abrir Recibo de Transação
   const handleOpenReceiptForTx = (tx: Transaction) => {
-    const cust = customers.find(c => c.id === tx.customerId);
+    const cust = customers.find(c => c.id === tx.customerId || c.id === tx.contactId);
     const receipt: PaymentReceipt = {
       id: tx.receiptId || `REC-${tx.id.replace(/\D/g, '').slice(-6) || Date.now()}`,
       orderId: tx.orderId,
-      customerId: tx.customerId || 'general',
-      customerName: cust?.name || 'Cliente Geral',
+      customerId: tx.customerId || tx.contactId || 'general',
+      customerName: tx.contactName || cust?.name || 'Cliente Geral',
       customerDocument: cust?.document,
       amount: tx.paidAmount || tx.amount,
-      date: tx.date,
-      paymentMethod: tx.paymentMethod || 'Dinheiro / PIX',
+      date: tx.paymentDate || tx.date,
+      paymentMethod: tx.paymentMethod || 'PIX',
       accountId: tx.accountId,
       accountName: accounts.find(a => a.id === tx.accountId)?.name,
       receivedBy: 'Caixa / Financeiro',
@@ -239,122 +231,291 @@ const Transactions: React.FC<TransactionsProps> = ({
     setViewingReceipt(receipt);
   };
 
+  // Solicitar exclusão com senha
+  const handleRequestDelete = (tx: Transaction) => {
+    setTxToDelete(tx);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (txToDelete) {
+      await onDeleteTransaction(txToDelete.id);
+      setIsDeleteModalOpen(false);
+      setTxToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       
       {/* Header Principal */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Gestão de Entradas e Saídas</h2>
-          <p className="text-slate-500 text-sm font-medium">Controle financeiro, conciliação e emissão de recibos</p>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Módulo Financeiro & Lançamentos</h2>
+            <span className="bg-purple-100 text-purple-800 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
+              Gestão Integral
+            </span>
+          </div>
+          <p className="text-slate-500 text-xs font-medium">
+            Entradas, saídas, descontos, abatimentos, conciliação diária e liquidação em tempo real
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        
+        {/* Barra de Ações Rápidas */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Lançamento Rápido Express */}
           <button 
-            onClick={() => openNewModal(TransactionType.SALE)} 
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg shadow-emerald-200 text-xs"
+            onClick={() => setIsQuickEntryOpen(true)} 
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2.5 rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg shadow-amber-200 text-xs active:scale-95"
+            title="Lançamento instantâneo em 1 clique (Aceita R$ 0 para abatimento futuro)"
           >
-            <ArrowUpRight size={16} /> Nova Entrada (Receita)
+            <Zap size={15} className="fill-slate-950" /> ⚡ Lançamento Rápido
           </button>
+
+          {/* Relatório Diário de Caixa */}
           <button 
-            onClick={() => openNewModal(TransactionType.EXPENSE)} 
-            className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg shadow-rose-200 text-xs"
+            onClick={() => setIsDailyReportOpen(true)} 
+            className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg text-xs active:scale-95"
+            title="Relatório diário baseado em liquidações reais"
           >
-            <ArrowDownLeft size={16} /> Nova Saída (Despesa)
+            <FileText size={15} className="text-amber-400" /> Relatório Diário
+          </button>
+
+          {/* Nova Entrada */}
+          <button 
+            onClick={() => {
+              setFormModalType(TransactionType.SALE);
+              setEditingTransaction(null);
+              setIsFormModalOpen(true);
+            }} 
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-2xl font-black transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-200 text-xs active:scale-95"
+          >
+            <ArrowUpRight size={15} /> 📥 Nova Entrada
+          </button>
+
+          {/* Nova Saída */}
+          <button 
+            onClick={() => {
+              setFormModalType(TransactionType.EXPENSE);
+              setEditingTransaction(null);
+              setIsFormModalOpen(true);
+            }} 
+            className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-2xl font-black transition-all flex items-center gap-1.5 shadow-lg shadow-rose-200 text-xs active:scale-95"
+          >
+            <ArrowDownLeft size={15} /> 📤 Nova Saída
           </button>
         </div>
       </header>
 
-      {/* Cards de Métricas Financeiras */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
-            <ArrowUpRight size={24} />
+      {/* Cards de Métricas Financeiras Globais */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black shrink-0">
+            <ArrowUpRight size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Entradas</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">📥 Total de Entradas</p>
             <p className="text-xl font-black text-emerald-600">{formatBRL(totalInflows)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-black">
-            <ArrowDownLeft size={24} />
+        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-black shrink-0">
+            <ArrowDownLeft size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Saídas</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">📤 Total de Saídas</p>
             <p className="text-xl font-black text-rose-600">{formatBRL(totalOutflows)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black ${netBalance >= 0 ? 'bg-purple-50 text-purple-600' : 'bg-rose-50 text-rose-600'}`}>
-            <DollarSign size={24} />
+        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black shrink-0 ${netBalance >= 0 ? 'bg-purple-50 text-purple-600' : 'bg-rose-50 text-rose-600'}`}>
+            <DollarSign size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Líquido</p>
-            <p className={`text-xl font-black ${netBalance >= 0 ? 'text-purple-700' : 'text-rose-600'}`}>{formatBRL(netBalance)}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">💰 Saldo Líquido</p>
+            <p className={`text-xl font-black ${netBalance >= 0 ? 'text-purple-700' : 'text-rose-600'}`}>
+              {formatBRL(netBalance)}
+            </p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">
-            <Clock size={24} />
+        <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-black shrink-0">
+            <Clock size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">A Receber (Pendentes)</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">🟡 A Receber / Pendente</p>
             <p className="text-xl font-black text-amber-600">{formatBRL(totalPendingInflows)}</p>
           </div>
         </div>
       </div>
 
-      {/* Barra de Filtros e Busca */}
-      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+      {/* Painel Avançado de Filtragem e Conciliação Diária */}
+      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
         
-        {/* Abas Tipo */}
-        <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
-          <button
-            onClick={() => setActiveTab('ALL')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            Todas ({transactions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('INFLOW')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${activeTab === 'INFLOW' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-emerald-700'}`}
-          >
-            <ArrowUpRight size={14} /> Entradas
-          </button>
-          <button
-            onClick={() => setActiveTab('OUTFLOW')}
-            className={`px-5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${activeTab === 'OUTFLOW' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-rose-700'}`}
-          >
-            <ArrowDownLeft size={14} /> Saídas
-          </button>
-        </div>
+        {/* Linha Superior: Abas de Tipo, Busca e Reset */}
+        <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+          
+          {/* Abas Tipo */}
+          <div className="flex p-1 bg-slate-100 rounded-2xl w-full xl:w-auto overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('ALL')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${activeTab === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Todas ({transactions.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('INFLOW')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'INFLOW' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-emerald-700'}`}
+            >
+              <ArrowUpRight size={14} /> 📥 Entradas
+            </button>
+            <button
+              onClick={() => setActiveTab('OUTFLOW')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'OUTFLOW' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-rose-700'}`}
+            >
+              <ArrowDownLeft size={14} /> 📤 Saídas
+            </button>
+            <button
+              onClick={() => setActiveTab('PENDING')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'PENDING' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-500 hover:text-amber-700'}`}
+            >
+              🟡 Pendentes / Parciais
+            </button>
+          </div>
 
-        {/* Busca e Filtro de Contas */}
-        <div className="flex flex-1 items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-1">
+          {/* Campo de Busca */}
+          <div className="relative flex-1 w-full xl:w-auto max-w-xl">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Buscar descrição, cliente ou categoria..."
+              placeholder="Buscar por descrição, cliente/fornecedor, centro de custo, categoria..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs focus:border-purple-500"
             />
           </div>
 
-          <select
-            value={filterAccount}
-            onChange={e => setFilterAccount(e.target.value)}
-            className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
-          >
-            <option value="ALL">Todas as Contas</option>
-            {accounts.map(acc => (
-              <option key={acc.id} value={acc.id}>{acc.name}</option>
-            ))}
-          </select>
+          {/* Botão de Limpar Filtros */}
+          {hasActiveFilters && (
+            <button
+              onClick={handleResetFilters}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 shrink-0"
+              title="Limpar todos os filtros"
+            >
+              <RotateCcw size={14} /> Limpar Filtros
+            </button>
+          )}
+
+        </div>
+
+        {/* Linha Inferior: Filtros de Data (Conciliação Diária), Cliente, Conta e Centro de Custo */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3 pt-3 border-t border-slate-100">
+          
+          {/* Atalhos Rápidos de Data */}
+          <div className="xl:col-span-4 flex flex-col gap-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Calendar size={12} className="text-purple-600" /> Período de Conciliação
+            </label>
+            <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => applyDatePreset('TODAY')}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                  activeDatePreset === 'TODAY' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDatePreset('7DAYS')}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                  activeDatePreset === '7DAYS' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                7 Dias
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDatePreset('THIS_MONTH')}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                  activeDatePreset === 'THIS_MONTH' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                Este Mês
+              </button>
+              <button
+                type="button"
+                onClick={() => applyDatePreset('ALL')}
+                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                  activeDatePreset === 'ALL' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
+                }`}
+              >
+                Tudo
+              </button>
+            </div>
+          </div>
+
+          {/* Seletores Manuais de Data Início / Fim */}
+          <div className="xl:col-span-3 flex flex-col gap-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <CalendarRange size={12} /> Intervalo Personalizado
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => handleCustomDateChange('start', e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
+              />
+              <span className="text-xs font-bold text-slate-400">a</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => handleCustomDateChange('end', e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
+              />
+            </div>
+          </div>
+
+          {/* Filtro por Cliente */}
+          <div className="xl:col-span-3 flex flex-col gap-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <User size={12} className="text-emerald-600" /> Filtrar Contato
+            </label>
+            <select
+              value={filterCustomer}
+              onChange={e => setFilterCustomer(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
+            >
+              <option value="ALL">Todos os Clientes / Fornecedores</option>
+              {customers.map(cust => (
+                <option key={cust.id} value={cust.id}>{cust.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro de Conta Bancária */}
+          <div className="xl:col-span-2 flex flex-col gap-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Landmark size={12} /> Conta / Caixa
+            </label>
+            <select
+              value={filterAccount}
+              onChange={e => setFilterAccount(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
+            >
+              <option value="ALL">Todas as Contas</option>
+              {accounts.map(acc => (
+                <option key={acc.id} value={acc.id}>{acc.name}</option>
+              ))}
+            </select>
+          </div>
+
         </div>
 
       </div>
@@ -366,10 +527,10 @@ const Transactions: React.FC<TransactionsProps> = ({
             <thead>
               <tr className="bg-slate-50/70 text-slate-400 text-[10px] font-black uppercase tracking-widest">
                 <th className="px-6 py-4">Data</th>
-                <th className="px-6 py-4">Descrição / Detalhes</th>
-                <th className="px-4 py-4">Categoria</th>
-                <th className="px-4 py-4">Conta Bancária</th>
-                <th className="px-6 py-4 text-right">Valor / Impacto</th>
+                <th className="px-6 py-4">Descrição / Contato</th>
+                <th className="px-4 py-4">Categoria / C. Custo</th>
+                <th className="px-4 py-4">Conta</th>
+                <th className="px-6 py-4 text-right">Valor Líquido</th>
                 <th className="px-4 py-4 text-center">Status</th>
                 <th className="px-6 py-4 text-center">Ações</th>
               </tr>
@@ -385,11 +546,18 @@ const Transactions: React.FC<TransactionsProps> = ({
                 filteredTransactions.slice().reverse().map(t => {
                   const account = accounts.find(a => a.id === t.accountId);
                   const isSale = t.type === TransactionType.SALE;
+                  const contact = t.contactName || customers.find(c => c.id === t.customerId || c.id === t.contactId)?.name;
+                  const isPendingOrPartial = t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL || t.status === TransactionStatus.ATRASADO;
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-6 py-5 text-xs font-bold text-slate-500 whitespace-nowrap">{t.date}</td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-4 text-xs font-bold text-slate-500 whitespace-nowrap">
+                        {formatDateBR(t.date)}
+                        {t.dueDate && t.dueDate !== t.date && (
+                          <span className="block text-[10px] text-slate-400">Venc: {formatDateBR(t.dueDate)}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-black text-slate-800">{t.description}</p>
                           {t.paymentMethod && (
@@ -398,55 +566,96 @@ const Transactions: React.FC<TransactionsProps> = ({
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] font-black uppercase tracking-wider text-purple-600 pt-0.5">
-                          {costCenters.find(cc => cc.id === t.costCenterId)?.name || 'Geral'}
-                          {t.customerId && ` • ${customers.find(c => c.id === t.customerId)?.name || 'Cliente'}`}
-                        </p>
+                        {contact && (
+                          <p className="text-[11px] font-bold text-purple-700 pt-0.5 flex items-center gap-1">
+                            <User size={11} /> {contact}
+                          </p>
+                        )}
+                        {t.discount && t.discount > 0 ? (
+                          <span className="text-[10px] text-amber-600 font-bold block">
+                            🏷️ Desconto: {formatBRL(t.discount)} (Bruto: {formatBRL(t.originalAmount)})
+                          </span>
+                        ) : null}
                       </td>
-                      <td className="px-4 py-5">
-                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight bg-slate-100 px-2.5 py-1 rounded-lg">
+                      <td className="px-4 py-4">
+                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight bg-slate-100 px-2 py-1 rounded-lg inline-block mb-0.5">
                           {t.category}
                         </span>
+                        <p className="text-[10px] font-bold text-slate-400">
+                          {costCenters.find(cc => cc.id === t.costCenterId)?.name || t.costCenter || 'Geral'}
+                        </p>
                       </td>
-                      <td className="px-4 py-5 text-xs font-bold text-slate-600">
+                      <td className="px-4 py-4 text-xs font-bold text-slate-600">
                         {account?.name || 'Caixa'}
                       </td>
-                      <td className={`px-6 py-5 text-right font-black text-sm whitespace-nowrap ${isSale ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {isSale ? '+' : '-'} {formatBRL(t.paidAmount || t.amount)}
+                      <td className={`px-6 py-4 text-right font-black text-sm whitespace-nowrap ${isSale ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {isSale ? '+ ' : '- '} {formatBRL(t.amount)}
+                        {t.paidAmount > 0 && t.paidAmount !== t.amount && (
+                          <span className="block text-[10px] text-slate-400 font-normal">
+                            Pago: {formatBRL(t.paidAmount)}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-5 text-center">
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-full uppercase border ${
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase border ${
                           t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO 
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                             : t.status === TransactionStatus.PARCIAL 
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : t.status === TransactionStatus.ATRASADO
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {t.status}
+                          {t.status === TransactionStatus.PAGO && '✅ Pago'}
+                          {t.status === TransactionStatus.CONFIRMADO && '✅ Confirmado'}
+                          {t.status === TransactionStatus.PARCIAL && '🟡 Parcial'}
+                          {t.status === TransactionStatus.PENDENTE && '🟡 Pendente'}
+                          {t.status === TransactionStatus.ATRASADO && '🔴 Atrasado'}
                         </span>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-6 py-4">
                         <div className="flex justify-center items-center gap-1.5">
+                          {/* Ação de Receber/Pagar/Abater */}
+                          {isPendingOrPartial && (
+                            <button
+                              onClick={() => handleOpenReceivePay(t)}
+                              className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm flex items-center gap-1 ${
+                                isSale 
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+                              }`}
+                              title={isSale ? "Receber / Baixar / Abater Entrada" : "Pagar / Baixar / Abater Despesa"}
+                            >
+                              <DollarSign size={12} /> {isSale ? 'Receber' : 'Pagar'}
+                            </button>
+                          )}
+
                           {isSale && (
                             <button
                               onClick={() => handleOpenReceiptForTx(t)}
-                              className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
-                              title="Visualizar / Imprimir Recibo"
+                              className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                              title="Visualizar / Imprimir Recibo Oficial"
                             >
                               <Receipt size={16} />
                             </button>
                           )}
+
                           <button
-                            onClick={() => setEditingTransaction(t)}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                            title="Editar Lançamento"
+                            onClick={() => {
+                              setEditingTransaction(t);
+                              setFormModalType(t.type);
+                              setIsFormModalOpen(true);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                            title="Editar Lançamento Completo"
                           >
                             <Pencil size={16} />
                           </button>
+
                           <button
-                            onClick={() => onDeleteTransaction(t.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                            title="Excluir"
+                            onClick={() => handleRequestDelete(t)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                            title="Excluir (Protegido por Senha)"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -461,176 +670,55 @@ const Transactions: React.FC<TransactionsProps> = ({
         </div>
       </div>
 
-      {/* Modal Criar / Editar Lançamento */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-8 md:p-10 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight">
-                {editingTransaction ? 'Editar Lançamento' : (formData.type === TransactionType.SALE ? 'Nova Entrada (Receita)' : 'Nova Saída (Despesa)')}
-              </h3>
-              <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
+      {/* Diálogo Completo de Transação */}
+      <TransactionFormDialog
+        isOpen={isFormModalOpen}
+        onClose={() => {
+          setIsFormModalOpen(false);
+          setEditingTransaction(null);
+        }}
+        initialType={formModalType}
+        editingTransaction={editingTransaction}
+        accounts={accounts}
+        costCenters={costCenters}
+        categories={categories}
+        customers={customers}
+        historyTransactions={transactions}
+        onSave={handleSaveForm}
+      />
 
-            <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              
-              <div className="grid grid-cols-2 gap-4 p-1.5 bg-slate-100 rounded-2xl mb-4">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, type: TransactionType.SALE })}
-                  className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${formData.type === TransactionType.SALE ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
-                >
-                  <ArrowUpRight size={14} /> ENTRADA
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, type: TransactionType.EXPENSE })}
-                  className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${formData.type === TransactionType.EXPENSE ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500'}`}
-                >
-                  <ArrowDownLeft size={14} /> SAÍDA
-                </button>
-              </div>
+      {/* Diálogo de Lançamento Rápido 1-Click */}
+      <QuickEntryDialog
+        isOpen={isQuickEntryOpen}
+        onClose={() => setIsQuickEntryOpen(false)}
+        accounts={accounts}
+        costCenters={costCenters}
+        categories={categories}
+        customers={customers}
+        historyTransactions={transactions}
+        onSave={handleSaveForm}
+      />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.description}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Ex: Recebimento de Venda, Compra de Peças, Diesel..."
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm"
-                  />
-                </div>
+      {/* Diálogo de Recebimento/Pagamento Parcial & Abatimentos */}
+      <ReceivePayDialog
+        isOpen={isReceivePayOpen}
+        onClose={() => {
+          setIsReceivePayOpen(false);
+          setSelectedTxForSettlement(null);
+        }}
+        transaction={selectedTxForSettlement}
+        accounts={accounts}
+        onConfirm={handleConfirmSettlement}
+      />
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
-                  <select
-                    required
-                    value={formData.category}
-                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 font-bold text-sm"
-                  >
-                    {categories
-                      .filter(c => formData.type === TransactionType.SALE ? c.type === 'INFLOW' : c.type === 'OUTFLOW')
-                      .map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)
-                    }
-                    <option value="Outros">Outros</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total (R$)</label>
-                  <input
-                    required
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg focus:border-purple-500"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</label>
-                  <select
-                    value={formData.paymentMethod}
-                    onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs"
-                  >
-                    <option value="PIX">PIX</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Transferência (TED/DOC)">Transferência (TED/DOC)</option>
-                    <option value="Boleto">Boleto</option>
-                    <option value="Cartão de Débito">Cartão de Débito</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Cheque">Cheque</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs"
-                  >
-                    <option value={TransactionStatus.CONFIRMADO}>Confirmado</option>
-                    <option value={TransactionStatus.PENDENTE}>Pendente</option>
-                    <option value={TransactionStatus.PARCIAL}>Parcial</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Conta Bancária / Caixa</label>
-                  <select
-                    value={formData.accountId}
-                    onChange={e => setFormData({ ...formData, accountId: e.target.value })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm"
-                  >
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>{acc.name} ({acc.bankName || 'Caixa'})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
-                  <select
-                    value={formData.costCenterId}
-                    onChange={e => setFormData({ ...formData, costCenterId: e.target.value })}
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm"
-                  >
-                    {costCenters.map(cc => (
-                      <option key={cc.id} value={cc.id}>{cc.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {formData.type === TransactionType.SALE && (
-                <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-black text-emerald-900">Emitir Recibo de Pagamento Oficial</p>
-                    <p className="text-[10px] text-emerald-700">Abre o recibo pronto para impressão ou compartilhamento logo após salvar.</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={formData.generateReceipt}
-                    onChange={e => setFormData({ ...formData, generateReceipt: e.target.checked })}
-                    className="w-5 h-5 accent-emerald-600 rounded cursor-pointer"
-                  />
-                </div>
-              )}
-
-              <div className="flex gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="flex-1 py-4 text-slate-400 font-black uppercase text-[10px] tracking-widest border border-slate-100 rounded-2xl hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className={`flex-[2] py-4 rounded-2xl font-black text-white shadow-xl ${formData.type === TransactionType.SALE ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'}`}
-                >
-                  Salvar Lançamento
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Relatório Diário de Caixa */}
+      <DailyFinancialReport
+        isOpen={isDailyReportOpen}
+        onClose={() => setIsDailyReportOpen(false)}
+        transactions={transactions}
+        accounts={accounts}
+        company={company}
+      />
 
       {/* Modal de Recibo Oficial */}
       {viewingReceipt && (
@@ -640,6 +728,20 @@ const Transactions: React.FC<TransactionsProps> = ({
           onClose={() => setViewingReceipt(null)}
         />
       )}
+
+      {/* Modal de Exclusão Segura com Senha de 5 dígitos */}
+      <DeletionPasswordModal
+        isOpen={isDeleteModalOpen}
+        title="Excluir Lançamento Financeiro"
+        description="Esta ação removerá o lançamento do banco de dados e recalculará os saldos das contas vinculadas. Digite a senha de 5 dígitos para autorizar:"
+        itemDescription={txToDelete ? `${txToDelete.description} (${formatBRL(txToDelete.amount)})` : undefined}
+        onConfirm={handleConfirmDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setTxToDelete(null);
+        }}
+        correctPassword="12345"
+      />
 
     </div>
   );

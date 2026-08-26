@@ -42,6 +42,16 @@ export interface User {
   lastAccess?: string;
   avatar?: string;
   companyId?: string;
+  companyName?: string;
+  cnpj?: string;
+  phone?: string;
+  jobTitle?: string;
+  city?: string;
+  state?: string;
+  onboardingCompleted?: boolean;
+  onboardingStep?: number;
+  createdAt?: string;
+  plan?: 'STARTER' | 'PRO' | 'ENTERPRISE';
 }
 
 export interface Category {
@@ -222,25 +232,47 @@ export interface SalePayment {
   paymentMethod?: string;
 }
 
+export interface TransactionPayment {
+  id: string;
+  transactionId: string;
+  amount: number;
+  paymentDate: string;
+  accountId: string;
+  paymentMethod: string;
+  notes?: string;
+  isDiscountOrDeduction?: boolean;
+  createdAt?: string;
+}
+
 export interface Transaction {
   id: string;
   accountId: string;
   costCenterId?: string;
-  date: string;
+  costCenter?: string; // Nome livre ou sugerido por IA
+  date: string; // Data de competência / vencimento (due_date)
+  dueDate?: string;
+  paymentDate?: string; // Data efetiva do pagamento
   type: TransactionType;
   status: TransactionStatus;
   description: string;
   category: string;
-  amount: number;
-  paidAmount: number;
+  amount: number; // Valor LÍQUIDO final
+  originalAmount?: number; // Valor cheio antes do desconto
+  discount?: number; // Desconto monetário total calculado
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number; // % ou R$ digitado
+  paidAmount: number; // Soma já paga
   quantity?: number;
   productId?: string;
   customerId?: string;
+  contactId?: string; // ID do cliente ou fornecedor
+  contactName?: string; // Nome do cliente ou fornecedor vinculado
   orderId?: string;
   notes?: string;
   companyId?: string;
   receiptId?: string;
   paymentMethod?: string;
+  payments?: TransactionPayment[]; // Histórico de pagamentos parciais / abatimentos
 }
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
@@ -269,10 +301,22 @@ export interface SaleOrder {
   discount: number;
   shipping: number;
   total: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: 'pago' | 'parcial' | 'pendente';
+  withdrawalStatus?: 'aguardando' | 'parcial' | 'total';
   status: OrderStatus;
   payments: SalePayment[];
   receipts?: PaymentReceipt[];
   withdrawals?: OrderWithdrawal[];
+  // Barter / Permuta Agro (Calcário x Grãos)
+  isBarter?: boolean;
+  barterCrop?: 'Milho' | 'Soja' | 'Sorgo' | 'Outro' | string;
+  barterCommodityType?: 'MILHO' | 'SOJA' | string;
+  cornTons?: number; // Toneladas ou sacas de grãos
+  cornUnitValue?: number; // Cotação da saca / tonelada de grãos
+  cornPricePerTon?: number;
+  barterEquivalentValue?: number;
   notes?: string;
   companyId?: string;
   // Fiscal / NotaAs fields

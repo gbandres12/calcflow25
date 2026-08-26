@@ -24,7 +24,7 @@ import {
   OUTFLOW_CATEGORIES,
   DEFAULT_FISCAL_CONFIG
 } from '../constants';
-import { Category, User } from '../types';
+import { Category, User, UserRole } from '../types';
 
 const storage = {
   get(key: string) {
@@ -173,7 +173,71 @@ export const userService = {
       return INITIAL_USERS[0];
     }
 
-    throw new Error("Usuário não encontrado. Use uma das contas demonstrativas ou crie um novo.");
+    throw new Error("Usuário não encontrado. Cadastre-se na aba 'Criar Conta' para começar.");
+  },
+
+  async registerUser(userData: {
+    name: string;
+    email: string;
+    companyName: string;
+    cnpj?: string;
+    phone?: string;
+    jobTitle?: string;
+    role?: UserRole;
+  }): Promise<User> {
+    const cleanEmail = userData.email.trim().toLowerCase();
+    const existingUsers: User[] = await db.getTable('users');
+    const alreadyExists = existingUsers.some(u => u.email.toLowerCase() === cleanEmail);
+    if (alreadyExists) {
+      throw new Error("Este e-mail já está cadastrado. Faça login ou use outro e-mail.");
+    }
+
+    const newUser: User = {
+      id: `usr-${Date.now()}`,
+      name: userData.name.trim(),
+      email: cleanEmail,
+      role: userData.role || UserRole.ADMIN,
+      status: 'Ativo',
+      companyName: userData.companyName.trim(),
+      cnpj: userData.cnpj?.trim() || '',
+      phone: userData.phone?.trim() || '',
+      jobTitle: userData.jobTitle?.trim() || 'Diretor / Gestor Geral',
+      onboardingCompleted: false,
+      onboardingStep: 1,
+      createdAt: new Date().toISOString(),
+      lastAccess: new Date().toISOString(),
+      plan: 'PRO'
+    };
+
+    await db.upsert('users', 'main', newUser);
+    return newUser;
+  },
+
+  async completeOnboarding(userId: string, data?: Partial<User>): Promise<User> {
+    const users: User[] = await db.getTable('users');
+    let user = users.find(u => u.id === userId);
+    if (user) {
+      user.onboardingCompleted = true;
+      user.onboardingStep = 5;
+      if (data?.companyName) user.companyName = data.companyName;
+      if (data?.cnpj) user.cnpj = data.cnpj;
+      if (data?.city) user.city = data.city;
+      if (data?.state) user.state = data.state;
+      await db.upsert('users', 'main', user);
+      return user;
+    }
+    const newUser: User = {
+      id: userId,
+      name: 'Usuário',
+      email: '',
+      role: UserRole.ADMIN,
+      status: 'Ativo',
+      onboardingCompleted: true,
+      onboardingStep: 5,
+      ...(data || {})
+    };
+    await db.upsert('users', 'main', newUser);
+    return newUser;
   },
 
   async getAll(): Promise<User[]> {
