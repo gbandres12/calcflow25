@@ -16,7 +16,7 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { DanfeModal } from './DanfeModal';
@@ -24,6 +24,7 @@ import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { QuickCustomerModal } from './QuickCustomerModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
@@ -34,6 +35,7 @@ interface SalesOrdersProps {
   accounts: FinancialAccount[];
   company: Company;
   onAddOrder: (order: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => void;
+  onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
   onUpdateOrder: (order: SaleOrder) => void;
   onDeleteOrder: (orderId: string) => void;
   onFinalizeOrder: (orderId: string, payments: SalePayment[]) => void;
@@ -73,6 +75,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   accounts, 
   company, 
   onAddOrder, 
+  onAddCustomer,
   onUpdateOrder,
   onDeleteOrder,
   onFinalizeOrder,
@@ -80,6 +83,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 }) => {
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isQuickCustomerModalOpen, setIsQuickCustomerModalOpen] = useState(false);
   
   // Modals de Ação Principal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1139,11 +1143,21 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   <div className="space-y-1.5 relative" ref={customerDropdownRef}>
                     <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                       <span className="flex items-center gap-1.5"><User size={13} /> Cliente Destinatário / Produtor *</span>
-                      {selectedCustomerId && (
-                        <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                          <Check size={12} /> Cliente Selecionado
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {selectedCustomerId && (
+                          <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                            <Check size={12} /> Cliente Selecionado
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickCustomerModalOpen(true)}
+                          className="text-[11px] text-purple-700 hover:text-purple-900 font-black flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-all active:scale-95"
+                          title="Cadastrar novo cliente rapidamente com busca de endereço via CEP"
+                        >
+                          <UserPlus size={13} /> + Cadastrar Cliente Rápido
+                        </button>
+                      </div>
                     </label>
                     <div className="relative">
                       <input 
@@ -1171,10 +1185,28 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     </div>
 
                     {isCustomerDropdownOpen && (
-                      <div className="absolute z-[110] top-full left-0 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto custom-scrollbar">
+                      <div className="absolute z-[110] top-full left-0 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                        {/* Botão de Destaque para Cadastro Rápido */}
+                        <div className="p-2 border-b border-purple-100 bg-purple-50/70 sticky top-0 z-10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsQuickCustomerModalOpen(true);
+                              setIsCustomerDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-between transition-all shadow-sm"
+                          >
+                            <span className="flex items-center gap-2">
+                              <UserPlus size={14} />
+                              <span>Cadastrar {customerSearch ? <strong>"{customerSearch}"</strong> : 'Novo Cliente'} Rápido</span>
+                            </span>
+                            <span className="text-[10px] bg-purple-500 text-purple-100 px-2 py-0.5 rounded uppercase tracking-wider font-extrabold">ViaCEP</span>
+                          </button>
+                        </div>
+
                         {filteredCustomers.length === 0 ? (
-                          <div className="p-4 text-center text-slate-400 text-xs">
-                            Nenhum cliente encontrado com esse termo.
+                          <div className="p-4 text-center text-slate-500 text-xs">
+                            Nenhum cliente cadastrado com esse termo. Clique acima para cadastrar em segundos!
                           </div>
                         ) : (
                           filteredCustomers.map(c => (
@@ -1192,7 +1224,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             >
                               <div>
                                 <p className="text-xs font-bold">{c.name}</p>
-                                <p className="text-[11px] text-slate-400">Doc: {c.document} {c.phone ? `• Tel: ${c.phone}` : ''}</p>
+                                <p className="text-[11px] text-slate-400">
+                                  Doc: {c.document} {c.phone ? `• Tel: ${c.phone}` : ''} {c.city ? `• ${c.city}/${c.state}` : ''}
+                                </p>
                               </div>
                               {selectedCustomerId === c.id && <Check size={14} className="text-emerald-600" />}
                             </button>
@@ -2052,6 +2086,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
         </div>
       )}
+
+      {/* Modal Cadastro Rápido de Cliente */}
+      <QuickCustomerModal
+        isOpen={isQuickCustomerModalOpen}
+        onClose={() => setIsQuickCustomerModalOpen(false)}
+        initialName={customerSearch}
+        onAddCustomer={onAddCustomer}
+        onSuccess={(newCustomer) => {
+          setSelectedCustomerId(newCustomer.id);
+          setCustomerSearch(newCustomer.name);
+          setIsCustomerDropdownOpen(false);
+        }}
+      />
 
     </div>
   );

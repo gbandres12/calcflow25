@@ -266,7 +266,7 @@ const App: React.FC = () => {
     db.upsert('customers', activeCompanyId, formatted);
   };
 
-  const handleAddCustomer = (newCustomer: Omit<Customer, 'id' | 'totalSpent'>) => {
+  const handleAddCustomer = (newCustomer: Omit<Customer, 'id' | 'totalSpent'>): Customer => {
     const customer: Customer = {
       ...newCustomer,
       id: `cust-${Date.now()}`,
@@ -274,6 +274,7 @@ const App: React.FC = () => {
     };
     setCustomers(prev => [...prev, customer]);
     db.upsert('customers', activeCompanyId, customer);
+    return customer;
   };
 
   // Estoque
@@ -625,6 +626,7 @@ const App: React.FC = () => {
               accounts={accounts} 
               company={COMPANY_INFO} 
               onAddOrder={handleAddOrder} 
+              onAddCustomer={handleAddCustomer}
               onUpdateOrder={handleUpdateOrder} 
               onDeleteOrder={(id) => db.delete('sales_orders', activeCompanyId, id)} 
               onFinalizeOrder={(oid, p) => finalizeSale(orders.find(o => o.id === oid)!, p)} 
