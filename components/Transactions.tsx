@@ -729,18 +729,18 @@ export const Transactions: React.FC<TransactionsProps> = ({
         />
       )}
 
-      {/* Modal de Exclusão Segura com Senha de 5 dígitos */}
+      {/* Modal de Exclusão Segura com Senha de 4 dígitos */}
       <DeletionPasswordModal
         isOpen={isDeleteModalOpen}
         title="Excluir Lançamento Financeiro"
-        description="Esta ação removerá o lançamento do banco de dados e recalculará os saldos das contas vinculadas. Digite a senha de 5 dígitos para autorizar:"
+        description="Esta ação removerá o lançamento do banco de dados e recalculará os saldos das contas vinculadas. Digite a senha (1234) para autorizar:"
         itemDescription={txToDelete ? `${txToDelete.description} (${formatBRL(txToDelete.amount)})` : undefined}
         onConfirm={handleConfirmDelete}
         onClose={() => {
           setIsDeleteModalOpen(false);
           setTxToDelete(null);
         }}
-        correctPassword="12345"
+        correctPassword="1234"
       />
 
     </div>

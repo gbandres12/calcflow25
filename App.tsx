@@ -305,6 +305,11 @@ const App: React.FC = () => {
     userService.saveUser(updatedUser);
   };
 
+  const handleDeleteUser = (userId: string) => {
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    userService.deleteUser(userId);
+  };
+
   // Pedidos e Vendas
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'reference'>) => {
     const reference = `PED-${new Date().getFullYear()}-${(orders.length + 1).toString().padStart(4, '0')}`;
@@ -686,6 +691,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               onAddUser={handleAddUser} 
               onUpdateUser={handleUpdateUser} 
+              onDeleteUser={handleDeleteUser}
               onOpenOnboarding={() => setShowOnboardingModal(true)}
             />
           )}

@@ -6,7 +6,7 @@ import { INITIAL_USERS } from '../constants';
 import { 
   Lock, Mail, Loader2, ArrowRight, Factory, ShieldCheck, 
   Sparkles, UserCheck, Briefcase, Wrench, Building2, Phone, 
-  UserPlus, LogIn, CheckCircle2, Shield 
+  UserPlus, LogIn, CheckCircle2, Shield, HardHat 
 } from 'lucide-react';
 
 interface LoginProps {
@@ -88,6 +88,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const roleIcons = {
     [UserRole.ADMIN]: ShieldCheck,
     [UserRole.MANAGER]: Briefcase,
+    [UserRole.OPERATIONAL_SUPERVISOR]: HardHat,
     [UserRole.OPERATOR]: Wrench
   };
 

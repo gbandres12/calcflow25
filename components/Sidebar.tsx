@@ -18,9 +18,12 @@ import {
   Briefcase, 
   Wrench,
   FileCheck,
+  Calendar,
+  Shield,
+  HardHat,
   X
 } from 'lucide-react';
-import { View, UserRole, User } from '../types';
+import { View, UserRole, User, UserPermissions } from '../types';
 
 interface SidebarProps {
   currentView: View;
@@ -39,26 +42,53 @@ const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onCloseMobile 
 }) => {
+  const userPermissions: UserPermissions = user.permissions || {
+    financial: user.role === UserRole.ADMIN || user.role === UserRole.MANAGER,
+    users: user.role === UserRole.ADMIN || user.role === UserRole.OPERATIONAL_SUPERVISOR,
+    inventory: true,
+    orders: true
+  };
+
+  const isItemAllowed = (itemId: string, itemRoles?: UserRole[]) => {
+    if (user.role === UserRole.ADMIN) return true;
+    if (itemRoles && !itemRoles.includes(user.role)) {
+      return false;
+    }
+    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal'].includes(itemId)) {
+      return userPermissions.financial;
+    }
+    if (['users'].includes(itemId)) {
+      return userPermissions.users;
+    }
+    if (['inventory', 'milling'].includes(itemId)) {
+      return userPermissions.inventory;
+    }
+    if (['orders', 'customers', 'yard'].includes(itemId)) {
+      return userPermissions.orders;
+    }
+    return true;
+  };
+
   const allGroups = [
     {
       title: 'Visão Geral',
-      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard },
       ]
     },
     {
-      title: 'Comercial & Fiscal',
-      roles: [UserRole.ADMIN, UserRole.MANAGER],
+      title: 'Comercial & Clientes',
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
-        { id: 'orders', label: 'Vendas e Orçamentos', icon: FileText },
-        { id: 'fiscal', label: 'Fiscal & Notas (NF-e)', icon: FileCheck },
+        { id: 'orders', label: 'Vendas & Romaneios', icon: FileText },
         { id: 'customers', label: 'Clientes & Produtores', icon: Users },
+        { id: 'fiscal', label: 'Fiscal & Notas (NF-e)', icon: FileCheck, roles: [UserRole.ADMIN, UserRole.MANAGER] },
       ]
     },
     {
       title: 'Produção & Fábrica',
-      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'inventory', label: 'Estoque Mineral', icon: Package },
         { id: 'milling', label: 'Moagem / Britagem', icon: Factory },
@@ -66,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       title: 'Frota, Pátio & Suprimentos',
-      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR],
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'yard', label: 'Pátio, Balança & Peças', icon: Boxes },
         { id: 'fleet', label: 'Frota e Maquinário', icon: Truck },
@@ -75,27 +105,41 @@ const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       title: 'Financeiro & Caixa',
-      roles: [UserRole.ADMIN, UserRole.MANAGER],
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
-        { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
-        { id: 'transactions', label: 'Lançamentos / DRE', icon: CreditCard },
+        { id: 'daily', label: 'Movimentação Diária', icon: Calendar },
+        { id: 'transactions', label: 'Lançamentos / Extrato', icon: CreditCard },
         { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
+        { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
       ]
     },
     {
       title: 'Gestão & Sistema',
-      roles: [UserRole.ADMIN],
+      roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'users', label: 'Usuários & Equipe', icon: UserCog },
-        { id: 'settings', label: 'Categorias & Configs', icon: Settings },
+        { id: 'settings', label: 'Categorias & Configs', icon: Settings, roles: [UserRole.ADMIN] },
       ]
     }
   ];
 
-  const groups = allGroups.filter(group => group.roles.includes(user.role));
+  const groups = allGroups
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => isItemAllowed(item.id, item.roles))
+    }))
+    .filter(group => group.items.length > 0);
 
-  const roleIcon = user.role === UserRole.ADMIN ? ShieldCheck : user.role === UserRole.MANAGER ? Briefcase : Wrench;
-  const RoleIconComponent = roleIcon;
+  const getRoleIcon = () => {
+    switch (user.role) {
+      case UserRole.ADMIN: return ShieldCheck;
+      case UserRole.MANAGER: return Briefcase;
+      case UserRole.OPERATIONAL_SUPERVISOR: return HardHat;
+      default: return Wrench;
+    }
+  };
+
+  const RoleIconComponent = getRoleIcon();
 
   const handleItemClick = (id: View) => {
     onNavigate(id);

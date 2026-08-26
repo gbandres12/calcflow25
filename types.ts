@@ -28,10 +28,18 @@ export enum AccountType {
 export enum UserRole {
   ADMIN = 'Administrador',
   MANAGER = 'Gerente',
+  OPERATIONAL_SUPERVISOR = 'Supervisor Operacional',
   OPERATOR = 'Operador'
 }
 
 export type FuelType = 'S10' | 'S500';
+
+export interface UserPermissions {
+  financial: boolean;
+  users: boolean;
+  inventory: boolean;
+  orders: boolean;
+}
 
 export interface User {
   id: string;
@@ -52,6 +60,7 @@ export interface User {
   onboardingStep?: number;
   createdAt?: string;
   plan?: 'STARTER' | 'PRO' | 'ENTERPRISE';
+  permissions?: UserPermissions;
 }
 
 export interface Category {
@@ -352,5 +361,5 @@ export interface FiscalConfig {
   autoEmitirAoFinalizar?: boolean;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal';
 

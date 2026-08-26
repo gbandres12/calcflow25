@@ -90,6 +90,7 @@ export const INITIAL_USERS: User[] = [
     name: 'Carlos Mendes (Diretor Geral)', 
     email: 'admin@calcarioflow.com.br', 
     role: UserRole.ADMIN, 
+    jobTitle: 'Diretor / Administrador Geral',
     status: 'Ativo',
     lastAccess: new Date().toISOString()
   },
@@ -98,6 +99,7 @@ export const INITIAL_USERS: User[] = [
     name: 'Eng. Roberto Albuquerque', 
     email: 'producao@calcarioflow.com.br', 
     role: UserRole.MANAGER, 
+    jobTitle: 'Gerente Geral da Indústria',
     status: 'Ativo',
     lastAccess: new Date(Date.now() - 3600000).toISOString()
   },
@@ -106,14 +108,27 @@ export const INITIAL_USERS: User[] = [
     name: 'Mariana Rocha (Comercial)', 
     email: 'vendas@calcarioflow.com.br', 
     role: UserRole.MANAGER, 
+    jobTitle: 'Gerente Comercial & Vendas',
     status: 'Ativo',
     lastAccess: new Date(Date.now() - 7200000).toISOString()
+  },
+  { 
+    id: 'u5', 
+    name: 'Marcos Encarregado (Supervisor)', 
+    email: 'supervisor@calcarioflow.com.br', 
+    role: UserRole.OPERATIONAL_SUPERVISOR, 
+    jobTitle: 'Supervisor de Operações & Pátio',
+    phone: '(93) 99188-4422',
+    status: 'Ativo',
+    lastAccess: new Date(Date.now() - 5400000).toISOString()
   },
   { 
     id: 'u4', 
     name: 'José Balança (Operador)', 
     email: 'operador@calcarioflow.com.br', 
     role: UserRole.OPERATOR, 
+    jobTitle: 'Operador de Balança e Expedição',
+    phone: '(93) 99144-1234',
     status: 'Ativo',
     lastAccess: new Date(Date.now() - 14400000).toISOString()
   }

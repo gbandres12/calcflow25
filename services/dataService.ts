@@ -315,6 +315,10 @@ export const userService = {
     return await db.upsert('users', 'main', user);
   },
 
+  async deleteUser(id: string) {
+    return await db.delete('users', 'main', id);
+  },
+
   async sync(users: any[]) {
     return await db.upsert('users', 'main', users);
   }

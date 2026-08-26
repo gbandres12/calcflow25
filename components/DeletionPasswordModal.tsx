@@ -14,11 +14,11 @@ interface DeletionPasswordModalProps {
 export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
   isOpen,
   title = 'Confirmação de Exclusão Segura',
-  description = 'Esta operação é irreversível. Digite a senha de segurança de 5 dígitos para autorizar a exclusão permanente:',
+  description = 'Esta operação é irreversível. Digite a senha de segurança (1234) para autorizar a exclusão permanente:',
   itemDescription,
   onConfirm,
   onClose,
-  correctPassword = '12345'
+  correctPassword = '1234'
 }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,12 +27,12 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === correctPassword || password === '12345' || password === 'admin') {
+    if (password === correctPassword || password === '1234' || password === '12345' || password === 'admin') {
       setError('');
       setPassword('');
       onConfirm();
     } else {
-      setError('Senha incorreta! Digite a senha de 5 dígitos (Padrão: 12345)');
+      setError('Senha incorreta! Digite a senha de segurança (Padrão: 1234)');
     }
   };
 
@@ -73,7 +73,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-              Senha de Segurança (5 dígitos)
+              Senha de Segurança (1234)
             </label>
             <div className="relative">
               <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -87,7 +87,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
                   setPassword(e.target.value);
                   setError('');
                 }}
-                placeholder="Ex: 12345"
+                placeholder="Ex: 1234"
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-center text-lg tracking-widest font-black outline-none focus:border-rose-500 focus:bg-white transition-all"
               />
             </div>
@@ -97,7 +97,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
               </p>
             )}
             <p className="text-[10px] text-slate-400 mt-1 italic text-center">
-              Dica: a senha mestre padrão é <span className="font-mono font-bold text-slate-600">12345</span>
+              Dica: a senha mestre padrão é <span className="font-mono font-bold text-slate-600">1234</span>
             </p>
           </div>
 

@@ -1848,7 +1848,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         />
       )}
 
-      {/* Confirmação de Exclusão com Senha de 5 dígitos */}
+      {/* Confirmação de Exclusão com Senha de 4 dígitos (1234) */}
       {selectedOrderToDelete && (
         <DeletionPasswordModal
           isOpen={isDeleteModalOpen}
@@ -1860,6 +1860,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             setIsDeleteModalOpen(false);
             setSelectedOrderToDelete(null);
           }}
+          correctPassword="1234"
         />
       )}
 
