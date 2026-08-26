@@ -49,7 +49,27 @@ import {
 import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('calcarioflow_active_session_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleSetCurrentUser = (user: User | null) => {
+    setCurrentUser(user);
+    if (user) {
+      try {
+        localStorage.setItem('calcarioflow_active_session_user', JSON.stringify(user));
+      } catch {}
+    } else {
+      try {
+        localStorage.removeItem('calcarioflow_active_session_user');
+      } catch {}
+    }
+  };
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -307,7 +327,13 @@ const App: React.FC = () => {
 
   // Usuários
   const handleAddUser = (userData: Omit<User, 'id'>) => {
-    const newUser: User = { ...userData, id: `u-${Date.now()}`, status: 'Ativo' };
+    const newUser: User = { 
+      ...userData, 
+      id: `u-${Date.now()}`, 
+      status: 'Ativo',
+      companyId: currentUser?.companyId || activeCompanyId,
+      companyName: currentUser?.companyName || 'Sua Empresa'
+    };
     setUsers(prev => [...prev, newUser]);
     userService.saveUser(newUser);
   };
@@ -327,7 +353,7 @@ const App: React.FC = () => {
     const reference = `PED-${new Date().getFullYear()}-${(orders.length + 1).toString().padStart(4, '0')}`;
     const newOrder: SaleOrder = { ...orderData, id: `ord-${Date.now()}`, reference };
     setOrders(prev => [...prev, newOrder]);
-    orderService.saveOrders(activeCompanyId, [...orders, newOrder]);
+    db.upsert('sales_orders', activeCompanyId, newOrder);
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments);
     }
@@ -382,7 +408,9 @@ const App: React.FC = () => {
       });
       return updatedList;
     });
-    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, payments, status: OrderStatus.FINALIZED } : o));
+    const finalizedOrder = { ...order, payments, status: OrderStatus.FINALIZED };
+    setOrders(prev => prev.map(o => o.id === order.id ? finalizedOrder : o));
+    db.upsert('sales_orders', activeCompanyId, finalizedOrder);
   };
 
   const handlePaymentReceived = (receipt: PaymentReceipt, _updatedOrder: SaleOrder) => {
@@ -417,7 +445,7 @@ const App: React.FC = () => {
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-    orderService.saveOrders(activeCompanyId, orders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    db.upsert('sales_orders', activeCompanyId, updatedOrder);
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(updatedOrder, updatedOrder.payments);
     }
@@ -482,7 +510,7 @@ const App: React.FC = () => {
   };
 
   const handleCompleteOnboarding = async (updatedUser: User) => {
-    setCurrentUser(updatedUser);
+    handleSetCurrentUser(updatedUser);
     setShowOnboardingModal(false);
 
     try {
@@ -499,7 +527,11 @@ const App: React.FC = () => {
     }
   };
 
-  if (!currentUser) return <Login onLoginSuccess={setCurrentUser} />;
+  if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} />;
+
+  const displayUsers = activeCompanyId === 'matriz-demo' 
+    ? users 
+    : users.filter(u => u.companyId === currentUser?.companyId || u.companyId === activeCompanyId || u.id === currentUser?.id || u.email === currentUser?.email);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
@@ -507,7 +539,7 @@ const App: React.FC = () => {
         currentView={currentView} 
         onNavigate={setCurrentView} 
         user={currentUser}
-        onLogout={() => setCurrentUser(null)}
+        onLogout={() => handleSetCurrentUser(null)}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
@@ -547,7 +579,7 @@ const App: React.FC = () => {
 
                {/* Botão Sair no Mobile */}
                <button 
-                 onClick={() => setCurrentUser(null)} 
+                 onClick={() => handleSetCurrentUser(null)} 
                  className="sm:hidden px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase transition-colors"
                >
                  Sair
@@ -597,7 +629,7 @@ const App: React.FC = () => {
                       <p className="text-[9px] font-bold text-purple-600 uppercase tracking-wider">{currentUser.role}</p>
                    </div>
                    <button 
-                     onClick={() => setCurrentUser(null)} 
+                     onClick={() => handleSetCurrentUser(null)} 
                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase transition-colors"
                    >
                      Sair
@@ -734,7 +766,7 @@ const App: React.FC = () => {
           )}
           {currentView === 'users' && (
             <UserManagement 
-              users={users} 
+              users={displayUsers} 
               currentUser={currentUser}
               onAddUser={handleAddUser} 
               onUpdateUser={handleUpdateUser} 
