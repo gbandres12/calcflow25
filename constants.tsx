@@ -23,8 +23,11 @@ import {
 
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   id: 'fiscal-main-config',
-  apiKey: '', // Chave obtida no portal da NotaAs (https://notaas.com.br)
-  environment: 'sandbox', // 'sandbox' (Testes) ou 'production' (SEFAZ Real)
+  apiKey: '', // Chave obtida no portal da API NotaAs, Focus NFe ou Nuvem Fiscal
+  apiProvider: 'notaas',
+  apiBaseUrl: 'https://platform.notaas.com.br/api/v1',
+  modoEmissao: 'api_real', // 'api_real' (Transmissão Direta via API) ou 'sandbox_local' (Simulação Treinamento)
+  environment: 'sandbox', // 'sandbox' (Ambiente de Homologação) ou 'production' (SEFAZ Real)
   cnpjEmitente: '10.375.218/0001-50',
   inscricaoEstadual: '15.489.201-9',
   razaoSocial: 'CALCARIOFLOW MINERACAO E INDUSTRIA LTDA',

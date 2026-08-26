@@ -25,6 +25,7 @@ import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
+import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 
@@ -434,10 +435,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const handlePrint = (order: SaleOrder) => {
     setPrintOrder(order);
-    setTimeout(() => {
-      window.print();
-      setPrintOrder(null);
-    }, 400);
   };
 
   // Salvar Pagamento / Abatimento
@@ -1898,193 +1895,14 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         />
       )}
 
-      {/* Template de Impressão A4 Profissional e Elegante */}
+      {/* Template e Modal de Impressão A4 Profissional e Elegante */}
       {printOrder && (
-        <div className="fixed inset-0 bg-white z-[999] p-0 text-slate-900 hidden print:block overflow-visible" 
-          style={{ width: '210mm', minHeight: '297mm', padding: '12mm', margin: '0 auto', fontFamily: "'Inter', sans-serif" }}>
-          
-          {/* Topo Corporativo */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3px solid #1e293b', paddingBottom: '16px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-               <div style={{ width: '110px' }}>
-                  <img src="https://i.ibb.co/h9vDq8s/calcario-logo.png" alt="Logo" style={{ width: '100%', height: 'auto' }} />
-               </div>
-               <div>
-                  <h1 style={{ fontSize: '18px', fontWeight: '900', color: '#0f172a', margin: 0 }}>{company.name}</h1>
-                  <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0', fontWeight: '700' }}>CNPJ: {company.document} • IE: 15.829.401-2</p>
-                  <p style={{ fontSize: '10px', color: '#64748b', margin: 0 }}>{company.address} • Fone: {company.phone}</p>
-               </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-               <span style={{ display: 'inline-block', padding: '4px 10px', background: '#0f172a', color: '#fff', fontSize: '11px', fontWeight: '900', borderRadius: '6px' }}>
-                 {printOrder.status === OrderStatus.BUDGET ? 'ORÇAMENTO COMERCIAL' : 'PEDIDO DE VENDA'}
-               </span>
-               <p style={{ fontSize: '20px', fontWeight: '900', color: '#0f172a', margin: '6px 0 2px 0' }}>Nº {printOrder.reference}</p>
-               <p style={{ fontSize: '10px', color: '#64748b', margin: 0 }}>Emissão: <strong>{printOrder.date}</strong></p>
-            </div>
-          </div>
-
-          {/* Dados do Cliente / Produtor */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '8px', marginBottom: '18px' }}>
-             <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
-                <tbody>
-                   <tr>
-                      <td style={{ padding: '3px 0', fontWeight: '700', width: '15%', color: '#64748b' }}>Cliente / Fazenda:</td>
-                      <td style={{ padding: '3px 0', fontWeight: '900', color: '#0f172a' }}>{customers.find(c => c.id === printOrder.customerId)?.name}</td>
-                      <td style={{ padding: '3px 0', fontWeight: '700', width: '15%', color: '#64748b' }}>CPF / CNPJ:</td>
-                      <td style={{ padding: '3px 0', fontWeight: '800' }}>{customers.find(c => c.id === printOrder.customerId)?.document}</td>
-                   </tr>
-                   <tr>
-                      <td style={{ padding: '3px 0', fontWeight: '700', color: '#64748b' }}>Telefone:</td>
-                      <td style={{ padding: '3px 0', fontWeight: '700' }}>{customers.find(c => c.id === printOrder.customerId)?.phone || 'Não informado'}</td>
-                      <td style={{ padding: '3px 0', fontWeight: '700', color: '#64748b' }}>Município / UF:</td>
-                      <td style={{ padding: '3px 0', fontWeight: '700' }}>{customers.find(c => c.id === printOrder.customerId)?.city || company.city} - {customers.find(c => c.id === printOrder.customerId)?.state || company.state}</td>
-                   </tr>
-                </tbody>
-             </table>
-          </div>
-
-          {/* Itens do Pedido */}
-          <div style={{ marginBottom: '20px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-               <thead>
-                  <tr style={{ background: '#f1f5f9', color: '#0f172a', borderBottom: '2px solid #cbd5e1' }}>
-                     <th style={{ textAlign: 'left', padding: '8px' }}>DESCRIÇÃO DO PRODUTO</th>
-                     <th style={{ textAlign: 'center', padding: '8px', width: '70px' }}>NCM</th>
-                     <th style={{ textAlign: 'center', padding: '8px', width: '80px' }}>QUANTIDADE</th>
-                     <th style={{ textAlign: 'right', padding: '8px', width: '90px' }}>UNITÁRIO</th>
-                     <th style={{ textAlign: 'right', padding: '8px', width: '100px' }}>TOTAL (R$)</th>
-                  </tr>
-               </thead>
-               <tbody>
-                  {printOrder.items.map((item, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                       <td style={{ padding: '8px', fontWeight: '700' }}>{item.productName}</td>
-                       <td style={{ padding: '8px', textAlign: 'center', color: '#64748b' }}>{item.ncm || '2517.10.00'}</td>
-                       <td style={{ padding: '8px', textAlign: 'center', fontWeight: '800' }}>{item.quantity} {item.unit}</td>
-                       <td style={{ padding: '8px', textAlign: 'right' }}>{formatBRL(item.unitPrice)}</td>
-                       <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800' }}>{formatBRL(item.total)}</td>
-                    </tr>
-                  ))}
-               </tbody>
-            </table>
-          </div>
-
-          {/* Condições de Pagamento e Entradas Efetuadas */}
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'flex-start' }}>
-             <div style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', background: '#fafafa' }}>
-                <h3 style={{ fontSize: '10px', fontWeight: '900', color: '#0f172a', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>
-                   Condições de Pagamento & Histórico de Abatimentos
-                </h3>
-                
-                {/* Lista de Recibos / Entradas */}
-                {(printOrder.receipts && printOrder.receipts.length > 0) && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <p style={{ fontSize: '9px', fontWeight: '800', color: '#059669', margin: '0 0 4px 0' }}>ENTRADAS & ABATIMENTOS PAGOS:</p>
-                    <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
-                       <tbody>
-                          {printOrder.receipts.map(r => (
-                            <tr key={r.id} style={{ borderBottom: '1px dashed #e2e8f0' }}>
-                               <td style={{ padding: '3px 0' }}>{r.date} - {r.id} ({r.paymentMethod})</td>
-                               <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: '800', color: '#059669' }}>{formatBRL(r.amount)}</td>
-                            </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Parcelas Programadas */}
-                {printOrder.payments.length > 0 && (
-                  <div>
-                    <p style={{ fontSize: '9px', fontWeight: '800', color: '#475569', margin: '0 0 4px 0' }}>PARCELAS PROGRAMADAS:</p>
-                    <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
-                       <tbody>
-                          {printOrder.payments.map((p, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px dashed #e2e8f0' }}>
-                               <td style={{ padding: '3px 0' }}>Vencimento: {p.date} ({p.description || `Parcela ${idx + 1}`})</td>
-                               <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: '800' }}>{formatBRL(p.amount)}</td>
-                            </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                  </div>
-                )}
-             </div>
-
-             {/* Totalizadores */}
-             <div style={{ width: '220px', background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
-                   <tbody>
-                      <tr>
-                        <td style={{ padding: '3px 0', color: '#64748b' }}>Subtotal:</td>
-                        <td style={{ textAlign: 'right', padding: '3px 0', fontWeight: '700' }}>{formatBRL(printOrder.subtotal)}</td>
-                      </tr>
-                      {printOrder.discount > 0 && (
-                        <tr>
-                          <td style={{ padding: '3px 0', color: '#64748b' }}>Desconto:</td>
-                          <td style={{ textAlign: 'right', padding: '3px 0', fontWeight: '700', color: '#ef4444' }}>- {formatBRL(printOrder.discount)}</td>
-                        </tr>
-                      )}
-                      {printOrder.shipping > 0 && (
-                        <tr>
-                          <td style={{ padding: '3px 0', color: '#64748b' }}>Frete (+):</td>
-                          <td style={{ textAlign: 'right', padding: '3px 0', fontWeight: '700' }}>{formatBRL(printOrder.shipping)}</td>
-                        </tr>
-                      )}
-                      <tr style={{ borderTop: '2px solid #0f172a' }}>
-                         <td style={{ padding: '8px 0 0 0', fontSize: '12px', fontWeight: '900', color: '#0f172a' }}>TOTAL GERAL:</td>
-                         <td style={{ textAlign: 'right', padding: '8px 0 0 0', fontSize: '14px', fontWeight: '900', color: '#0f172a' }}>{formatBRL(printOrder.total)}</td>
-                      </tr>
-                   </tbody>
-                </table>
-             </div>
-          </div>
-
-          {/* Controle de Retiradas de Carga */}
-          {(printOrder.withdrawals && printOrder.withdrawals.length > 0) && (
-            <div style={{ marginBottom: '20px', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px', background: '#f8fafc' }}>
-              <h4 style={{ fontSize: '9px', fontWeight: '900', margin: '0 0 6px 0', textTransform: 'uppercase' }}>Histórico de Retiradas de Carga (Expedição)</h4>
-              <table style={{ width: '100%', fontSize: '8.5px', borderCollapse: 'collapse' }}>
-                 <thead>
-                    <tr style={{ color: '#64748b', borderBottom: '1px solid #cbd5e1' }}>
-                       <th style={{ textAlign: 'left', padding: '3px' }}>DATA</th>
-                       <th style={{ textAlign: 'left', padding: '3px' }}>PLACA</th>
-                       <th style={{ textAlign: 'left', padding: '3px' }}>MOTORISTA</th>
-                       <th style={{ textAlign: 'center', padding: '3px' }}>TICKET</th>
-                       <th style={{ textAlign: 'right', padding: '3px' }}>CARGA RETIRADA</th>
-                    </tr>
-                 </thead>
-                 <tbody>
-                    {printOrder.withdrawals.map((w, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                         <td style={{ padding: '3px' }}>{w.date}</td>
-                         <td style={{ padding: '3px', fontWeight: '700' }}>{w.plateNumber}</td>
-                         <td style={{ padding: '3px' }}>{w.driverName}</td>
-                         <td style={{ padding: '3px', textAlign: 'center' }}>{w.weighTicketNumber}</td>
-                         <td style={{ padding: '3px', textAlign: 'right', fontWeight: '800' }}>{w.quantityWithdrawn} TON</td>
-                      </tr>
-                    ))}
-                 </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Assinaturas */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '45px', gap: '30px' }}>
-             <div style={{ flex: 1, borderTop: '1px solid #0f172a', textAlign: 'center', paddingTop: '6px' }}>
-                <p style={{ fontSize: '9px', margin: 0, fontWeight: '900', textTransform: 'uppercase' }}>
-                  {customers.find(c => c.id === printOrder.customerId)?.name}
-                </p>
-                <p style={{ fontSize: '8px', color: '#64748b', margin: 0 }}>Assinatura do Cliente / Produtor</p>
-             </div>
-             <div style={{ flex: 1, borderTop: '1px solid #0f172a', textAlign: 'center', paddingTop: '6px' }}>
-                <p style={{ fontSize: '9px', margin: 0, fontWeight: '900', textTransform: 'uppercase' }}>{company.name}</p>
-                <p style={{ fontSize: '8px', color: '#64748b', margin: 0 }}>Representante Comercial / Expedição</p>
-             </div>
-          </div>
-
-        </div>
+        <SalesOrderPdfModal
+          order={printOrder}
+          customer={customers.find(c => c.id === printOrder.customerId) || customers[0]}
+          company={company}
+          onClose={() => setPrintOrder(null)}
+        />
       )}
 
       {/* Modal Cadastro Rápido de Cliente */}

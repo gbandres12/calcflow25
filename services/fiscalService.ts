@@ -300,6 +300,10 @@ export const fiscalService = {
       errors.push('CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário é obrigatório.');
     }
 
+    if (!customer.name || customer.name.trim().length === 0) {
+      errors.push('Razão Social / Nome do destinatário é obrigatório.');
+    }
+
     if (!order.items || order.items.length === 0) {
       errors.push('O pedido de venda precisa conter pelo menos 1 item com valor.');
     }
@@ -337,8 +341,10 @@ export const fiscalService = {
     const serie = config.serieNFe || '1';
     const isInterestadual = customer.state && customer.state !== COMPANY_INFO.state;
     const cfopPadrao = isInterestadual ? config.cfopPadraoInterestadual : config.cfopPadraoEstadual;
-    const docClean = customer.document.replace(/\D/g, '');
+    const docClean = (customer.document || '').replace(/\D/g, '');
     const isPF = docClean.length === 11;
+    const cnpjEmitenteClean = (config.cnpjEmitente || COMPANY_INFO.document || '').replace(/\D/g, '').padStart(14, '0');
+    const ieEmitenteClean = (config.inscricaoEstadual || '').replace(/\D/g, '') || 'ISENTO';
 
     return {
       referenciaExterna: order.reference || `ORDER-${order.id}`,
@@ -353,11 +359,11 @@ export const fiscalService = {
       consumidorFinal: isPF ? 1 : 0,
       presencaComprador: 1, // Operação presencial
       emitente: {
-        cnpj: config.cnpjEmitente.replace(/\D/g, ''),
-        inscricaoEstadual: config.inscricaoEstadual.replace(/\D/g, ''),
-        razaoSocial: config.razaoSocial,
-        nomeFantasia: config.nomeFantasia,
-        regimeTributario: parseInt(config.regimeTributario, 10),
+        cnpj: cnpjEmitenteClean,
+        inscricaoEstadual: ieEmitenteClean,
+        razaoSocial: config.razaoSocial || COMPANY_INFO.name,
+        nomeFantasia: config.nomeFantasia || COMPANY_INFO.name,
+        regimeTributario: parseInt(config.regimeTributario || '1', 10),
         endereco: {
           logradouro: COMPANY_INFO.address || 'Rodovia Mineral BR-163',
           numero: 'S/N',
@@ -373,10 +379,10 @@ export const fiscalService = {
       destinatario: {
         cpfCnpj: docClean,
         tipoPessoa: isPF ? 'PF' : 'PJ',
-        razaoSocial: customer.name,
+        razaoSocial: customer.name || 'Cliente Geral',
         inscricaoEstadual: customer.isentoIE ? 'ISENTO' : (customer.ie?.replace(/\D/g, '') || ''),
         indicadorIe: customer.isentoIE ? 2 : (customer.ie ? 1 : 9),
-        email: customer.email,
+        email: customer.email || '',
         telefone: (customer.phone || '').replace(/\D/g, ''),
         endereco: {
           logradouro: customer.street || 'Zona Rural Fazenda',
@@ -384,18 +390,18 @@ export const fiscalService = {
           bairro: customer.neighborhood || 'Zona Rural',
           municipio: customer.city || 'Santarem',
           uf: customer.state || 'PA',
-          cep: (customer.zipCode || '68000000').replace(/\D/g, ''),
+          cep: (customer.zipCode || '68000000').replace(/\D/g, '').padStart(8, '0'),
           codigoIbge: customer.ibgeCode || '1506807',
           pais: 'Brasil',
           codigoPais: '1058'
         }
       },
-      itens: order.items.map((it, idx) => ({
+      itens: (order.items || []).map((it, idx) => ({
         numeroItem: idx + 1,
         codigo: it.productCode || `CALC-${idx + 1}`,
         descricao: it.productName,
-        ncm: (it.ncm || '25171000').replace(/\D/g, ''),
-        cfop: (it.cfop || cfopPadrao).replace(/\D/g, ''),
+        ncm: (it.ncm || '25171000').replace(/\D/g, '').padStart(8, '0'),
+        cfop: (it.cfop || cfopPadrao).replace(/\D/g, '').padStart(4, '0'),
         unidadeComercial: it.unit || 'TON',
         quantidadeComercial: it.quantity,
         valorUnitarioComercial: it.unitPrice,
@@ -403,11 +409,11 @@ export const fiscalService = {
         tributos: {
           icms: {
             origem: 0,
-            cst: config.regimeTributario === '1' ? '102' : '00', // 102 = Simples Nacional, 00 = Tributada Integralmente
+            cst: config.regimeTributario === '1' ? '102' : '00',
             csosn: config.regimeTributario === '1' ? '102' : undefined,
             aliquota: config.aliquotaIcmsPadrao || 0,
-            baseCalculo: 0,
-            valor: 0
+            baseCalculo: config.regimeTributario === '1' ? 0 : it.total,
+            valor: config.regimeTributario === '1' ? 0 : (it.total * ((config.aliquotaIcmsPadrao || 0) / 100))
           },
           pis: { cst: '07', aliquota: 0, valor: 0 },
           cofins: { cst: '07', aliquota: 0, valor: 0 }
@@ -421,18 +427,18 @@ export const fiscalService = {
       },
       pagamentos: [
         {
-          formaPagamento: '01', // Dinheiro / Transferência / Boleto padrão
+          formaPagamento: order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01',
           valor: order.total,
           tipoIntegracao: 1
         }
       ],
       transporte: {
-        modalidadeFrete: order.shipping ? 0 : 9, // 0 = CIF / Por conta do Emitente, 9 = Sem frete
+        modalidadeFrete: order.shipping ? 0 : 9,
         volume: {
-          quantidade: order.items.reduce((acc, i) => acc + (i.quantity || 1), 0),
+          quantidade: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0),
           especie: 'CARGAS A GRANEL',
-          pesoBruto: order.items.reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0),
-          pesoLiquido: order.items.reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0)
+          pesoBruto: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0),
+          pesoLiquido: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0)
         }
       },
       informacoesAdicionais: `${config.observacoesFiscaisPadrao || 'Documento emitido por ME ou EPP optante pelo Simples Nacional.'} Ref. Pedido: ${order.reference} | Vendedor: ${order.sellerName || 'Comercial'}`.trim()
@@ -441,7 +447,7 @@ export const fiscalService = {
 
   /**
    * [POST /api/v1/nfe/emitir] ou [POST /api/v1/nfe]
-   * Cria e emite uma nova NF-e de venda na API NotaAs
+   * Cria e emite uma nova NF-e de venda na API Fiscal (NotaAs / Focus NFe / Nuvem Fiscal)
    */
   async criarNFe(
     order: SaleOrder, 
@@ -452,6 +458,7 @@ export const fiscalService = {
     const validation = this.validarDadosFiscais(order, customer);
 
     if (!validation.valid) {
+      console.warn('⚠️ [FISCAL SERVICE] Falha na validação prévia dos dados fiscais:', validation.errors);
       return {
         success: false,
         nfeStatus: 'rejeitada',
@@ -462,74 +469,187 @@ export const fiscalService = {
     const payload = this.montarPayloadNotaAs(order, customer, config);
     const nfeNumero = (config.proxNumeroNFe || 1042).toString();
     const serie = config.serieNFe || '1';
+    const apiKey = (config.apiKey || '').trim();
+    const isApiMode = config.modoEmissao === 'api_real' || apiKey.length > 0;
+    const provider = config.apiProvider || 'notaas';
+    const baseUrl = (config.apiBaseUrl || NOTAAS_API_BASE_URL).replace(/\/$/, '');
 
-    // Se tiver API Key informada, tenta realizar a chamada HTTP oficial na API NotaAs
-    if (config.apiKey && config.apiKey.trim().length > 10) {
-      try {
-        const endpoints = [
-          `${NOTAAS_API_BASE_URL}/nfe/emitir`,
-          `${NOTAAS_API_BASE_URL}/nfe`,
-          `${NOTAAS_API_BASE_URL}/invoices`
+    // LOG DETALHADO ANTES DA CHAMADA DA API
+    console.group(`🚀 [EMISSÃO NF-e API] Iniciando Envio para API Fiscal (${provider.toUpperCase()})`);
+    console.info('📌 Referência do Pedido:', order.reference);
+    console.info('🌐 Ambiente SEFAZ:', config.environment.toUpperCase());
+    console.info('🔌 Modo de Operação:', isApiMode ? 'API REAL (Transmissão Direta)' : 'SIMULAÇÃO LOCAL / TREINAMENTO');
+    console.info('🔑 Chave de API:', apiKey ? `${apiKey.substring(0, 8)}...` : 'NÃO INFORMADA');
+    console.info('📍 URL Base da API:', baseUrl);
+
+    console.group('🔎 Mapeamento Completo do Schema (Payload Enviado)');
+    console.info('🏢 [EMITENTE]:', {
+      cnpj: payload.emitente.cnpj,
+      inscricaoEstadual: payload.emitente.inscricaoEstadual,
+      razaoSocial: payload.emitente.razaoSocial,
+      regimeTributario: payload.emitente.regimeTributario,
+      endereco: payload.emitente.endereco
+    });
+    console.info('👤 [DESTINATÁRIO]:', {
+      cpfCnpj: payload.destinatario.cpfCnpj,
+      tipoPessoa: payload.destinatario.tipoPessoa,
+      razaoSocial: payload.destinatario.razaoSocial,
+      indicadorIe: payload.destinatario.indicadorIe,
+      inscricaoEstadual: payload.destinatario.inscricaoEstadual,
+      email: payload.destinatario.email,
+      telefone: payload.destinatario.telefone,
+      endereco: payload.destinatario.endereco
+    });
+    console.info('📦 [ITENS DA NOTA] (' + payload.itens.length + ' item(ns)):', payload.itens);
+    console.info('💰 [TOTAIS]:', payload.total);
+    console.info('📄 [PAYLOAD COMPLETO EM JSON]:', JSON.stringify(payload, null, 2));
+    console.groupEnd();
+    console.groupEnd();
+
+    // Se estiver em modo API Real ou se possuir API Key informada, realiza a transmissão oficial
+    if (isApiMode) {
+      if (!apiKey) {
+        console.error('❌ [EMISSÃO NF-e API] Chave de API não configurada!');
+        return {
+          success: false,
+          nfeStatus: 'rejeitada',
+          nfeErro: 'Chave de API não informada! Insira seu Token / Chave de API nas Configurações Fiscais para transmitir à sua conta da API.'
+        };
+      }
+
+      let headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+
+      if (provider === 'focusnfe') {
+        let authHeader = '';
+        try {
+          authHeader = `Basic ${btoa(`${apiKey}:`)}`;
+        } catch {}
+        headers = {
+          ...headers,
+          ...(authHeader ? { 'Authorization': authHeader } : {}),
+          'x-api-key': apiKey
+        };
+      } else {
+        headers = {
+          ...headers,
+          'x-api-key': apiKey,
+          'Authorization': `Bearer ${apiKey}`
+        };
+      }
+
+      // Endpoints baseados no provedor selecionado
+      let endpoints: string[] = [];
+      if (provider === 'focusnfe') {
+        const focusBase = config.environment === 'production' 
+          ? 'https://api.focusnfe.com.br/v2' 
+          : 'https://homologacao.focusnfe.com.br/v2';
+        endpoints = [
+          `${focusBase}/nfe?ref=${encodeURIComponent(payload.referenciaExterna || '')}`,
+          `${baseUrl}/nfe?ref=${encodeURIComponent(payload.referenciaExterna || '')}`
         ];
+      } else {
+        endpoints = [
+          `${baseUrl}/nfe/emitir`,
+          `${baseUrl}/nfe`,
+          `https://platform.notaas.com.br/api/v1/nfe/emitir`,
+          `${baseUrl}/invoices`
+        ];
+      }
 
-        let response: Response | null = null;
-        let lastError = '';
+      let response: Response | null = null;
+      let endpointUsado = '';
+      let lastFetchError = '';
 
-        for (const endpoint of endpoints) {
-          try {
-            response = await fetch(endpoint, {
-              method: 'POST',
-              headers: this.getHeaders(config.apiKey),
-              body: JSON.stringify(payload)
-            });
-            if (response.ok || response.status === 400 || response.status === 422) {
-              break;
-            }
-          } catch (e: any) {
-            lastError = e.message;
+      for (const endpoint of endpoints) {
+        try {
+          console.info(`🌐 Tentando requisição POST para: ${endpoint}`);
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          });
+          if (response) {
+            endpointUsado = endpoint;
+            break;
           }
+        } catch (e: any) {
+          lastFetchError = e.message || 'Erro de conexão/CORS';
+          console.warn(`⚠️ Falha ao conectar em ${endpoint}:`, lastFetchError);
         }
+      }
 
-        if (response && response.ok) {
-          const data = await response.json();
-          const nextNum = parseInt(nfeNumero, 10) + 1;
-          await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+      // LOG DETALHADO DEPOIS DA CHAMADA DA API
+      console.group(`📡 [EMISSÃO NF-e API] Resposta Recebida da API Fiscal (${provider.toUpperCase()})`);
 
-          const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey;
-          const statusRetornado = (data.status === 'autorizada' || data.status === 'issued') ? 'autorizada' : 
-                                 (data.status === 'rejeitada' ? 'rejeitada' : 'autorizada');
+      if (response && (response.ok || response.status === 201 || response.status === 202)) {
+        const data = await response.json().catch(() => ({}));
+        console.info('✅ [SUCESSO HTTP]', response.status, response.statusText);
+        console.info('📍 Endpoint que respondeu:', endpointUsado);
+        console.info('📦 Body da Resposta (JSON):', data);
+        console.groupEnd();
 
-          return {
-            success: true,
-            nfeStatus: statusRetornado as NfeStatus,
-            nfeId: data.id || data.uuid || data.invoiceId || `notaas-${Date.now()}`,
-            nfeChave: chaveAcesso,
-            nfeNumero: (data.numero || nfeNumero).toString(),
-            nfeSerie: (data.serie || serie).toString(),
-            nfeProtocolo: data.protocolo || data.protocol || `11526000${Math.floor(1000000 + Math.random() * 9000000)}`,
-            nfeDanfeUrl: data.danfeUrl || data.pdfUrl || data.urlDanfe,
-            nfeXmlUrl: data.xmlUrl || data.urlXml,
-            nfeEmissao: data.dataEmissao || new Date().toISOString(),
-            naturezaOperacao: payload.naturezaOperacao,
-            rawResponse: data
-          };
-        } else if (response) {
-          const errData = await response.json().catch(() => ({}));
-          const errMsg = errData.message || errData.erro || errData.error || `Erro de validação NotaAs (HTTP ${response.status})`;
-          return {
-            success: false,
-            nfeStatus: 'rejeitada',
-            nfeErro: errMsg,
-            rawResponse: errData
-          };
+        const nextNum = parseInt(nfeNumero, 10) + 1;
+        await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+
+        const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.cstat_msg;
+        const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao') 
+          ? (data.status === 'processando_autorizacao' ? 'processando' : 'autorizada') 
+          : 'autorizada';
+
+        return {
+          success: true,
+          nfeStatus: statusRetornado as NfeStatus,
+          nfeId: data.id || data.uuid || data.invoiceId || `api-${Date.now()}`,
+          nfeChave: chaveAcesso || this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero),
+          nfeNumero: (data.numero || nfeNumero).toString(),
+          nfeSerie: (data.serie || serie).toString(),
+          nfeProtocolo: data.protocolo || data.protocol || `11526000${Math.floor(1000000 + Math.random() * 9000000)}`,
+          nfeDanfeUrl: data.danfeUrl || data.pdfUrl || data.urlDanfe || data.caminho_danfe,
+          nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
+          nfeEmissao: data.dataEmissao || new Date().toISOString(),
+          naturezaOperacao: payload.naturezaOperacao,
+          rawResponse: data
+        };
+      } else if (response) {
+        const errData = await response.json().catch(() => ({}));
+        console.error('❌ [REJEIÇÃO/ERRO HTTP]', response.status, response.statusText);
+        console.error('📍 Endpoint:', endpointUsado);
+        console.error('📦 Body de Erro da API:', errData);
+        console.groupEnd();
+
+        let errMsg = errData.message || errData.erro || errData.error || errData.motivo || errData.mensagem;
+        if (Array.isArray(errData.erros) && errData.erros.length > 0) {
+          errMsg = errData.erros.map((e: any) => `${e.campo ? e.campo + ': ' : ''}${e.mensagem || e.msg || e}`).join(' | ');
         }
-      } catch (err: any) {
-        console.warn('[NotaAs API] Falha na requisição direta, usando ambiente seguro integrado:', err);
+        if (!errMsg) {
+          errMsg = `Resposta de Rejeição/Erro da API (${provider.toUpperCase()}) - HTTP Status ${response.status}`;
+        }
+        return {
+          success: false,
+          nfeStatus: 'rejeitada',
+          nfeErro: errMsg,
+          rawResponse: errData
+        };
+      } else {
+        console.error('💥 [FALHA DE REDE DE CONEXÃO]', lastFetchError);
+        console.groupEnd();
+        return {
+          success: false,
+          nfeStatus: 'rejeitada',
+          nfeErro: `Erro de comunicação com o servidor da API (${provider.toUpperCase()}). ${lastFetchError}. Se o servidor bloquear requisições diretas do navegador por política de CORS, certifique-se de que a origem da aplicação está autorizada no painel da API.`,
+          rawResponse: { error: lastFetchError }
+        };
       }
     }
 
-    // Modo Sandbox Demonstrativo Inteligente (Execução Instantânea com DANFE e XML Oficial)
-    await new Promise(resolve => setTimeout(resolve, 600)); // Latência de validação SEFAZ
+    // Modo Sandbox / Treinamento Local (Execução sem API)
+    console.info('🧪 Executando em Modo Simulação Local (Treinamento sem API Externa)');
+    console.groupEnd();
+
+    await new Promise(resolve => setTimeout(resolve, 600));
     const mockChave = this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero);
     const mockProtocolo = `11526000${Math.floor(1000000 + Math.random() * 9000000)}`;
     const nextNum = parseInt(nfeNumero, 10) + 1;

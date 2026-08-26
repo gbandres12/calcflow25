@@ -326,6 +326,7 @@ export interface SaleOrder {
   paymentStatus?: 'pago' | 'parcial' | 'pendente';
   withdrawalStatus?: 'aguardando' | 'parcial' | 'total';
   status: OrderStatus;
+  paymentMethod?: string;
   payments: SalePayment[];
   receipts?: PaymentReceipt[];
   withdrawals?: OrderWithdrawal[];
@@ -356,6 +357,9 @@ export interface SaleOrder {
 export interface FiscalConfig {
   id: string;
   apiKey: string;
+  apiProvider?: 'notaas' | 'focusnfe' | 'nuvemfiscal' | 'custom';
+  apiBaseUrl?: string;
+  modoEmissao?: 'api_real' | 'sandbox_local';
   environment: 'sandbox' | 'production';
   cnpjEmitente: string;
   inscricaoEstadual: string;

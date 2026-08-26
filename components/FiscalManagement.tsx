@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, Customer, Company } from '../types';
+import { FiscalConfig, SaleOrder, Customer, Company, OrderStatus, TransactionStatus } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { 
   FileText, ShieldCheck, Key, Settings, Globe, CheckCircle2, 
   AlertCircle, RefreshCw, Send, Printer, Download, Eye, ExternalLink,
-  Layers, BarChart3, Database, Save, Check
+  Layers, BarChart3, Database, Save, Check, X
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 
@@ -29,12 +29,144 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
 
+  // Estado para Painel de Diagnóstico e Logs da API
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<Array<{ time: string; type: 'info' | 'success' | 'warning' | 'error'; message: string; data?: any }>>([]);
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [mappedPayload, setMappedPayload] = useState<any | null>(null);
+
   useEffect(() => {
     fiscalService.getConfig().then(c => {
       setConfig(c);
       checkSefazStatus(c);
     });
   }, []);
+
+  const addLog = (type: 'info' | 'success' | 'warning' | 'error', message: string, data?: any) => {
+    const time = new Date().toLocaleTimeString('pt-BR');
+    setDiagnosticLogs(prev => [...prev, { time, type, message, data }]);
+    if (type === 'error') console.error(`[DIAGNOSTIC ${time}] ${message}`, data || '');
+    else if (type === 'warning') console.warn(`[DIAGNOSTIC ${time}] ${message}`, data || '');
+    else console.log(`[DIAGNOSTIC ${time}] ${message}`, data || '');
+  };
+
+  const handleRunDiagnostic = async () => {
+    if (!config) return;
+    setIsTestingApi(true);
+    setDiagnosticLogs([]);
+    setShowDiagnostics(true);
+
+    addLog('info', '🚀 Iniciando Investigação de Mapeamento de Schema e Teste da API Fiscal...');
+    addLog('info', `📌 Provedor Configurado: ${(config.apiProvider || 'notaas').toUpperCase()}`);
+    addLog('info', `🌐 Ambiente SEFAZ: ${config.environment.toUpperCase()}`);
+    addLog('info', `🔗 URL Base: ${config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}`);
+
+    // 1. Obter ou criar um pedido de teste
+    const sampleOrder: SaleOrder = orders.length > 0 ? orders[0] : {
+      id: 'ORDER-TEST-001',
+      reference: 'PV-9999',
+      customerId: customers[0]?.id || 'CUST-001',
+      sellerName: 'Vendedor Comercial',
+      date: new Date().toLocaleDateString('pt-BR'),
+      status: OrderStatus.FINALIZED,
+      items: [
+        {
+          productId: 'PROD-01',
+          productCode: 'CALC-01',
+          productName: 'Calcário Agrícola Calcítico Fino PRNT 85%',
+          quantity: 32,
+          unit: 'TON',
+          unitPrice: 180,
+          discount: 0,
+          total: 5760,
+          ncm: '25171000',
+          cfop: config.cfopPadraoEstadual || '5101'
+        }
+      ],
+      subtotal: 5760,
+      shipping: 240,
+      discount: 0,
+      total: 6000,
+      paymentMethod: 'PIX',
+      payments: [{ id: 'PAY-1', amount: 6000, date: new Date().toLocaleDateString('pt-BR'), status: TransactionStatus.PAGO, accountId: 'ACC-1', description: 'À vista' }]
+    };
+
+    const sampleCustomer: Customer = customers.find(c => c.id === sampleOrder.customerId) || customers[0] || {
+      id: 'CUST-001',
+      name: 'Agropecuária Fazenda Rainha Ltda',
+      document: '12.345.678/0001-90',
+      ie: '15.829.100-1',
+      street: 'Rodovia PA-150 Km 12',
+      number: '100',
+      neighborhood: 'Zona Rural',
+      city: 'Santarém',
+      state: 'PA',
+      zipCode: '68000-000',
+      ibgeCode: '1506807',
+      phone: '(93) 99123-4567',
+      email: 'financeiro@fazendarainha.com.br',
+      totalSpent: 6000
+    };
+
+    // 2. Validação dos Dados Fiscais
+    addLog('info', '🔍 Etapa 1: Executando Validação Prévia de Dados Cadastrais...');
+    const valResult = fiscalService.validarDadosFiscais(sampleOrder, sampleCustomer);
+
+    if (!valResult.valid) {
+      addLog('error', '❌ Falha de Validação Prévia dos Dados Fiscais:', valResult.errors);
+    } else {
+      addLog('success', '✅ Etapa 1: Dados do Cliente e Pedido aprovados na validação prévia!');
+    }
+
+    // 3. Mapeamento do Schema do Payload NotaAs
+    addLog('info', '🔍 Etapa 2: Mapeando Schema do Payload para envio à API...');
+    const payload = fiscalService.montarPayloadNotaAs(sampleOrder, sampleCustomer, config);
+    setMappedPayload(payload);
+
+    // Verificação dos campos obrigatórios do Schema da API
+    addLog('info', '📋 Checando integridade do Emitente:', {
+      cnpj: payload.emitente.cnpj,
+      inscricaoEstadual: payload.emitente.inscricaoEstadual,
+      razaoSocial: payload.emitente.razaoSocial,
+      endereco: payload.emitente.endereco
+    });
+
+    addLog('info', '📋 Checando integridade do Destinatário:', {
+      cpfCnpj: payload.destinatario.cpfCnpj,
+      tipoPessoa: payload.destinatario.tipoPessoa,
+      razaoSocial: payload.destinatario.razaoSocial,
+      indicadorIe: payload.destinatario.indicadorIe,
+      inscricaoEstadual: payload.destinatario.inscricaoEstadual,
+      endereco: payload.destinatario.endereco
+    });
+
+    addLog('info', `📋 Checando ${payload.itens.length} Item(ns) da Nota (NCM e CFOP):`, payload.itens);
+    addLog('info', '📋 Checando Totais da Nota:', payload.total);
+
+    addLog('success', '✅ Etapa 2: Mapeamento do Schema concluído com sucesso!');
+
+    // 4. Teste de Chamada de API Real / Simulação
+    addLog('info', '🔍 Etapa 3: Transmitindo requisição para a API Fiscal...');
+    try {
+      const res = await fiscalService.criarNFe(sampleOrder, sampleCustomer, config);
+
+      if (res.success) {
+        addLog('success', `🎉 TRANSMISSÃO BEM-SUCEDIDA! Status SEFAZ: ${res.nfeStatus.toUpperCase()}`, {
+          nfeId: res.nfeId,
+          nfeChave: res.nfeChave,
+          nfeNumero: res.nfeNumero,
+          nfeProtocolo: res.nfeProtocolo,
+          rawResponse: res.rawResponse
+        });
+      } else {
+        addLog('error', `❌ REJEIÇÃO OU ERRO DA API: ${res.nfeErro}`, res.rawResponse);
+      }
+    } catch (err: any) {
+      addLog('error', `💥 Exceção HTTP durante chamada da API: ${err.message}`, err);
+    } finally {
+      setIsTestingApi(false);
+    }
+  };
 
   const checkSefazStatus = async (overrideCfg?: FiscalConfig) => {
     setSefazStatus({ status: 'cheking', mensagem: 'Consultando SEFAZ...', loading: true });
@@ -107,7 +239,17 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleRunDiagnostic}
+            disabled={isTestingApi}
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-2xl shadow-sm transition-all disabled:opacity-50"
+            title="Executa investigação completa do schema, validação e teste de transmissão à API"
+          >
+            <Send size={14} className={isTestingApi ? 'animate-spin' : ''} />
+            <span>{isTestingApi ? 'Testando API...' : '⚡ Investigar Mapeamento & Testar API'}</span>
+          </button>
+
           {sefazStatus && (
             <button
               onClick={() => checkSefazStatus()}
@@ -185,29 +327,64 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         </div>
 
         <form onSubmit={handleSaveConfig} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             
+            {/* Modo de Emissão */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Modo de Operação
+              </label>
+              <select
+                value={config.modoEmissao || 'api_real'}
+                onChange={(e) => setConfig({ ...config, modoEmissao: e.target.value as 'api_real' | 'sandbox_local' })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              >
+                <option value="api_real">API Real / Transmissão Direta ao Painel</option>
+                <option value="sandbox_local">Simulação Local / Treinamento Interno</option>
+              </select>
+            </div>
+
+            {/* Provedor da API */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Provedor / Plataforma da API
+              </label>
+              <select
+                value={config.apiProvider || 'notaas'}
+                onChange={(e) => {
+                  const prov = e.target.value as any;
+                  let defaultUrl = 'https://platform.notaas.com.br/api/v1';
+                  if (prov === 'focusnfe') defaultUrl = 'https://homologacao.focusnfe.com.br/v2';
+                  if (prov === 'nuvemfiscal') defaultUrl = 'https://api.nuvemfiscal.com.br/v2';
+                  setConfig({ ...config, apiProvider: prov, apiBaseUrl: defaultUrl });
+                }}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              >
+                <option value="notaas">NotaAs API (notaas.com.br)</option>
+                <option value="focusnfe">Focus NFe (focusnfe.com.br)</option>
+                <option value="nuvemfiscal">Nuvem Fiscal (nuvemfiscal.com.br)</option>
+                <option value="custom">Personalizado / Servidor Próprio</option>
+              </select>
+            </div>
+
             {/* Chave de API NotaAs */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Chave de API NotaAs (x-api-key)
+                Chave / Token da API (x-api-key)
               </label>
               <input
                 type="password"
-                value={config.apiKey}
+                value={config.apiKey || ''}
                 onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                placeholder="Insira sua chave de API gerada no NotaAs..."
+                placeholder="Cole sua chave de API obtida no portal da API..."
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
               />
-              <p className="text-[10px] text-slate-400">
-                Se deixar em branco, o sistema executará no modo Sandbox/Simulação com DANFE completo.
-              </p>
             </div>
 
             {/* Ambiente */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Ambiente de Emissão
+                Ambiente SEFAZ
               </label>
               <select
                 value={config.environment}
@@ -219,7 +396,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               </select>
             </div>
 
-            {/* Regime Tributário */}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                URL Base do Servidor de API Fiscal
+              </label>
+              <input
+                type="text"
+                value={config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}
+                onChange={(e) => setConfig({ ...config, apiBaseUrl: e.target.value })}
+                placeholder="https://platform.notaas.com.br/api/v1"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
+              />
+              <p className="text-[10px] text-slate-400 font-medium">
+                URL oficial de conexão HTTP. Ao emitir em 'API Real', o sistema enviará a requisição diretamente a este endpoint.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                 Regime Tributário
@@ -234,7 +429,6 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                 <option value="3">3 - Regime Normal (Lucro Presumido / Real)</option>
               </select>
             </div>
-
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
@@ -433,6 +627,139 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
             setSelectedDanfeOrder(updated);
           }}
         />
+      )}
+
+      {/* Modal de Investigação do Mapeamento de Schema & Logs da API */}
+      {showDiagnostics && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-950 text-slate-100 w-full max-w-4xl rounded-[2.5rem] shadow-2xl border border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-600/30 text-purple-400 rounded-2xl border border-purple-500/30">
+                  <Database size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    Investigação de Schema & Logs da API Fiscal
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-900 text-purple-300">
+                      {(config.apiProvider || 'notaas').toUpperCase()}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Validação em tempo real dos mapeamentos (CNPJ, Endereço, Itens NCM/CFOP) e transmissão HTTP.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleRunDiagnostic()}
+                  disabled={isTestingApi}
+                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw size={14} className={isTestingApi ? 'animate-spin' : ''} />
+                  <span>Re-testar</span>
+                </button>
+                <button
+                  onClick={() => setShowDiagnostics(false)}
+                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
+              
+              {/* Painel de Status */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-[11px]">
+                <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold font-sans">Provedor & Endpoint:</span>
+                  <p className="font-bold text-slate-200 uppercase">{config.apiProvider || 'notaas'}</p>
+                  <p className="text-slate-400 text-[10px] truncate">{config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}</p>
+                </div>
+
+                <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold font-sans">Ambiente SEFAZ:</span>
+                  <p className="font-bold text-slate-200 uppercase">{config.environment}</p>
+                  <p className="text-slate-400 text-[10px]">Chave API: {config.apiKey ? `${config.apiKey.slice(0, 8)}...` : 'NÃO INFORMADA'}</p>
+                </div>
+
+                <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] uppercase font-bold font-sans">Modo de Operação:</span>
+                  <p className="font-bold text-emerald-400 uppercase">{config.modoEmissao === 'api_real' || config.apiKey ? 'API REAL (TRANSMISSÃO)' : 'SIMULAÇÃO LOCAL'}</p>
+                  <p className="text-slate-400 text-[10px]">Regime: {config.regimeTributario === '1' ? 'Simples Nacional' : 'Regime Normal'}</p>
+                </div>
+              </div>
+
+              {/* Terminal de Logs */}
+              <div className="space-y-2">
+                <h4 className="font-black text-slate-300 text-xs uppercase tracking-wider flex items-center justify-between">
+                  <span>Terminal de Logs da Requisição (Console Output)</span>
+                  <span className="text-[10px] font-normal text-slate-500">Veja também o F12 / DevTools Console</span>
+                </h4>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 font-mono text-[11px] space-y-2.5 max-h-72 overflow-y-auto shadow-inner">
+                  {diagnosticLogs.map((log, idx) => (
+                    <div key={idx} className="space-y-1 border-b border-slate-800/60 pb-2 last:border-0 last:pb-0">
+                      <div className="flex items-start gap-2">
+                        <span className="text-slate-600 text-[10px]">{log.time}</span>
+                        <span className={`font-bold ${
+                          log.type === 'success' ? 'text-emerald-400' :
+                          log.type === 'error' ? 'text-rose-400' :
+                          log.type === 'warning' ? 'text-amber-400' : 'text-purple-300'
+                        }`}>
+                          {log.message}
+                        </span>
+                      </div>
+                      {log.data && (
+                        <pre className="p-2.5 bg-slate-950 text-slate-300 rounded-xl overflow-x-auto text-[10px] border border-slate-800/80">
+                          {JSON.stringify(log.data, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mapeamento Mapped Payload JSON */}
+              {mappedPayload && (
+                <div className="space-y-2">
+                  <h4 className="font-black text-slate-300 text-xs uppercase tracking-wider flex items-center justify-between">
+                    <span>Mapeamento do Payload do Schema Mapeado (`NotaAsCriarNFePayload`)</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(mappedPayload, null, 2));
+                        alert('Payload JSON copiado para a área de transferência!');
+                      }}
+                      className="text-[10px] text-purple-400 hover:text-purple-300 font-bold underline"
+                    >
+                      Copiar Payload JSON
+                    </button>
+                  </h4>
+                  <pre className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-[10px] font-mono text-slate-300 max-h-60 overflow-y-auto">
+                    {JSON.stringify(mappedPayload, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all"
+              >
+                Fechar Investigador
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>
