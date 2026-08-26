@@ -131,12 +131,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   } = useMemo(() => {
     const targetDate = selectedDate;
 
-    // Filter transactions for the selected account if specified
-    const accountFilter = (t: Transaction) => 
-      selectedAccountId === 'all' || t.accountId === selectedAccountId;
-
     // Calculate Initial Balance:
-    // Initial balance of accounts + all movements strictly BEFORE selectedDate
+    // Sum of initial balance of selected accounts + all movements strictly BEFORE targetDate
     let initialAccSum = 0;
     if (selectedAccountId === 'all') {
       initialAccSum = accounts.reduce((acc, a) => acc + (Number(a.initialBalance) || 0), 0);
@@ -146,45 +142,98 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     }
 
     let priorNetMovements = 0;
+    let sumInflows = 0;
+    let sumOutflows = 0;
+    let sumDeductions = 0;
+
+    const dayTxIds = new Set<string>();
+
     transactions.forEach(t => {
-      if (!accountFilter(t)) return;
-      const txDate = t.paymentDate || t.date || '';
-      if (txDate && txDate < targetDate && t.status === TransactionStatus.CONFIRMADO) {
-        const amt = Number(t.paidAmount !== undefined ? t.paidAmount : t.amount) || 0;
-        if (t.type === TransactionType.SALE) {
-          priorNetMovements += amt;
-        } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
-          priorNetMovements -= amt;
+      const hasPaymentsArr = Array.isArray(t.payments) && t.payments.length > 0;
+
+      if (hasPaymentsArr) {
+        t.payments!.forEach(pmt => {
+          const pmtDate = pmt.paymentDate || t.paymentDate || t.date;
+          const pmtAccId = pmt.accountId || t.accountId;
+          const matchesAccount = selectedAccountId === 'all' || pmtAccId === selectedAccountId;
+
+          if (!matchesAccount || !pmtDate) return;
+
+          const pmtAmount = Number(pmt.amount) || 0;
+
+          if (pmtDate < targetDate) {
+            if (!pmt.isDiscountOrDeduction) {
+              if (t.type === TransactionType.SALE) {
+                priorNetMovements += pmtAmount;
+              } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+                priorNetMovements -= pmtAmount;
+              }
+            }
+          } else if (pmtDate === targetDate) {
+            dayTxIds.add(t.id);
+            if (pmt.isDiscountOrDeduction) {
+              sumDeductions += pmtAmount;
+            } else {
+              if (t.type === TransactionType.SALE) {
+                sumInflows += pmtAmount;
+              } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+                sumOutflows += pmtAmount;
+              }
+            }
+          }
+        });
+      } else {
+        // Fallback for transactions without a payments array (direct transactions or quick entries)
+        const isPaidOrConfirmed = 
+          t.status === TransactionStatus.CONFIRMADO || 
+          t.status === TransactionStatus.PAGO || 
+          t.status === TransactionStatus.PARCIAL;
+
+        const matchesAccount = selectedAccountId === 'all' || t.accountId === selectedAccountId;
+        const txDate = t.paymentDate || t.date;
+
+        if (txDate === targetDate && matchesAccount) {
+          dayTxIds.add(t.id);
         }
+
+        if (!isPaidOrConfirmed || !matchesAccount || !txDate) return;
+
+        const paidAmt = Number(
+          t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
+            ? t.paidAmount 
+            : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
+        ) || 0;
+
+        if (txDate < targetDate) {
+          if (t.type === TransactionType.SALE) {
+            priorNetMovements += paidAmt;
+          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+            priorNetMovements -= paidAmt;
+          }
+        } else if (txDate === targetDate) {
+          if (t.type === TransactionType.SALE) {
+            sumInflows += paidAmt;
+          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+            sumOutflows += paidAmt;
+          }
+          if (t.discount) {
+            sumDeductions += Number(t.discount) || 0;
+          }
+        }
+      }
+
+      // Ensure any transaction whose date or paymentDate is targetDate is listed
+      const baseDate = t.paymentDate || t.date;
+      if (baseDate === targetDate && (selectedAccountId === 'all' || t.accountId === selectedAccountId)) {
+        dayTxIds.add(t.id);
       }
     });
 
-    const calculatedInitialBalance = initialAccSum + priorNetMovements;
-
-    // Movements of the selected day
-    const dayTxs = transactions.filter(t => {
-      if (!accountFilter(t)) return false;
-      const txDate = t.paymentDate || t.date || '';
-      return txDate === targetDate;
-    });
-
+    const dayTxs = transactions.filter(t => dayTxIds.has(t.id));
     const dayInflows = dayTxs.filter(t => t.type === TransactionType.SALE);
     const dayOutflows = dayTxs.filter(t => t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE);
 
-    const sumInflows = dayInflows.reduce((acc, t) => {
-      const amt = Number(t.paidAmount !== undefined ? t.paidAmount : t.amount) || 0;
-      return acc + amt;
-    }, 0);
-
-    const sumOutflows = dayOutflows.reduce((acc, t) => {
-      const amt = Number(t.paidAmount !== undefined ? t.paidAmount : t.amount) || 0;
-      return acc + amt;
-    }, 0);
-
-    const sumDeductions = dayTxs.reduce((acc, t) => {
-      return acc + (Number(t.discount) || 0);
-    }, 0);
-
+    const calculatedInitialBalance = initialAccSum + priorNetMovements;
     const netResult = sumInflows - sumOutflows;
     const calculatedFinalBalance = calculatedInitialBalance + netResult;
 

@@ -138,43 +138,122 @@ const Customers: React.FC<CustomersProps> = ({
         const lines = text.split(/\r?\n/);
         
         if (lines.length < 2) {
-          throw new Error("O arquivo parece estar vazio ou sem cabeçalho.");
+          throw new Error("O arquivo parece estar vazio ou sem conteúdo suficiente.");
         }
 
-        // Identifica o separador (vírgula ou ponto e vírgula)
-        const header = lines[0];
-        const separator = header.includes(';') ? ';' : ',';
-        const headers = header.split(separator).map(h => h.trim().toLowerCase());
+        const parseCSVLine = (line: string, sep: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"' || char === "'") {
+              inQuotes = !inQuotes;
+            } else if (char === sep && !inQuotes) {
+              result.push(current.trim().replace(/^["']|["']$/g, ''));
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim().replace(/^["']|["']$/g, ''));
+          return result;
+        };
+
+        // Procurar dinamicamente a linha de cabeçalho (pode haver títulos como "Tabela 1" nas primeiras linhas)
+        let headerIndex = -1;
+        let separator = ';';
+        let headers: string[] = [];
+
+        for (let i = 0; i < Math.min(lines.length, 25); i++) {
+          const candidateLine = lines[i].trim();
+          if (!candidateLine) continue;
+
+          const candidateSep = candidateLine.includes(';') ? ';' : (candidateLine.includes('\t') ? '\t' : ',');
+          const candidateHeaders = candidateLine.split(candidateSep).map(h => h.trim().toLowerCase());
+
+          const hasName = candidateHeaders.some(h => 
+            h.includes('nome') || h.includes('razão') || h.includes('razao') || h.includes('cliente')
+          );
+          const hasDoc = candidateHeaders.some(h => 
+            h.includes('cpf') || h.includes('cnpj') || h.includes('documento') || h.includes('doc')
+          );
+
+          if (hasName || hasDoc) {
+            headerIndex = i;
+            separator = candidateSep;
+            headers = candidateHeaders;
+            break;
+          }
+        }
+
+        if (headerIndex === -1) {
+          throw new Error("Não foi possível identificar o cabeçalho do arquivo. Certifique-se de que existem colunas como Nome/Razão Social, CPF ou CNPJ.");
+        }
+
+        // Mapeamento flexível de índices
+        const idxName = headers.findIndex(h => h.includes('nome/razão') || h.includes('nome / razão') || h.includes('razão social') || h.includes('razao social') || h.includes('nome') || h.includes('cliente'));
+        const idxFantasia = headers.findIndex(h => h.includes('fantasia') || h.includes('apelido'));
+        const idxCPF = headers.findIndex(h => h === 'cpf' || h.startsWith('cpf') || h.endsWith('cpf'));
+        const idxCNPJ = headers.findIndex(h => h === 'cnpj' || h.startsWith('cnpj') || h.endsWith('cnpj'));
+        const idxDoc = headers.findIndex(h => h.includes('documento') || h === 'doc' || h.includes('cpf/cnpj'));
+        const idxIE = headers.findIndex(h => h === 'ie' || h.includes('inscrição') || h.includes('inscricao'));
+        const idxCellular = headers.findIndex(h => h.includes('celular'));
+        const idxPhone = headers.findIndex(h => h.includes('telefone') || h.includes('fone') || h.includes('contato'));
+        const idxFax = headers.findIndex(h => h.includes('fax'));
+        const idxEmail = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
+        const idxAddress = headers.findIndex(h => h.includes('endereço') || h.includes('endereco') || h.includes('rua') || h.includes('logradouro'));
+        const idxNumber = headers.findIndex(h => h.includes('número') || h.includes('numero') || h === 'num');
+        const idxNeighborhood = headers.findIndex(h => h.includes('bairro'));
+        const idxCity = headers.findIndex(h => h.includes('cidade') || h.includes('município') || h.includes('municipio'));
+        const idxState = headers.findIndex(h => h.includes('estado') || h === 'uf');
+        const idxZip = headers.findIndex(h => h.includes('cep'));
 
         const newCustomers: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>[] = [];
 
-        // Mapeamento de colunas flexível
-        const idxName = headers.findIndex(h => h.includes('nome') || h.includes('cliente'));
-        const idxDoc = headers.findIndex(h => h.includes('documento') || h.includes('cpf') || h.includes('cnpj'));
-        const idxEmail = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
-        const idxPhone = headers.findIndex(h => h.includes('fone') || h.includes('telefone') || h.includes('celular'));
-
-        if (idxName === -1 || idxDoc === -1) {
-          throw new Error("Colunas obrigatórias 'Nome' e 'Documento' (CPF/CNPJ) não encontradas.");
-        }
-
-        for (let i = 1; i < lines.length; i++) {
+        for (let i = headerIndex + 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
 
-          const cells = line.split(separator).map(c => c.trim());
+          const cells = parseCSVLine(line, separator);
           if (cells.length < 2) continue;
 
+          const rawName = (idxName !== -1 ? cells[idxName] : '') || (idxFantasia !== -1 ? cells[idxFantasia] : '');
+          if (!rawName) continue;
+
+          const cpfVal = idxCPF !== -1 ? cells[idxCPF] : '';
+          const cnpjVal = idxCNPJ !== -1 ? cells[idxCNPJ] : '';
+          const docVal = idxDoc !== -1 ? cells[idxDoc] : '';
+
+          const document = cpfVal || cnpjVal || docVal || '';
+          const phone = (idxCellular !== -1 ? cells[idxCellular] : '') || (idxPhone !== -1 ? cells[idxPhone] : '') || (idxFax !== -1 ? cells[idxFax] : '');
+          
+          let tipoPessoa: 'PJ' | 'PF' | 'PRODUTOR' = 'PRODUTOR';
+          const cleanDoc = document.replace(/\D/g, '');
+          if (cleanDoc.length === 14 || cnpjVal) {
+            tipoPessoa = 'PJ';
+          } else if (cleanDoc.length === 11 || cpfVal) {
+            tipoPessoa = 'PF';
+          }
+
           newCustomers.push({
-            name: cells[idxName] || 'Sem Nome',
-            document: cells[idxDoc] || '',
+            name: rawName,
+            document: document,
             email: idxEmail !== -1 ? cells[idxEmail] : '',
-            phone: idxPhone !== -1 ? cells[idxPhone] : ''
+            phone: phone,
+            tipoPessoa: tipoPessoa,
+            ie: idxIE !== -1 ? cells[idxIE] : '',
+            street: idxAddress !== -1 ? cells[idxAddress] : '',
+            number: idxNumber !== -1 ? cells[idxNumber] : '',
+            neighborhood: idxNeighborhood !== -1 ? cells[idxNeighborhood] : '',
+            city: idxCity !== -1 ? cells[idxCity] : '',
+            state: idxState !== -1 ? cells[idxState] : '',
+            zipCode: idxZip !== -1 ? cells[idxZip] : ''
           });
         }
 
         if (newCustomers.length === 0) {
-          throw new Error("Nenhum dado válido encontrado nas linhas do arquivo.");
+          throw new Error("Nenhum cliente válido encontrado nas linhas do arquivo.");
         }
 
         onImportCustomers(newCustomers);

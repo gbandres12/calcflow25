@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, CostCenter, Category } from '../types';
+import { Transaction, TransactionType, TransactionStatus, CostCenter, Category } from '../types';
 import { INITIAL_COST_CENTERS } from '../constants';
 import { 
   TrendingUp, 
@@ -43,46 +43,90 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      const dateMatch = (!startDate || t.date >= startDate) && (!endDate || t.date <= endDate);
+      const txDate = t.paymentDate || t.date;
+      const dateMatch = (!startDate || txDate >= startDate) && (!endDate || txDate <= endDate);
       const categoryMatch = selectedCategory === 'Todas' || t.category === selectedCategory;
-      const ccMatch = selectedCCId === 'Todos' || t.costCenterId === selectedCCId;
+      const ccMatch = selectedCCId === 'Todos' || t.costCenterId === selectedCCId || t.costCenter === selectedCCId;
       return dateMatch && categoryMatch && ccMatch;
     });
   }, [transactions, startDate, endDate, selectedCategory, selectedCCId]);
 
-  const totalIn = useMemo(() => 
-    filteredTransactions
-      .filter(t => t.type === TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount || 0), 0)
-  , [filteredTransactions]);
-
-  const totalOut = useMemo(() => 
-    filteredTransactions
-      .filter(t => t.type !== TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount || 0), 0)
-  , [filteredTransactions]);
-
-  const todayTransactions = useMemo(() => transactions.filter(t => t.date === todayStr), [transactions, todayStr]);
-  const todayIn = todayTransactions.filter(t => t.type === TransactionType.SALE).reduce((acc, t) => acc + Number(t.paidAmount || 0), 0);
-  const todayOut = todayTransactions.filter(t => t.type !== TransactionType.SALE).reduce((acc, t) => acc + Number(t.paidAmount || 0), 0);
-  const todayBalance = todayIn - todayOut;
-
-  const costCenterSummary: Record<string, { in: number, out: number }> = useMemo(() => {
-    const summary: Record<string, { in: number, out: number }> = {};
+  // Compute total cash inflows and outflows within date range
+  const { totalIn, totalOut, costCenterSummary } = useMemo(() => {
+    let sumIn = 0;
+    let sumOut = 0;
+    const ccSummary: Record<string, { in: number, out: number }> = {};
     INITIAL_COST_CENTERS.forEach(cc => {
-      summary[cc.id] = { in: 0, out: 0 };
+      ccSummary[cc.id] = { in: 0, out: 0 };
     });
+
     filteredTransactions.forEach(t => {
-      if (t.costCenterId && summary[t.costCenterId]) {
+      const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
+      const ccId = t.costCenterId || 'cc1';
+
+      if (hasPayments) {
+        t.payments!.forEach(pmt => {
+          if (pmt.isDiscountOrDeduction) return;
+          const pmtDate = pmt.paymentDate || t.paymentDate || t.date;
+          const pmtDateMatch = (!startDate || pmtDate >= startDate) && (!endDate || pmtDate <= endDate);
+          if (!pmtDateMatch) return;
+
+          const pmtAmt = Number(pmt.amount) || 0;
+          if (t.type === TransactionType.SALE) {
+            sumIn += pmtAmt;
+            if (ccSummary[ccId]) ccSummary[ccId].in += pmtAmt;
+          } else {
+            sumOut += pmtAmt;
+            if (ccSummary[ccId]) ccSummary[ccId].out += pmtAmt;
+          }
+        });
+      } else {
+        const isPaid = 
+          t.status === TransactionStatus.CONFIRMADO || 
+          t.status === TransactionStatus.PAGO || 
+          t.status === TransactionStatus.PARCIAL;
+        if (!isPaid) return;
+
+        const paidAmt = Number(
+          t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
+            ? t.paidAmount 
+            : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
+        ) || 0;
+
         if (t.type === TransactionType.SALE) {
-          summary[t.costCenterId].in += Number(t.paidAmount || 0);
+          sumIn += paidAmt;
+          if (ccSummary[ccId]) ccSummary[ccId].in += paidAmt;
         } else {
-          summary[t.costCenterId].out += Number(t.paidAmount || 0);
+          sumOut += paidAmt;
+          if (ccSummary[ccId]) ccSummary[ccId].out += paidAmt;
         }
       }
     });
-    return summary;
-  }, [filteredTransactions]);
+
+    return { totalIn: sumIn, totalOut: sumOut, costCenterSummary: ccSummary };
+  }, [filteredTransactions, startDate, endDate]);
+
+  const todayTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const txDate = t.paymentDate || t.date;
+      if (txDate !== todayStr) return false;
+      return t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL;
+    });
+  }, [transactions, todayStr]);
+
+  const todayIn = useMemo(() => 
+    todayTransactions
+      .filter(t => t.type === TransactionType.SALE)
+      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
+  , [todayTransactions]);
+
+  const todayOut = useMemo(() => 
+    todayTransactions
+      .filter(t => t.type !== TransactionType.SALE)
+      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
+  , [todayTransactions]);
+
+  const todayBalance = todayIn - todayOut;
 
   const resetFilters = () => {
     setStartDate('');
@@ -145,6 +189,31 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
              <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Filtros Avançados</h4>
           </div>
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Inicial</label>
+              <input 
+                type="date" 
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)} 
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs" 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Final</label>
+              <input 
+                type="date" 
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)} 
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs" 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
+              <select value={selectedCCId} onChange={(e) => setSelectedCCId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs">
+                <option value="Todos">Todos os C. Custo</option>
+                {INITIAL_COST_CENTERS.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+              </select>
+            </div>
             <div className="space-y-1.5">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
               <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs">

@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Customers from './components/Customers';
 import CashFlow from './components/CashFlow';
+import { DailyFinancialManagement } from './components/DailyFinancialManagement';
 import MillingProcess from './components/MillingProcess';
 import FinancialAccounts from './components/FinancialAccounts';
 import SalesOrders from './components/SalesOrders';
@@ -331,8 +332,9 @@ const App: React.FC = () => {
         actualPaid = payment.paidAmount || 0;
       }
 
+      const accId = payment.accountId || accounts[0]?.id || 'acc-1';
       handleAddTransaction({
-        accountId: payment.accountId || accounts[0]?.id || 'acc-1',
+        accountId: accId,
         costCenterId: 'cc4',
         date: payment.date,
         type: TransactionType.SALE,
@@ -342,7 +344,16 @@ const App: React.FC = () => {
         amount: payment.amount,
         paidAmount: actualPaid,
         customerId: order.customerId,
-        orderId: order.id
+        orderId: order.id,
+        payments: actualPaid > 0 ? [{
+          id: `pmt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          transactionId: `tx-${Date.now()}`,
+          amount: actualPaid,
+          paymentDate: payment.date,
+          accountId: accId,
+          paymentMethod: 'PIX',
+          notes: `Recebimento da venda #${order.reference}`
+        }] : []
       });
     });
     setCustomers(prev => {
@@ -364,8 +375,9 @@ const App: React.FC = () => {
   };
 
   const handlePaymentReceived = (receipt: PaymentReceipt, _updatedOrder: SaleOrder) => {
+    const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
     handleAddTransaction({
-      accountId: receipt.accountId || accounts[0]?.id || 'acc-1',
+      accountId: accId,
       costCenterId: 'cc4',
       date: receipt.date,
       type: TransactionType.SALE,
@@ -378,7 +390,16 @@ const App: React.FC = () => {
       orderId: receipt.orderId,
       receiptId: receipt.id,
       paymentMethod: receipt.paymentMethod,
-      notes: receipt.notes
+      notes: receipt.notes,
+      payments: [{
+        id: `pmt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        transactionId: `tx-${Date.now()}`,
+        amount: receipt.amount,
+        paymentDate: receipt.date,
+        accountId: accId,
+        paymentMethod: receipt.paymentMethod || 'PIX',
+        notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+      }]
     });
   };
 
@@ -683,6 +704,18 @@ const App: React.FC = () => {
             <CashFlow 
               transactions={transactions} 
               categories={categories} 
+            />
+          )}
+          {currentView === 'daily' && (
+            <DailyFinancialManagement 
+              transactions={transactions} 
+              accounts={accounts} 
+              customers={customers}
+              orders={orders}
+              company={COMPANY_INFO}
+              onAddTransaction={handleAddTransaction} 
+              onUpdateTransaction={handleUpdateTransaction} 
+              onDeleteTransaction={handleDeleteTransaction} 
             />
           )}
           {currentView === 'users' && (
