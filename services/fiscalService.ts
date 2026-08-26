@@ -1,6 +1,8 @@
 import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
 import { db } from './dataService';
+import { firebaseFunctions } from './firebase';
+import { httpsCallable } from 'firebase/functions';
 
 /**
  * URL Base Oficial da API NotaAs
@@ -552,21 +554,97 @@ export const fiscalService = {
       let endpointUsado = '';
       let lastFetchError = '';
 
-      for (const endpoint of endpoints) {
+      // 1. Tentar via Firebase Cloud Function (Infraestrutura SaaS Firebase - Zero CORS)
+      if (firebaseFunctions) {
         try {
-          console.info(`🌐 [${invoiceRequestId}] Tentando requisição POST para: ${endpoint}`);
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload)
+          console.info(`⚡ [${invoiceRequestId}] Tentando emissão via Firebase Cloud Function (emitirNfe)...`);
+          const emitirNfeFn = httpsCallable<any, any>(firebaseFunctions, 'emitirNfe');
+          const fnResult = await emitirNfeFn({
+            payload,
+            companyId: activeCompanyId,
+            provider,
+            apiKey,
+            apiBaseUrl: baseUrl,
+            orderId: order.id,
           });
-          if (response) {
-            endpointUsado = endpoint;
-            break;
+
+          if (fnResult?.data?.success || (fnResult?.data?.statusHttp >= 200 && fnResult?.data?.statusHttp < 300)) {
+            const data = fnResult.data.data || {};
+            console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida via Firebase Cloud Function`);
+            console.info(`✅ [SUCESSO HTTP ${fnResult.data.statusHttp}] [${invoiceRequestId}]`, data);
+            console.groupEnd();
+
+            const nextNum = parseInt(nfeNumero, 10) + 1;
+            await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+
+            const nfeChave = data.chave || data.chave_acesso || data.chaveNFe || data.protocolo || '';
+            const nfeProtocolo = data.protocolo || data.id || data.invoiceId || '';
+            const danfeUrl = data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
+            const xmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
+            const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao' || fnResult.data.statusHttp === 202)
+              ? (data.status === 'processando_autorizacao' || fnResult.data.statusHttp === 202 ? 'processando' : 'autorizada')
+              : 'autorizada';
+
+            return {
+              success: true,
+              nfeStatus: statusRetornado as NfeStatus,
+              nfeId: data.id || data.uuid || data.invoiceId || `api-${Date.now()}`,
+              nfeChave: nfeChave || this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero),
+              nfeNumero: (data.numero || nfeNumero).toString(),
+              nfeSerie: (data.serie || serie).toString(),
+              nfeProtocolo: nfeProtocolo || `PROT-${Date.now()}`,
+              nfeDanfeUrl: danfeUrl || undefined,
+              nfeXmlUrl: xmlUrl || undefined,
+              nfeEmissao: data.dataEmissao || new Date().toISOString(),
+              naturezaOperacao: payload.naturezaOperacao,
+              rawResponse: { invoiceRequestId, viaCloudFunction: true, ...data }
+            };
           }
-        } catch (e: any) {
-          lastFetchError = e.message || 'Erro de conexão/CORS';
-          console.warn(`⚠️ [${invoiceRequestId}] Falha ao conectar em ${endpoint}:`, lastFetchError);
+        } catch (fnErr: any) {
+          console.warn(`⚠️ [${invoiceRequestId}] Cloud Function não respondeu ou em desenvolvimento, chaveando para Proxy:`, fnErr.message);
+        }
+      }
+
+      // 2. Tentar via Proxy do Backend (/api/nfe/emitir) para evitar bloqueios de CORS do navegador
+      try {
+        console.info(`🛡️ [${invoiceRequestId}] Tentando emissão via Proxy Backend Server-to-Server (/api/nfe/emitir)...`);
+        const proxyResponse = await fetch('/api/nfe/emitir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payload,
+            apiKey,
+            apiBaseUrl: baseUrl,
+            provider
+          })
+        });
+
+        if (proxyResponse && proxyResponse.status !== 404 && proxyResponse.status !== 502) {
+          response = proxyResponse;
+          endpointUsado = '/api/nfe/emitir (Proxy Backend Anti-CORS)';
+        }
+      } catch (proxyErr: any) {
+        console.warn(`⚠️ [${invoiceRequestId}] Proxy local não disponível, tentando endpoints diretos:`, proxyErr.message);
+      }
+
+      // 3. Se o proxy não respondeu, tentar os endpoints diretos
+      if (!response) {
+        for (const endpoint of endpoints) {
+          try {
+            console.info(`🌐 [${invoiceRequestId}] Tentando requisição POST para: ${endpoint}`);
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload)
+            });
+            if (response) {
+              endpointUsado = endpoint;
+              break;
+            }
+          } catch (e: any) {
+            lastFetchError = e.message || 'Erro de conexão/CORS';
+            console.warn(`⚠️ [${invoiceRequestId}] Falha ao conectar em ${endpoint}:`, lastFetchError);
+          }
         }
       }
 

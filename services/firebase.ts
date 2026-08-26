@@ -1,9 +1,11 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFunctions, Functions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
 let app: FirebaseApp;
 let firestoreDb: Firestore;
+let firebaseFunctions: Functions;
 
 try {
   if (!getApps().length) {
@@ -24,10 +26,18 @@ try {
   } else {
     firestoreDb = getFirestore(app);
   }
+
+  try {
+    firebaseFunctions = getFunctions(app, 'southamerica-east1');
+  } catch {
+    firebaseFunctions = getFunctions(app);
+  }
 } catch (error) {
   console.warn('[Firebase] Initializing fallback Firestore instance:', error);
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   firestoreDb = getFirestore(app);
+  firebaseFunctions = getFunctions(app);
 }
 
-export { app, firestoreDb };
+export { app, firestoreDb, firebaseFunctions };
+
