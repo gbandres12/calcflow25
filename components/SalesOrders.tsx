@@ -599,9 +599,22 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Lista de Pedidos em Cards Modernos & Elegantes com Indicador Visual de Pagamento */}
       <div className="space-y-4 print:hidden">
         {filteredOrders.length === 0 ? (
-          <div className="bg-white rounded-[2rem] p-16 text-center border border-slate-100 text-slate-400 space-y-2">
-            <ShoppingCart size={40} className="mx-auto opacity-20" />
-            <p className="text-sm font-bold">Nenhum pedido de venda encontrado para o filtro selecionado</p>
+          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-4 max-w-xl mx-auto my-8">
+            <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <ShoppingCart size={32} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-slate-800">Nenhum pedido de venda registrado</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Comece emitindo um novo pedido de venda ou orçamento comercial para faturamento e expedição de calcário.
+              </p>
+            </div>
+            <button
+              onClick={() => { setEditingOrder(null); setIsModalOpen(true); }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
+            >
+              <Plus size={16} /> Emitir Primeiro Pedido
+            </button>
           </div>
         ) : (
           filteredOrders.slice().reverse().map(order => {
@@ -616,87 +629,79 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             const remainingWithdraw = Math.max(0, totalQty - totalWithdrawn);
             const withdrawalProgress = totalQty > 0 ? Math.min(100, (totalWithdrawn / totalQty) * 100) : 0;
 
-            // Borda lateral e estilos conforme status de pagamento
-            let cardBorderLeft = 'border-l-[6px] border-l-slate-300';
-            if (order.status === OrderStatus.FINALIZED) {
-              if (paymentStatus === 'PAGO') cardBorderLeft = 'border-l-[6px] border-l-emerald-500';
-              else if (paymentStatus === 'PARCIAL') cardBorderLeft = 'border-l-[6px] border-l-amber-500';
-              else cardBorderLeft = 'border-l-[6px] border-l-rose-500';
-            }
-
             return (
               <div 
                 key={order.id} 
-                className={`bg-white rounded-[2.5rem] border border-slate-200/80 p-6 md:p-8 shadow-sm hover:shadow-md transition-all space-y-6 ${cardBorderLeft}`}
+                className="bg-white rounded-3xl border border-slate-200/90 p-6 md:p-7 shadow-sm hover:shadow-md hover:border-slate-300 transition-all space-y-5"
               >
                 
                 {/* Linha Superior: Cabeçalho do Pedido, Cliente e Badges de Pagamento */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-5 border-b border-slate-100">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3.5 rounded-2xl ${
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3.5">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
                       order.status === OrderStatus.BUDGET
-                        ? 'bg-amber-50 text-amber-600'
+                        ? 'bg-amber-50 text-amber-600 border border-amber-200/60'
                         : paymentStatus === 'PAGO'
-                        ? 'bg-emerald-50 text-emerald-600'
+                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60'
                         : paymentStatus === 'PARCIAL'
-                        ? 'bg-amber-50 text-amber-600'
-                        : 'bg-rose-50 text-rose-600'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                        : 'bg-rose-50 text-rose-600 border border-rose-200/60'
                     }`}>
                       <ShoppingCart size={22} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-black text-lg text-slate-900 tracking-tight">
+                        <h3 className="font-black text-base md:text-lg text-slate-900 tracking-tight">
                           {customer?.name || 'Cliente Geral'}
                         </h3>
-                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-600">
+                        <span className="text-[10px] font-mono font-black uppercase px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
                           {order.reference}
                         </span>
 
                         {/* Tag de Alerta de Débito junto ao nome do cliente */}
                         {order.status === OrderStatus.FINALIZED && (
                           paymentStatus === 'PENDENTE' ? (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 border border-rose-200">
-                              <AlertTriangle size={10} /> Débito Total ({formatBRL(remainingDebt)})
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                              <AlertTriangle size={10} /> Débito ({formatBRL(remainingDebt)})
                             </span>
                           ) : paymentStatus === 'PARCIAL' ? (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
-                              <Clock size={10} /> Débito Restante: {formatBRL(remainingDebt)}
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                              <Clock size={10} /> Restante: {formatBRL(remainingDebt)}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
                               <CheckCircle2 size={10} /> Quitado
                             </span>
                           )
                         )}
                       </div>
                       <p className="text-xs text-slate-400 font-bold uppercase tracking-wider text-[10px] pt-0.5">
-                        Doc: {customer?.document || 'N/I'} • Emissão: {order.date}
+                        Doc: {customer?.document || 'Não informado'} • Data: {order.date} {order.sellerName ? `• Vendedor: ${order.sellerName}` : ''}
                       </p>
                     </div>
                   </div>
 
                   {/* Status Badges: Badge de Pagamento Colorido e NF-e */}
-                  <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {/* Badge de Orçamento */}
                     {order.status === OrderStatus.BUDGET ? (
-                      <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1.5 shadow-sm shadow-amber-50">
+                      <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
                         <FileText size={13} /> Orçamento
                       </span>
                     ) : (
                       /* Badge Colorido de Status de Pagamento */
                       paymentStatus === 'PAGO' ? (
-                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1.5 shadow-sm shadow-emerald-50">
+                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
                           <CheckCircle2 size={13} className="text-emerald-600" />
                           <span>Pago / Quitado</span>
                         </span>
                       ) : paymentStatus === 'PARCIAL' ? (
-                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1.5 shadow-sm shadow-amber-50">
+                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1.5">
                           <Clock size={13} className="text-amber-600" />
                           <span>Pagamento Parcial</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] font-black px-3.5 py-1.5 rounded-xl uppercase bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1.5 shadow-sm shadow-rose-50 animate-pulse">
+                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-rose-50 text-rose-800 border border-rose-200 flex items-center gap-1.5">
                           <AlertTriangle size={13} className="text-rose-600" />
                           <span>Pagamento Pendente</span>
                         </span>
@@ -706,12 +711,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {order.status === OrderStatus.FINALIZED && (
                       order.nfeStatus === 'autorizada' ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                          <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
                             <FileCheck size={12} /> NF-e Nº {order.nfeNumero || '1041'}
                           </span>
                           <button
                             onClick={() => setOrderToViewDanfe(order)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
                           >
                             <Eye size={12} /> DANFE
                           </button>
@@ -721,11 +726,34 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           onClick={() => setOrderToEmitNfe(order)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm transition-all"
                         >
-                          <Send size={12} /> Emitir NF-e (NotaAs)
+                          <Send size={12} /> Emitir NF-e
                         </button>
                       )
                     )}
                   </div>
+                </div>
+
+                {/* Resumo de Produtos Faturados no Pedido */}
+                <div className="flex flex-wrap items-center gap-2 py-1">
+                  {order.items.map((item, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700">
+                      <Package size={13} className="text-slate-400" />
+                      <span>{item.productName}:</span>
+                      <span className="font-black text-slate-900">{item.quantity} {item.unit || 'Ton'}</span>
+                      <span className="text-slate-400 font-mono text-[11px]">(@ {formatBRL(item.unitPrice)}/{item.unit || 'Ton'})</span>
+                      <span className="text-purple-700 font-mono font-black">={formatBRL(item.total)}</span>
+                    </span>
+                  ))}
+                  {order.discount > 0 && (
+                    <span className="px-2.5 py-1 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
+                      Desconto: -{formatBRL(order.discount)}
+                    </span>
+                  )}
+                  {order.shipping > 0 && (
+                    <span className="px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700">
+                      Frete: +{formatBRL(order.shipping)}
+                    </span>
+                  )}
                 </div>
 
                 {/* Bloco Central: Painéis de Saldo Financeiro e Saldo de Retirada */}

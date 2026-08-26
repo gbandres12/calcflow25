@@ -26,6 +26,7 @@ import {
   TransactionType, 
   TransactionStatus,
   FinancialAccount,
+  AccountType,
   SaleOrder,
   OrderStatus,
   SalePayment,
@@ -74,6 +75,9 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
+  // ID isolado da empresa / tenant SaaS atual
+  const activeCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
+
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
     if (!currentUser) return;
@@ -87,17 +91,17 @@ const App: React.FC = () => {
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
           savedCategories, savedUsers
         ] = await Promise.all([
-          financeService.getTransactions(),
-          inventoryService.getInventory(),
-          db.getTable('customers'),
-          orderService.getOrders(),
-          db.getTable('machines'),
-          db.getTable('store_items'),
-          db.getTable('maintenance_records'),
-          db.getTable('fuel_records'),
-          db.getTable('fuel_purchases'),
-          db.getTable('financial_accounts'),
-          db.getTable('categories'),
+          financeService.getTransactions(activeCompanyId),
+          inventoryService.getInventory(activeCompanyId),
+          db.getTable('customers', activeCompanyId),
+          orderService.getOrders(activeCompanyId),
+          db.getTable('machines', activeCompanyId),
+          db.getTable('store_items', activeCompanyId),
+          db.getTable('maintenance_records', activeCompanyId),
+          db.getTable('fuel_records', activeCompanyId),
+          db.getTable('fuel_purchases', activeCompanyId),
+          db.getTable('financial_accounts', activeCompanyId),
+          db.getTable('categories', activeCompanyId),
           userService.getAll()
         ]);
 
@@ -122,32 +126,32 @@ const App: React.FC = () => {
     };
 
     loadAllData();
-  }, [currentUser]);
+  }, [currentUser, activeCompanyId]);
 
   // Handlers para Categorias
   const handleAddCategory = (name: string, type: 'INFLOW' | 'OUTFLOW') => {
     const newCat: Category = { id: `cat-${Date.now()}`, name, type };
     setCategories(prev => [...prev, newCat]);
-    db.upsert('categories', 'main', newCat);
+    db.upsert('categories', activeCompanyId, newCat);
   };
 
   const handleDeleteCategory = (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
-    db.delete('categories', 'main', id);
+    db.delete('categories', activeCompanyId, id);
   };
 
   // Handlers de Maquinário
   const handleAddMachine = (machineData: Omit<Machine, 'id'>) => {
     const newMachine: Machine = { ...machineData, id: `mach-${Date.now()}` };
     setMachines(prev => [...prev, newMachine]);
-    db.upsert('machines', 'main', newMachine);
+    db.upsert('machines', activeCompanyId, newMachine);
   };
 
   const handleUpdateHorimeter = (machineId: string, newHorimeter: number) => {
     setMachines(prev => prev.map(m => {
       if (m.id === machineId) {
         const updated = { ...m, currentHorimeter: newHorimeter };
-        db.upsert('machines', 'main', updated);
+        db.upsert('machines', activeCompanyId, updated);
         return updated;
       }
       return m;
@@ -158,7 +162,7 @@ const App: React.FC = () => {
   const handleAddFuel = (fuelData: Omit<FuelRecord, 'id'>) => {
     const newFuel: FuelRecord = { ...fuelData, id: `fuel-${Date.now()}` };
     setFuelRecords(prev => [...prev, newFuel]);
-    db.upsert('fuel_records', 'main', newFuel);
+    db.upsert('fuel_records', activeCompanyId, newFuel);
     handleUpdateHorimeter(fuelData.machineId, fuelData.horimeter);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
@@ -176,7 +180,7 @@ const App: React.FC = () => {
   const handleAddFuelPurchase = (purchaseData: Omit<FuelPurchase, 'id'>) => {
     const newPurchase: FuelPurchase = { ...purchaseData, id: `pur-${Date.now()}` };
     setFuelPurchases(prev => [...prev, newPurchase]);
-    db.upsert('fuel_purchases', 'main', newPurchase);
+    db.upsert('fuel_purchases', activeCompanyId, newPurchase);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc3',
@@ -194,7 +198,7 @@ const App: React.FC = () => {
   const handleAddMaintenance = (maintData: Omit<MaintenanceRecord, 'id'>) => {
     const newMaint: MaintenanceRecord = { ...maintData, id: `maint-${Date.now()}` };
     setMaintenances(prev => [...prev, newMaint]);
-    db.upsert('maintenance_records', 'main', newMaint);
+    db.upsert('maintenance_records', activeCompanyId, newMaint);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc5',
@@ -212,18 +216,18 @@ const App: React.FC = () => {
   const handleAddStoreItem = (itemData: Omit<StoreItem, 'id'>) => {
     const newItem: StoreItem = { ...itemData, id: `store-${Date.now()}` };
     setStoreItems(prev => [...prev, newItem]);
-    db.upsert('store_items', 'main', newItem);
+    db.upsert('store_items', activeCompanyId, newItem);
   };
 
   const handleUpdateStoreItem = (item: StoreItem) => {
     setStoreItems(prev => prev.map(s => s.id === item.id ? item : s));
-    db.upsert('store_items', 'main', item);
+    db.upsert('store_items', activeCompanyId, item);
   };
 
   // Contas Financeiras
   const handleUpdateAccount = (updatedAccount: FinancialAccount) => {
     setAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
-    db.upsert('financial_accounts', 'main', updatedAccount);
+    db.upsert('financial_accounts', activeCompanyId, updatedAccount);
   };
 
   // Transações Financeiras
@@ -231,7 +235,7 @@ const App: React.FC = () => {
     const tx: Transaction = { ...newTx, id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}` };
     setTransactions(prev => {
       const updated = [tx, ...prev];
-      financeService.saveTransactions('main', updated);
+      financeService.saveTransactions(activeCompanyId, updated);
       return updated;
     });
   };
@@ -239,14 +243,14 @@ const App: React.FC = () => {
   const handleUpdateTransaction = (updatedTx: Transaction) => {
     setTransactions(prev => {
       const updated = prev.map(t => t.id === updatedTx.id ? updatedTx : t);
-      financeService.saveTransactions('main', updated);
+      financeService.saveTransactions(activeCompanyId, updated);
       return updated;
     });
   };
 
   const handleDeleteTransaction = (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
-    db.delete('transactions', 'main', id);
+    db.delete('transactions', activeCompanyId, id);
   };
 
   // Clientes
@@ -257,7 +261,7 @@ const App: React.FC = () => {
       totalSpent: 0
     }));
     setCustomers(prev => [...prev, ...formatted]);
-    db.upsert('customers', 'main', formatted);
+    db.upsert('customers', activeCompanyId, formatted);
   };
 
   const handleAddCustomer = (newCustomer: Omit<Customer, 'id' | 'totalSpent'>) => {
@@ -267,7 +271,7 @@ const App: React.FC = () => {
       totalSpent: 0
     };
     setCustomers(prev => [...prev, customer]);
-    db.upsert('customers', 'main', customer);
+    db.upsert('customers', activeCompanyId, customer);
   };
 
   // Estoque
@@ -277,7 +281,7 @@ const App: React.FC = () => {
         (item.id === productId) ? { ...item, quantity: Math.max(0, item.quantity + quantity) } : item
       );
       const updatedItem = newList.find(i => i.id === productId);
-      if (updatedItem) inventoryService.updateStock('main', productId, updatedItem.quantity);
+      if (updatedItem) inventoryService.updateStock(activeCompanyId, productId, updatedItem.quantity);
       return newList;
     });
   };
@@ -285,7 +289,7 @@ const App: React.FC = () => {
   const handleAddInventoryItem = (item: Omit<InventoryItem, 'id'> & { id?: string }) => {
     const newItem: InventoryItem = { ...item, id: item.id || `prod-${Date.now()}` };
     setInventory(prev => [...prev, newItem]);
-    db.upsert('inventory', 'main', newItem);
+    db.upsert('inventory', activeCompanyId, newItem);
   };
 
   // Usuários
@@ -305,7 +309,7 @@ const App: React.FC = () => {
     const reference = `PED-${new Date().getFullYear()}-${(orders.length + 1).toString().padStart(4, '0')}`;
     const newOrder: SaleOrder = { ...orderData, id: `ord-${Date.now()}`, reference };
     setOrders(prev => [...prev, newOrder]);
-    orderService.saveOrders('main', [...orders, newOrder]);
+    orderService.saveOrders(activeCompanyId, [...orders, newOrder]);
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments);
     }
@@ -343,7 +347,7 @@ const App: React.FC = () => {
             totalSpent: Number(c.totalSpent || 0) + order.total,
             status: 'Ativo' as const
           };
-          db.upsert('customers', 'main', updatedCustomer);
+          db.upsert('customers', activeCompanyId, updatedCustomer);
           return updatedCustomer;
         }
         return c;
@@ -375,10 +379,68 @@ const App: React.FC = () => {
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-    orderService.saveOrders('main', orders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    orderService.saveOrders(activeCompanyId, orders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(updatedOrder, updatedOrder.payments);
     }
+  };
+
+  // Resetar empresa para banco 100% limpo
+  const handleResetCompanyDatabase = async () => {
+    if (!window.confirm(`Tem certeza que deseja zerar todos os registros de "${currentUser.companyName || 'sua empresa'}" e deixar a base 100% limpa?`)) {
+      return;
+    }
+    setSyncing(true);
+    await db.resetCompanyToClean(activeCompanyId);
+    setTransactions([]);
+    setCustomers([]);
+    setOrders([]);
+    setMachines([]);
+    setStoreItems([]);
+    setMaintenances([]);
+    setFuelRecords([]);
+    setFuelPurchases([]);
+    setAccounts([{ id: 'acc-1', name: 'Conta Principal / Caixa Geral', type: AccountType.BANCO, initialBalance: 0, bankName: 'Banco Principal', accountNumber: '0001-0' }]);
+    setInventory([
+      { id: 'moido', name: 'Calcário Agrícola Moído (Granel)', unit: 'Ton', quantity: 0, minStock: 200, unitPrice: 180 },
+      { id: 'britado', name: 'Calcário Britado (Matéria-Prima)', unit: 'Ton', quantity: 0, minStock: 500, unitPrice: 90 },
+      { id: 'filler', name: 'Calcário Filler Ultrafino', unit: 'Ton', quantity: 0, minStock: 50, unitPrice: 240 }
+    ]);
+    setSyncing(false);
+  };
+
+  // Carregar dados de demonstração para testes
+  const handleLoadDemoData = async () => {
+    if (!window.confirm("Deseja carregar dados de demonstração para teste nesta empresa?")) return;
+    setSyncing(true);
+    await db.loadDemoDataForCompany(activeCompanyId);
+    const [
+      savedTxs, savedInv, savedCust, 
+      savedOrders, savedMachines, savedStore, 
+      savedMaint, savedFuel, savedFuelPurchases, savedAccounts
+    ] = await Promise.all([
+      financeService.getTransactions(activeCompanyId),
+      inventoryService.getInventory(activeCompanyId),
+      db.getTable('customers', activeCompanyId),
+      orderService.getOrders(activeCompanyId),
+      db.getTable('machines', activeCompanyId),
+      db.getTable('store_items', activeCompanyId),
+      db.getTable('maintenance_records', activeCompanyId),
+      db.getTable('fuel_records', activeCompanyId),
+      db.getTable('fuel_purchases', activeCompanyId),
+      db.getTable('financial_accounts', activeCompanyId)
+    ]);
+    setTransactions(savedTxs);
+    setInventory(savedInv);
+    setCustomers(savedCust);
+    setOrders(savedOrders);
+    setMachines(savedMachines);
+    setStoreItems(savedStore);
+    setMaintenances(savedMaint);
+    setFuelRecords(savedFuel);
+    setFuelPurchases(savedFuelPurchases);
+    setAccounts(savedAccounts);
+    setSyncing(false);
   };
 
   const handleCompleteOnboarding = async (updatedUser: User) => {
@@ -387,8 +449,8 @@ const App: React.FC = () => {
 
     try {
       const [savedInv, savedAccs, savedUsers] = await Promise.all([
-        inventoryService.getInventory(),
-        db.getTable('financial_accounts'),
+        inventoryService.getInventory(activeCompanyId),
+        db.getTable('financial_accounts', activeCompanyId),
         userService.getAll()
       ]);
       if (savedInv?.length) setInventory(savedInv);
@@ -429,6 +491,31 @@ const App: React.FC = () => {
              </div>
              
              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-sm text-[10px]">
+                  <span className="font-bold text-slate-400">Base:</span>
+                  <span className={`font-black uppercase px-2 py-0.5 rounded-lg ${activeCompanyId === 'matriz-demo' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                    {activeCompanyId === 'matriz-demo' ? 'Demonstração' : 'Produção SaaS'}
+                  </span>
+                  {activeCompanyId !== 'matriz-demo' && (
+                    <button
+                      onClick={handleResetCompanyDatabase}
+                      title="Zerar todos os dados e deixar a base limpa"
+                      className="ml-1 px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-black transition-colors border border-rose-200"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                  {activeCompanyId !== 'matriz-demo' && orders.length === 0 && customers.length === 0 && (
+                    <button
+                      onClick={handleLoadDemoData}
+                      title="Carregar registros de demonstração para testes rápidos"
+                      className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg font-black transition-colors border border-purple-200"
+                    >
+                      Testar Demo
+                    </button>
+                  )}
+                </div>
+
                 {currentUser.onboardingCompleted === false && (
                   <button
                     onClick={() => setShowOnboardingModal(true)}
@@ -475,7 +562,7 @@ const App: React.FC = () => {
               company={COMPANY_INFO} 
               onAddOrder={handleAddOrder} 
               onUpdateOrder={handleUpdateOrder} 
-              onDeleteOrder={(id) => db.delete('sales_orders', 'main', id)} 
+              onDeleteOrder={(id) => db.delete('sales_orders', activeCompanyId, id)} 
               onFinalizeOrder={(oid, p) => finalizeSale(orders.find(o => o.id === oid)!, p)} 
               onPaymentReceived={handlePaymentReceived}
             />
