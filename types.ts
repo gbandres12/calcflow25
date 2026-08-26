@@ -352,6 +352,8 @@ export interface SaleOrder {
   nfeEmissao?: string;
   nfeErro?: string;
   nfeNaturezaOperacao?: string;
+  nfePayload?: any;
+  nfeRawResponse?: any;
 }
 
 export interface FiscalConfig {

@@ -454,15 +454,17 @@ export const fiscalService = {
     customer: Customer, 
     overrideConfig?: FiscalConfig
   ): Promise<EmitirNFeResult> {
+    const invoiceRequestId = `inv_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const config = overrideConfig || (await this.getConfig());
     const validation = this.validarDadosFiscais(order, customer);
 
     if (!validation.valid) {
-      console.warn('⚠️ [FISCAL SERVICE] Falha na validação prévia dos dados fiscais:', validation.errors);
+      console.warn(`⚠️ [FISCAL SERVICE] [${invoiceRequestId}] Falha na validação prévia dos dados fiscais:`, validation.errors);
       return {
         success: false,
         nfeStatus: 'rejeitada',
-        nfeErro: validation.errors.join(' | ')
+        nfeErro: validation.errors.join(' | '),
+        rawResponse: { invoiceRequestId, validationErrors: validation.errors }
       };
     }
 
@@ -474,32 +476,18 @@ export const fiscalService = {
     const provider = config.apiProvider || 'notaas';
     const baseUrl = (config.apiBaseUrl || NOTAAS_API_BASE_URL).replace(/\/$/, '');
 
-    // LOG DETALHADO ANTES DA CHAMADA DA API
-    console.group(`🚀 [EMISSÃO NF-e API] Iniciando Envio para API Fiscal (${provider.toUpperCase()})`);
+    // LOG DETALHADO E RASTREÁVEL COM INVOICE_REQUEST_ID
+    console.group(`🚀 [EMISSÃO NF-e API] [ID: ${invoiceRequestId}] Iniciando Envio para API Fiscal (${provider.toUpperCase()})`);
+    console.info('🆔 Trace Request ID:', invoiceRequestId);
     console.info('📌 Referência do Pedido:', order.reference);
     console.info('🌐 Ambiente SEFAZ:', config.environment.toUpperCase());
     console.info('🔌 Modo de Operação:', isApiMode ? 'API REAL (Transmissão Direta)' : 'SIMULAÇÃO LOCAL / TREINAMENTO');
     console.info('🔑 Chave de API:', apiKey ? `${apiKey.substring(0, 8)}...` : 'NÃO INFORMADA');
     console.info('📍 URL Base da API:', baseUrl);
 
-    console.group('🔎 Mapeamento Completo do Schema (Payload Enviado)');
-    console.info('🏢 [EMITENTE]:', {
-      cnpj: payload.emitente.cnpj,
-      inscricaoEstadual: payload.emitente.inscricaoEstadual,
-      razaoSocial: payload.emitente.razaoSocial,
-      regimeTributario: payload.emitente.regimeTributario,
-      endereco: payload.emitente.endereco
-    });
-    console.info('👤 [DESTINATÁRIO]:', {
-      cpfCnpj: payload.destinatario.cpfCnpj,
-      tipoPessoa: payload.destinatario.tipoPessoa,
-      razaoSocial: payload.destinatario.razaoSocial,
-      indicadorIe: payload.destinatario.indicadorIe,
-      inscricaoEstadual: payload.destinatario.inscricaoEstadual,
-      email: payload.destinatario.email,
-      telefone: payload.destinatario.telefone,
-      endereco: payload.destinatario.endereco
-    });
+    console.group(`🔎 Mapeamento Completo do Schema [${invoiceRequestId}]`);
+    console.info('🏢 [EMITENTE]:', payload.emitente);
+    console.info('👤 [DESTINATÁRIO]:', payload.destinatario);
     console.info('📦 [ITENS DA NOTA] (' + payload.itens.length + ' item(ns)):', payload.itens);
     console.info('💰 [TOTAIS]:', payload.total);
     console.info('📄 [PAYLOAD COMPLETO EM JSON]:', JSON.stringify(payload, null, 2));
@@ -509,11 +497,12 @@ export const fiscalService = {
     // Se estiver em modo API Real ou se possuir API Key informada, realiza a transmissão oficial
     if (isApiMode) {
       if (!apiKey) {
-        console.error('❌ [EMISSÃO NF-e API] Chave de API não configurada!');
+        console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
         return {
           success: false,
           nfeStatus: 'rejeitada',
-          nfeErro: 'Chave de API não informada! Insira seu Token / Chave de API nas Configurações Fiscais para transmitir à sua conta da API.'
+          nfeErro: 'Chave de API não informada! Insira seu Token / Chave de API nas Configurações Fiscais para transmitir à sua conta da API.',
+          rawResponse: { invoiceRequestId, error: 'API Key missing' }
         };
       }
 
@@ -565,7 +554,7 @@ export const fiscalService = {
 
       for (const endpoint of endpoints) {
         try {
-          console.info(`🌐 Tentando requisição POST para: ${endpoint}`);
+          console.info(`🌐 [${invoiceRequestId}] Tentando requisição POST para: ${endpoint}`);
           response = await fetch(endpoint, {
             method: 'POST',
             headers,
@@ -577,16 +566,16 @@ export const fiscalService = {
           }
         } catch (e: any) {
           lastFetchError = e.message || 'Erro de conexão/CORS';
-          console.warn(`⚠️ Falha ao conectar em ${endpoint}:`, lastFetchError);
+          console.warn(`⚠️ [${invoiceRequestId}] Falha ao conectar em ${endpoint}:`, lastFetchError);
         }
       }
 
       // LOG DETALHADO DEPOIS DA CHAMADA DA API
-      console.group(`📡 [EMISSÃO NF-e API] Resposta Recebida da API Fiscal (${provider.toUpperCase()})`);
+      console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida da API Fiscal (${provider.toUpperCase()})`);
 
       if (response && (response.ok || response.status === 201 || response.status === 202)) {
         const data = await response.json().catch(() => ({}));
-        console.info('✅ [SUCESSO HTTP]', response.status, response.statusText);
+        console.info(`✅ [SUCESSO HTTP ${response.status}] [${invoiceRequestId}]`, response.statusText);
         console.info('📍 Endpoint que respondeu:', endpointUsado);
         console.info('📦 Body da Resposta (JSON):', data);
         console.groupEnd();
@@ -595,8 +584,8 @@ export const fiscalService = {
         await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
 
         const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.cstat_msg;
-        const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao') 
-          ? (data.status === 'processando_autorizacao' ? 'processando' : 'autorizada') 
+        const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao' || response.status === 202) 
+          ? (data.status === 'processando_autorizacao' || response.status === 202 ? 'processando' : 'autorizada') 
           : 'autorizada';
 
         return {
@@ -611,11 +600,11 @@ export const fiscalService = {
           nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
           nfeEmissao: data.dataEmissao || new Date().toISOString(),
           naturezaOperacao: payload.naturezaOperacao,
-          rawResponse: data
+          rawResponse: { invoiceRequestId, ...data }
         };
       } else if (response) {
         const errData = await response.json().catch(() => ({}));
-        console.error('❌ [REJEIÇÃO/ERRO HTTP]', response.status, response.statusText);
+        console.error(`❌ [REJEIÇÃO/ERRO HTTP ${response.status}] [${invoiceRequestId}]`, response.statusText);
         console.error('📍 Endpoint:', endpointUsado);
         console.error('📦 Body de Erro da API:', errData);
         console.groupEnd();
@@ -624,29 +613,53 @@ export const fiscalService = {
         if (Array.isArray(errData.erros) && errData.erros.length > 0) {
           errMsg = errData.erros.map((e: any) => `${e.campo ? e.campo + ': ' : ''}${e.mensagem || e.msg || e}`).join(' | ');
         }
+
+        // TRATAMENTO AUTOMÁTICO DE IDEMPOTÊNCIA / DUPLICIDADE (HTTP 409 OU REJEIÇÃO DE CHAVE DUPLICADA)
+        if (response.status === 409 || (errMsg && (errMsg.toLowerCase().includes('duplicidade') || errMsg.toLowerCase().includes('ja emitida') || errMsg.toLowerCase().includes('já existe')))) {
+          console.info(`🔄 [IDEMPOTÊNCIA] [${invoiceRequestId}] Rejeição por duplicidade detectada. Consultando nota previamente transmitida para referência: ${payload.referenciaExterna}`);
+          const consultRes = await this.consultarPorReferencia(payload.referenciaExterna, config);
+          if (consultRes.success && consultRes.nfe) {
+            console.info(`✅ [IDEMPOTÊNCIA RECUPERADA] Nota recuperada com sucesso da API Nótass!`, consultRes.nfe);
+            return {
+              success: true,
+              nfeStatus: consultRes.status,
+              nfeId: consultRes.nfe.id,
+              nfeChave: consultRes.nfe.chaveAcesso,
+              nfeNumero: (consultRes.nfe.numero || nfeNumero).toString(),
+              nfeSerie: (consultRes.nfe.serie || serie).toString(),
+              nfeProtocolo: consultRes.nfe.protocolo,
+              nfeDanfeUrl: consultRes.nfe.danfeUrl,
+              nfeXmlUrl: consultRes.nfe.xmlUrl,
+              nfeEmissao: consultRes.nfe.dataEmissao,
+              naturezaOperacao: payload.naturezaOperacao,
+              rawResponse: { invoiceRequestId, recoveredFromConflict: true, ...consultRes.nfe }
+            };
+          }
+        }
+
         if (!errMsg) {
           errMsg = `Resposta de Rejeição/Erro da API (${provider.toUpperCase()}) - HTTP Status ${response.status}`;
         }
         return {
           success: false,
           nfeStatus: 'rejeitada',
-          nfeErro: errMsg,
-          rawResponse: errData
+          nfeErro: `[HTTP ${response.status}] ${errMsg}`,
+          rawResponse: { invoiceRequestId, ...errData }
         };
       } else {
-        console.error('💥 [FALHA DE REDE DE CONEXÃO]', lastFetchError);
+        console.error(`💥 [FALHA DE REDE DE CONEXÃO] [${invoiceRequestId}]`, lastFetchError);
         console.groupEnd();
         return {
           success: false,
           nfeStatus: 'rejeitada',
           nfeErro: `Erro de comunicação com o servidor da API (${provider.toUpperCase()}). ${lastFetchError}. Se o servidor bloquear requisições diretas do navegador por política de CORS, certifique-se de que a origem da aplicação está autorizada no painel da API.`,
-          rawResponse: { error: lastFetchError }
+          rawResponse: { invoiceRequestId, error: lastFetchError }
         };
       }
     }
 
     // Modo Sandbox / Treinamento Local (Execução sem API)
-    console.info('🧪 Executando em Modo Simulação Local (Treinamento sem API Externa)');
+    console.info(`🧪 [${invoiceRequestId}] Executando em Modo Simulação Local (Treinamento sem API Externa)`);
     console.groupEnd();
 
     await new Promise(resolve => setTimeout(resolve, 600));
@@ -664,7 +677,37 @@ export const fiscalService = {
       nfeSerie: serie,
       nfeProtocolo: mockProtocolo,
       nfeEmissao: new Date().toISOString(),
-      naturezaOperacao: payload.naturezaOperacao
+      naturezaOperacao: payload.naturezaOperacao,
+      rawResponse: { invoiceRequestId, mode: 'simulation' }
+    };
+  },
+
+  /**
+   * Rotina de Polling / Acompanhamento de Nota Fiscal em Processamento na SEFAZ
+   */
+  async consultarEAtualizarStatusProcessamento(
+    nfeIdOrChave: string,
+    overrideConfig?: FiscalConfig,
+    maxRetries: number = 5,
+    delayMs: number = 3000
+  ): Promise<ConsultarNFeResult> {
+    let retries = 0;
+    while (retries < maxRetries) {
+      console.info(`⏳ [POLLING NF-e] Tentativa ${retries + 1}/${maxRetries} consultando status da nota ${nfeIdOrChave}...`);
+      const result = await this.consultarNFe(nfeIdOrChave, overrideConfig);
+      if (result.success && result.status !== 'processando') {
+        console.info(`🎉 [POLLING NF-e] Processamento finalizado! Status final: ${result.status.toUpperCase()}`);
+        return result;
+      }
+      retries++;
+      if (retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    return {
+      success: true,
+      status: 'processando',
+      error: 'Nota permanece em processamento na SEFAZ. Tente consultar novamente em alguns instantes.'
     };
   },
 

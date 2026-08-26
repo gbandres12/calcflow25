@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { 
@@ -25,21 +25,39 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const validation = fiscalService.validarDadosFiscais(order, customer);
 
   const handleEmitir = async () => {
+    if (isSubmittingRef.current || loading) {
+      console.warn('⚠️ [EMISSÃO BLOQUEADA] Clique duplo ou emissão simultânea evitada!');
+      return;
+    }
+
+    isSubmittingRef.current = true;
     setLoading(true);
     setErrorMsg(null);
 
     try {
+      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config);
       const result = await fiscalService.emitirNFe(order, customer, config);
 
       if (result.success) {
+        let finalStatus = result.nfeStatus;
+
+        // Se o servidor respondeu status processando, dispara polling de acompanhamento
+        if (result.nfeStatus === 'processando' && result.nfeId) {
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 3, 2000);
+          if (pollResult.success && pollResult.status) {
+            finalStatus = pollResult.status;
+          }
+        }
+
         const updatedOrder: SaleOrder = {
           ...order,
-          nfeStatus: result.nfeStatus,
+          nfeStatus: finalStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
           nfeNumero: result.nfeNumero,
@@ -48,7 +66,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           nfeDanfeUrl: result.nfeDanfeUrl,
           nfeXmlUrl: result.nfeXmlUrl,
           nfeEmissao: result.nfeEmissao,
-          nfeNaturezaOperacao: result.naturezaOperacao
+          nfeNaturezaOperacao: result.naturezaOperacao,
+          nfePayload: payloadSent,
+          nfeRawResponse: result.rawResponse
         };
 
         onSuccess(updatedOrder);
@@ -58,6 +78,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     } catch (e: any) {
       setErrorMsg(e.message || 'Erro de comunicação com o serviço fiscal.');
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };
