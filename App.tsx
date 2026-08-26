@@ -294,6 +294,16 @@ const App: React.FC = () => {
     db.upsert('inventory', activeCompanyId, newItem);
   };
 
+  const handleUpdateInventoryItem = (item: InventoryItem) => {
+    setInventory(prev => prev.map(i => i.id === item.id ? item : i));
+    db.upsert('inventory', activeCompanyId, item);
+  };
+
+  const handleDeleteInventoryItem = (id: string) => {
+    setInventory(prev => prev.filter(i => i.id !== id));
+    db.delete('inventory', activeCompanyId, id);
+  };
+
   // Usuários
   const handleAddUser = (userData: Omit<User, 'id'>) => {
     const newUser: User = { ...userData, id: `u-${Date.now()}`, status: 'Ativo' };
@@ -659,6 +669,8 @@ const App: React.FC = () => {
                 payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: new Date().toISOString().split('T')[0], status: TransactionStatus.CONFIRMADO, accountId: accounts[0]?.id || 'acc-1', description: 'Venda Direta de Pátio' }] 
               })} 
               onAddProduct={handleAddInventoryItem} 
+              onUpdateProduct={handleUpdateInventoryItem}
+              onDeleteProduct={handleDeleteInventoryItem}
             />
           )}
           {currentView === 'milling' && (

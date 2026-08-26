@@ -120,16 +120,27 @@ export interface Customer {
 
 export interface InventoryItem {
   id: 'britado' | 'moido' | string;
+  code?: string;
   name: string;
+  category?: string;
   quantity: number;
   unitPrice: number;
+  costPrice?: number;
   minStock: number;
   unit?: string;
   companyId?: string;
+  
+  // Área Fiscal
   ncm?: string;
+  cst?: string;
   cfop?: string;
   origem?: string;
+  aliquotaIcms?: number;
+  aliquotaPis?: number;
+  aliquotaCofins?: number;
   unidadeTributavel?: string;
+  fatorConversao?: number;
+  observacoesFiscais?: string;
 }
 
 export interface Machine {
