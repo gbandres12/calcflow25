@@ -1,0 +1,24 @@
+{
+  "name": "CalcárioFlow ERP - Usina & Mineração",
+  "short_name": "CalcárioFlow",
+  "description": "Sistema de Gestão para Mineração, Britagem, Moagem de Calcário e Balança de Pátio",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/h9vDq8s/calcario-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.ibb.co/h9vDq8s/calcario-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

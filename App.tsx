@@ -17,7 +17,7 @@ import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Boxes, Users } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -52,6 +52,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // App State
   const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
@@ -464,34 +465,60 @@ const App: React.FC = () => {
   if (!currentUser) return <Login onLoginSuccess={setCurrentUser} />;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       <Sidebar 
         currentView={currentView} 
         onNavigate={setCurrentView} 
         user={currentUser}
         onLogout={() => setCurrentUser(null)}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
-      <main className="flex-1 ml-64 p-8 transition-all duration-300 print:ml-0 print:p-0">
-        <div className="max-w-7xl mx-auto pb-20 print:max-w-none">
-          <div className="flex justify-between items-center mb-6 print:hidden">
-             <div className="flex items-center gap-2.5 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
-               {syncing ? (
-                 <>
-                   <RefreshCw size={14} className="text-purple-600 animate-spin" />
-                   <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronizando Sistema...</span>
-                 </>
-               ) : (
-                 <>
-                   <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                   <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                     {currentUser.companyName || COMPANY_INFO.name} • {currentUser.city || COMPANY_INFO.city}-{currentUser.state || COMPANY_INFO.state}
-                   </span>
-                 </>
-               )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 w-full lg:ml-64 p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
+        <div className="max-w-7xl mx-auto print:max-w-none">
+          {/* Topbar com suporte Mobile e Desktop */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 print:hidden">
+             <div className="flex items-center justify-between w-full sm:w-auto gap-2.5">
+               <div className="flex items-center gap-2">
+                 {/* Botão de Menu para Celular */}
+                 <button
+                   onClick={() => setMobileMenuOpen(true)}
+                   className="p-2 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-100 lg:hidden shadow-sm flex items-center justify-center"
+                   title="Abrir Menu Lateral"
+                 >
+                   <Menu size={18} />
+                 </button>
+
+                 <div className="flex items-center gap-2 bg-white px-3 sm:px-4 py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm">
+                   {syncing ? (
+                     <>
+                       <RefreshCw size={13} className="text-purple-600 animate-spin" />
+                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronizando...</span>
+                     </>
+                   ) : (
+                     <>
+                       <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                       <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide truncate max-w-[200px] sm:max-w-none">
+                         {currentUser.companyName || COMPANY_INFO.name}
+                       </span>
+                     </>
+                   )}
+                 </div>
+               </div>
+
+               {/* Botão Sair no Mobile */}
+               <button 
+                 onClick={() => setCurrentUser(null)} 
+                 className="sm:hidden px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase transition-colors"
+               >
+                 Sair
+               </button>
              </div>
              
-             <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-slate-200 shadow-sm text-[10px]">
+             <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm text-[10px]">
                   <span className="font-bold text-slate-400">Base:</span>
                   <span className={`font-black uppercase px-2 py-0.5 rounded-lg ${activeCompanyId === 'matriz-demo' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                     {activeCompanyId === 'matriz-demo' ? 'Demonstração' : 'Produção SaaS'}
@@ -519,14 +546,15 @@ const App: React.FC = () => {
                 {currentUser.onboardingCompleted === false && (
                   <button
                     onClick={() => setShowOnboardingModal(true)}
-                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-amber-200 active:scale-95 animate-pulse"
+                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
                   >
-                    <Sparkles size={13} />
-                    Completar Configuração da Usina
+                    <Sparkles size={12} />
+                    <span className="hidden sm:inline">Completar Setup</span>
+                    <span className="sm:hidden">Setup</span>
                   </button>
                 )}
 
-                <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-200">
+                <div className="hidden sm:flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-200">
                    <div className="text-right">
                       <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{currentUser.name}</p>
                       <p className="text-[9px] font-bold text-purple-600 uppercase tracking-wider">{currentUser.role}</p>
@@ -682,9 +710,13 @@ const App: React.FC = () => {
               machines={machines} 
               storeItems={storeItems} 
               maintenances={maintenances} 
+              orders={orders}
+              customers={customers}
+              company={COMPANY_INFO}
               onAddMaintenance={handleAddMaintenance} 
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
+              onUpdateOrder={handleUpdateOrder}
             />
           )}
           {currentView === 'settings' && (
@@ -696,6 +728,57 @@ const App: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* Barra de Navegação Inferior Rápida para Celular (PWA / Mobile) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex items-center justify-around z-40 print:hidden shadow-2xl">
+        <button
+          onClick={() => setCurrentView('dashboard')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <LayoutDashboard size={18} />
+          <span className="text-[10px] tracking-tight">Início</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('orders')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'orders' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FileText size={18} />
+          <span className="text-[10px] tracking-tight">Vendas</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('yard')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'yard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Scale size={18} />
+          <span className="text-[10px] tracking-tight">Balança</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('inventory')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'inventory' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Package size={18} />
+          <span className="text-[10px] tracking-tight">Estoque</span>
+        </button>
+
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-slate-400 hover:text-slate-200"
+        >
+          <Menu size={18} />
+          <span className="text-[10px] tracking-tight">Menu</span>
+        </button>
+      </div>
 
       {/* Assistente de Onboarding / Setup Inicial */}
       {showOnboardingModal && currentUser && (

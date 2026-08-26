@@ -104,6 +104,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   }, []);
   
   // Form State
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
@@ -345,10 +346,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingOrder(null);
+    setCurrentStep(1);
     resetForm();
   };
 
   const resetForm = () => {
+    setCurrentStep(1);
     setSelectedCustomerId('');
     setCustomerSearch('');
     setQuantity('');
@@ -361,6 +364,60 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
+  };
+
+  const handleNextStep = () => {
+    if (currentStep === 1) {
+      if (!selectedCustomerId) {
+        alert("Por favor, selecione um cliente da lista antes de avançar.");
+        return;
+      }
+      if (!quantity || parseFloat(quantity) <= 0) {
+        alert("Por favor, informe a quantidade de calcário em toneladas.");
+        return;
+      }
+      if (!unitPrice || parseFloat(unitPrice) <= 0) {
+        alert("Por favor, informe o preço unitário por tonelada.");
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (!isBudget && payments.length > 0 && Math.abs(remainingToProgram) > 0.05) {
+        alert(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`);
+        return;
+      }
+      setCurrentStep(3);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep((currentStep - 1) as 1 | 2 | 3);
+    }
+  };
+
+  const generateQuickInstallments = (count: number) => {
+    const targetAmount = balanceToSchedule;
+    if (targetAmount <= 0) return;
+    const partAmount = Number((targetAmount / count).toFixed(2));
+    const newPayments: SalePayment[] = [];
+    let accumulated = 0;
+    for (let i = 1; i <= count; i++) {
+      const isLast = i === count;
+      const amount = isLast ? Number((targetAmount - accumulated).toFixed(2)) : partAmount;
+      accumulated += amount;
+      const dueDate = new Date(Date.now() + i * 30 * 86400000).toISOString().split('T')[0];
+      newPayments.push({
+        id: `pay-${Date.now()}-${i}`,
+        amount,
+        paidAmount: 0,
+        date: dueDate,
+        status: TransactionStatus.PENDENTE,
+        accountId: accounts[0]?.id || '',
+        description: count === 1 ? 'À Vista (30 dias)' : `Parcela ${i}/${count}`
+      });
+    }
+    setPayments(newPayments);
   };
 
   const handleConfirmDeletion = () => {
@@ -930,282 +987,680 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         )}
       </div>
 
-      {/* Modal Criar / Editar Pedido */}
+      {/* Modal Criar / Editar Pedido em Etapas (Stepper) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg">
-                  {editingOrder ? <Pencil size={24} /> : <ShoppingCart size={24} />}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 print:hidden">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+            
+            {/* Topo do Modal com Título e Fechamento */}
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-900 text-white rounded-xl shadow-sm">
+                  {editingOrder ? <Pencil size={18} /> : <ShoppingCart size={18} />}
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 tracking-tight">{editingOrder ? 'Editar Documento' : 'Novo Pedido de Venda'}</h3>
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest text-[9px]">Unidade {company.name}</p>
+                  <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                    {editingOrder ? `Editar Pedido (${editingOrder.reference})` : (isBudget ? 'Novo Orçamento Comercial' : 'Novo Pedido de Venda')}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">{company.name} • Unidade de Faturamento</p>
                 </div>
               </div>
-              <button onClick={handleCloseModal} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X size={24} /></button>
+              <button 
+                onClick={handleCloseModal} 
+                className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-400 hover:text-slate-700"
+                title="Fechar"
+              >
+                <X size={20} />
+              </button>
             </div>
-            
-            <form onSubmit={handleCreateOrUpdateOrder} className="p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-4 p-1.5 bg-slate-100 rounded-2xl">
-                <button type="button" onClick={() => setIsBudget(false)} className={`py-3 rounded-xl font-black text-xs transition-all ${!isBudget ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500'}`}>VENDA CONFIRMADA</button>
-                <button type="button" onClick={() => setIsBudget(true)} className={`py-3 rounded-xl font-black text-xs transition-all ${isBudget ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}>APENAS ORÇAMENTO</button>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Coluna Dados do Pedido */}
-                <div className="space-y-6">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex items-center gap-2"><FileText size={14}/> Dados Gerais</h4>
-                  <div className="space-y-4">
-                    <div className="space-y-1.5 relative" ref={customerDropdownRef}>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><User size={12} /> Cliente Destinatário / Produtor</label>
-                      <div className="relative">
-                        <input 
-                          required
-                          type="text"
-                          placeholder="Pesquisar por Nome, CPF/CNPJ ou Telefone..."
-                          value={customerSearch}
-                          onChange={(e) => {
-                            setCustomerSearch(e.target.value);
-                            setIsCustomerDropdownOpen(true);
-                            if (selectedCustomerId) setSelectedCustomerId('');
-                          }}
-                          onFocus={() => setIsCustomerDropdownOpen(true)}
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm transition-all"
-                        />
-                        {selectedCustomerId && (
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-emerald-50 text-emerald-600 p-1 rounded-lg">
-                            <Check size={16} />
+            {/* Stepper Progress Bar Sóbria */}
+            <div className="bg-slate-100/80 px-6 py-3 border-b border-slate-200">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                
+                {/* Etapa 1 */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className={`flex items-center gap-2 text-left p-1.5 rounded-lg transition-all ${
+                    currentStep === 1
+                      ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
+                      : currentStep > 1
+                      ? 'text-emerald-700 hover:bg-white/50'
+                      : 'text-slate-400 opacity-60'
+                  }`}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    currentStep === 1
+                      ? 'bg-slate-900 text-white'
+                      : currentStep > 1
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    {currentStep > 1 ? <Check size={13} /> : '1'}
+                  </span>
+                  <div className="min-w-0 hidden sm:block">
+                    <p className="text-xs font-bold leading-tight truncate">Cliente & Itens</p>
+                    <p className="text-[10px] text-slate-400 leading-none">Dados da carga</p>
+                  </div>
+                </button>
+
+                {/* Etapa 2 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                      setCurrentStep(2);
+                    }
+                  }}
+                  className={`flex items-center gap-2 text-left p-1.5 rounded-lg transition-all ${
+                    currentStep === 2
+                      ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
+                      : currentStep > 2
+                      ? 'text-emerald-700 hover:bg-white/50'
+                      : 'text-slate-400 opacity-60'
+                  }`}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    currentStep === 2
+                      ? 'bg-slate-900 text-white'
+                      : currentStep > 2
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    {currentStep > 2 ? <Check size={13} /> : '2'}
+                  </span>
+                  <div className="min-w-0 hidden sm:block">
+                    <p className="text-xs font-bold leading-tight truncate">Faturamento</p>
+                    <p className="text-[10px] text-slate-400 leading-none">Entrada & Prazos</p>
+                  </div>
+                </button>
+
+                {/* Etapa 3 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                      setCurrentStep(3);
+                    }
+                  }}
+                  className={`flex items-center gap-2 text-left p-1.5 rounded-lg transition-all ${
+                    currentStep === 3
+                      ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
+                      : 'text-slate-400 opacity-60'
+                  }`}
+                >
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    currentStep === 3
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    3
+                  </span>
+                  <div className="min-w-0 hidden sm:block">
+                    <p className="text-xs font-bold leading-tight truncate">Revisão & Emissão</p>
+                    <p className="text-[10px] text-slate-400 leading-none">Confirmação final</p>
+                  </div>
+                </button>
+
+              </div>
+            </div>
+
+            {/* Conteúdo Dinâmico do Stepper */}
+            <form onSubmit={handleCreateOrUpdateOrder} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 custom-scrollbar">
+              
+              {/* ETAPA 1: CLIENTE & ITENS */}
+              {currentStep === 1 && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  
+                  {/* Seletor de Tipo de Documento */}
+                  <div className="flex items-center justify-between p-1 bg-slate-100 rounded-xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setIsBudget(false)}
+                      className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
+                        !isBudget ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Venda Confirmada (Faturamento)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsBudget(true)}
+                      className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
+                        isBudget ? 'bg-white text-amber-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Orçamento Comercial (Cotação)
+                    </button>
+                  </div>
+
+                  {/* Seleção do Cliente com Busca */}
+                  <div className="space-y-1.5 relative" ref={customerDropdownRef}>
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5"><User size={13} /> Cliente Destinatário / Produtor *</span>
+                      {selectedCustomerId && (
+                        <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <Check size={12} /> Cliente Selecionado
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input 
+                        required
+                        type="text"
+                        placeholder="Digite o nome, CPF/CNPJ ou telefone do cliente..."
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setIsCustomerDropdownOpen(true);
+                          if (selectedCustomerId) setSelectedCustomerId('');
+                        }}
+                        onFocus={() => setIsCustomerDropdownOpen(true)}
+                        className="w-full pl-3.5 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl focus:border-slate-800 focus:ring-1 focus:ring-slate-800 outline-none font-medium text-sm transition-all"
+                      />
+                      {customerSearch && (
+                        <button 
+                          type="button" 
+                          onClick={() => { setCustomerSearch(''); setSelectedCustomerId(''); }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {isCustomerDropdownOpen && (
+                      <div className="absolute z-[110] top-full left-0 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto custom-scrollbar">
+                        {filteredCustomers.length === 0 ? (
+                          <div className="p-4 text-center text-slate-400 text-xs">
+                            Nenhum cliente encontrado com esse termo.
                           </div>
+                        ) : (
+                          filteredCustomers.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomerId(c.id);
+                                setCustomerSearch(c.name);
+                                setIsCustomerDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors flex justify-between items-center ${
+                                selectedCustomerId === c.id ? 'bg-slate-100 text-slate-900 font-bold' : 'text-slate-700'
+                              }`}
+                            >
+                              <div>
+                                <p className="text-xs font-bold">{c.name}</p>
+                                <p className="text-[11px] text-slate-400">Doc: {c.document} {c.phone ? `• Tel: ${c.phone}` : ''}</p>
+                              </div>
+                              {selectedCustomerId === c.id && <Check size={14} className="text-emerald-600" />}
+                            </button>
+                          ))
                         )}
                       </div>
-
-                      {isCustomerDropdownOpen && (
-                        <div className="absolute z-[110] top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-72 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2 duration-200">
-                          {filteredCustomers.length === 0 ? (
-                            <div className="p-8 text-center text-slate-400">
-                               <Search size={32} className="mx-auto mb-2 opacity-20"/>
-                               <p className="text-xs font-bold uppercase tracking-widest">Nenhum cliente encontrado</p>
-                            </div>
-                          ) : (
-                            filteredCustomers.map(c => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomerId(c.id);
-                                  setCustomerSearch(c.name);
-                                  setIsCustomerDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-5 py-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex flex-col gap-1.5 ${selectedCustomerId === c.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''}`}
-                              >
-                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{c.name}</span>
-                                <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                   <span className="flex items-center gap-1"><Fingerprint size={12}/> {c.document}</span>
-                                   {c.phone && <span className="flex items-center gap-1"><Phone size={12}/> {c.phone}</span>}
-                                </div>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest"><Package size={12} className="inline mr-1" /> Volume (Toneladas)</label>
-                        <input required type="number" step="0.1" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="Ex: 100.0" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço Tonelada (R$)</label>
-                        <input required type="number" step="0.01" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-black text-lg" placeholder="180.00" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Tag size={12} /> Desconto (R$)</label>
-                        <input type="number" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-rose-500 outline-none font-bold text-sm" placeholder="0.00" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Truck size={12} /> Frete (R$)</label>
-                        <input type="number" step="0.01" value={shipping} onChange={e => setShipping(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-blue-500 outline-none font-bold text-sm" placeholder="0.00" />
-                      </div>
-                    </div>
-
-                    {/* Switch e Detalhes de Barter / Permuta */}
-                    <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-2 cursor-pointer">
-                          <Wheat size={16} className="text-amber-600" />
-                          <span>Operação Barter / Permuta em Grãos</span>
-                        </label>
-                        <input 
-                          type="checkbox" 
-                          checked={isBarter} 
-                          onChange={e => setIsBarter(e.target.checked)}
-                          className="w-5 h-5 accent-amber-600 cursor-pointer rounded"
-                        />
-                      </div>
-
-                      {isBarter && (
-                        <div className="pt-2 border-t border-amber-200/80 space-y-3 animate-in fade-in duration-200">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-[9px] font-black text-amber-800 uppercase">Grão da Permuta</label>
-                              <select 
-                                value={barterCommodityType} 
-                                onChange={e => setBarterCommodityType(e.target.value as 'MILHO' | 'SOJA')}
-                                className="w-full p-2.5 bg-white border border-amber-200 rounded-xl outline-none font-bold text-xs"
-                              >
-                                <option value="MILHO">🌽 Milho Granel</option>
-                                <option value="SOJA">🌱 Soja Granel</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[9px] font-black text-amber-800 uppercase">Cotação (R$ / Tonelada)</label>
-                              <input 
-                                type="number" 
-                                step="1" 
-                                value={cornPricePerTon} 
-                                onChange={e => setCornPricePerTon(e.target.value)}
-                                className="w-full p-2.5 bg-white border border-amber-200 rounded-xl outline-none font-bold text-xs text-amber-950 font-mono"
-                                placeholder="Ex: 1100.00"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="p-3 bg-white/90 rounded-xl border border-amber-200 text-xs font-bold text-amber-900 flex justify-between items-center">
-                            <span>Equivalência Calculada:</span>
-                            <span className="font-mono text-sm text-amber-800 font-black">
-                              {grainTonsEquivalent.toFixed(2)} TON ({grainBagsEquivalent.toFixed(0)} Sacas de 60kg)
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações do Pedido</label>
-                      <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-medium text-sm min-h-[70px] resize-none" placeholder="Detalhes da entrega ou condições especiais..." />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Coluna Condições de Pagamento / Entrada / Parcelas */}
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14}/> Entrada & Plano de Parcelas</h4>
-                    {!isBudget && (
-                      <button type="button" onClick={addPaymentRow} className="text-purple-600 hover:text-purple-700 font-black text-[10px] uppercase flex items-center gap-1">
-                        <PlusCircle size={14}/> Adicionar Parcela
-                      </button>
                     )}
                   </div>
 
+                  {/* Volume e Preço Unitário */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Package size={14} /> Especificação do Produto & Quantidade
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium">Calcário Agrícola Granel (PRNT &gt; 85%)</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Volume (Toneladas) *</label>
+                        <input 
+                          required 
+                          type="number" 
+                          step="0.1" 
+                          value={quantity} 
+                          onChange={e => setQuantity(e.target.value)} 
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
+                          placeholder="Ex: 50.0" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Preço Unitário (R$ / Tonelada) *</label>
+                        <input 
+                          required 
+                          type="number" 
+                          step="0.01" 
+                          value={unitPrice} 
+                          onChange={e => setUnitPrice(e.target.value)} 
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
+                          placeholder="180.00" 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Desconto Comercial (R$)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={discount} 
+                          onChange={e => setDiscount(e.target.value)} 
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm" 
+                          placeholder="0.00" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Frete / Entrega (R$)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={shipping} 
+                          onChange={e => setShipping(e.target.value)} 
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm" 
+                          placeholder="0.00" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operação de Barter / Permuta */}
+                  <div className="p-3.5 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-amber-950 flex items-center gap-1.5 cursor-pointer">
+                        <Wheat size={15} className="text-amber-700" />
+                        <span>Habilitar Operação de Barter / Permuta em Grãos</span>
+                      </label>
+                      <input 
+                        type="checkbox" 
+                        checked={isBarter} 
+                        onChange={e => setIsBarter(e.target.checked)}
+                        className="w-4 h-4 accent-slate-900 cursor-pointer rounded"
+                      />
+                    </div>
+
+                    {isBarter && (
+                      <div className="pt-2 border-t border-amber-200/80 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <label className="text-[10px] font-bold text-amber-900 block mb-1">Grão da Permuta</label>
+                          <select 
+                            value={barterCommodityType} 
+                            onChange={e => setBarterCommodityType(e.target.value as 'MILHO' | 'SOJA')}
+                            className="w-full p-2 bg-white border border-amber-300 rounded-lg outline-none font-medium"
+                          >
+                            <option value="MILHO">Milho Granel</option>
+                            <option value="SOJA">Soja Granel</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-amber-900 block mb-1">Cotação (R$ / Tonelada)</label>
+                          <input 
+                            type="number" 
+                            step="1" 
+                            value={cornPricePerTon} 
+                            onChange={e => setCornPricePerTon(e.target.value)}
+                            className="w-full p-2 bg-white border border-amber-300 rounded-lg outline-none font-medium"
+                            placeholder="1100"
+                          />
+                        </div>
+                        <div className="sm:col-span-2 p-2 bg-white rounded-lg border border-amber-200 flex justify-between items-center text-[11px] font-bold text-amber-900">
+                          <span>Equivalência Estimada:</span>
+                          <span>{grainTonsEquivalent.toFixed(2)} TON (~{grainBagsEquivalent.toFixed(0)} sacas de 60kg)</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Observações */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Observações do Pedido / Entrega</label>
+                    <textarea 
+                      value={notes} 
+                      onChange={e => setNotes(e.target.value)} 
+                      rows={2}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:border-slate-800 outline-none text-xs font-medium resize-none" 
+                      placeholder="Ex: Instruções de rota, fazenda de destino ou requisitos de expedição..." 
+                    />
+                  </div>
+
+                  {/* Resumo Rápido da Etapa 1 */}
+                  <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center text-xs">
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Subtotal Líquido</p>
+                      <p className="font-bold">{parseFloat(quantity) || 0} TON @ {formatBRL(parseFloat(unitPrice) || 0)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total do Documento</p>
+                      <p className="text-base font-black text-emerald-400">{formatBRL(totalOrderValue)}</p>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* ETAPA 2: FATURAMENTO & PRAZOS */}
+              {currentStep === 2 && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  
                   {isBudget ? (
-                    <div className="p-8 bg-slate-50 rounded-3xl border border-dashed border-slate-200 text-center space-y-3">
-                       <Banknote size={32} className="mx-auto text-slate-300"/>
-                       <p className="text-xs text-slate-500 font-medium px-4">O plano de pagamento será definido na conversão de orçamento para venda confirmada.</p>
+                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-2">
+                      <FileText size={32} className="mx-auto text-slate-400" />
+                      <h4 className="text-sm font-bold text-slate-800">Orçamento Comercial Selecionado</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                        Este documento é apenas uma proposta de venda. Ele não gerará títulos no Contas a Receber nem movimentará estoque até ser formalmente aprovado e convertido em Venda Confirmada.
+                      </p>
+                      <p className="text-[11px] text-slate-400 pt-2 font-medium">
+                        Validade da proposta: 15 dias a partir da data de emissão.
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       
-                      {/* Campo de Entrada Inicial no ato da venda */}
+                      {/* Resumo do Total */}
+                      <div className="p-4 bg-slate-100 rounded-xl flex justify-between items-center border border-slate-200">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Total da Venda</p>
+                          <p className="text-lg font-black text-slate-900">{formatBRL(totalOrderValue)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Saldo a Programar</p>
+                          <p className={`text-base font-black ${remainingToProgram === 0 ? 'text-emerald-700' : 'text-slate-800'}`}>
+                            {formatBRL(remainingToProgram)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Entrada / Sinal no Ato */}
                       {!editingOrder && (
-                        <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-3">
-                          <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1.5">
-                            <DollarSign size={14} /> Entrada / Sinal Pago no Ato (R$)
-                          </span>
-                          <div className="grid grid-cols-2 gap-3">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <DollarSign size={14} className="text-emerald-700" /> Entrada / Pagamento no Ato da Venda (Opcional)
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Valor da Entrada (R$)</label>
                               <input
                                 type="number"
                                 step="0.01"
                                 value={downPayment}
                                 onChange={e => setDownPayment(e.target.value)}
                                 placeholder="0.00"
-                                className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl outline-none font-black text-base text-emerald-900"
+                                className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none font-bold text-sm"
                               />
                             </div>
                             <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Forma de Pagamento</label>
                               <select
                                 value={downPaymentMethod}
                                 onChange={e => setDownPaymentMethod(e.target.value)}
-                                className="w-full p-2.5 bg-white border border-emerald-200 rounded-xl outline-none font-bold text-xs"
+                                className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none font-medium text-xs"
                               >
                                 <option value="PIX">PIX</option>
                                 <option value="Dinheiro">Dinheiro</option>
-                                <option value="Transferência Bancária">Transferência</option>
-                                <option value="Boleto">Boleto</option>
+                                <option value="Transferência Bancária">Transferência Bancária</option>
+                                <option value="Boleto">Boleto Bancário</option>
                                 <option value="Cartão de Débito">Cartão de Débito</option>
                                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                                 <option value="Cheque">Cheque</option>
                               </select>
                             </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Conta de Destino</label>
+                              <select
+                                value={downPaymentAccount}
+                                onChange={e => setDownPaymentAccount(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none font-medium text-xs truncate"
+                              >
+                                {accounts.map(a => (
+                                  <option key={a.id} value={a.id}>{a.name}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                           {downPaymentNum > 0 && (
-                            <p className="text-[10px] text-emerald-700 font-bold">
-                              * Um recibo de pagamento oficial nº REC-{new Date().getFullYear()}-XXXX será emitido automaticamente.
+                            <p className="text-[11px] text-emerald-800 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                              ✓ Um recibo de entrada oficial será gerado e vinculado a esta venda.
                             </p>
                           )}
                         </div>
                       )}
 
-                      {/* Parcelas Programadas */}
-                      <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
-                        {payments.map((payment, idx) => (
-                          <div key={payment.id} className="p-3 bg-white border border-slate-200 rounded-2xl space-y-2 relative group shadow-sm">
-                            <button type="button" onClick={() => removePaymentRow(payment.id)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X size={12}/></button>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Valor Parcela</label>
-                                <input type="number" step="0.01" value={payment.amount} onChange={e => updatePaymentRow(payment.id, 'amount', parseFloat(e.target.value))} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-black text-xs" />
-                              </div>
-                              <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase">Vencimento</label>
-                                <input type="date" value={payment.date} onChange={e => updatePaymentRow(payment.id, 'date', e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-100 rounded-lg outline-none font-bold text-xs" />
-                              </div>
-                            </div>
+                      {/* Gerador Rápido de Parcelas e Lista */}
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <CreditCard size={14} /> Parcelas & Vencimentos
+                          </label>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Preenchimento Rápido:</span>
+                            <button
+                              type="button"
+                              onClick={() => generateQuickInstallments(1)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                            >
+                              1x (30 dias)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => generateQuickInstallments(2)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                            >
+                              2x (30/60d)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => generateQuickInstallments(3)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                            >
+                              3x (30/60/90d)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={addPaymentRow}
+                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-[11px] font-bold transition-colors flex items-center gap-1"
+                            >
+                              <Plus size={12} /> + Parcela
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        </div>
 
-                      {/* Resumo Financeiro */}
-                      <div className="p-5 bg-slate-900 rounded-[2rem] border border-slate-800 space-y-2 text-white">
-                         <div className="flex justify-between items-center text-xs">
-                            <span className="text-slate-400 uppercase font-black text-[9px] tracking-widest">Total do Pedido</span>
-                            <span className="font-black">{formatBRL(totalOrderValue)}</span>
-                         </div>
-                         {downPaymentNum > 0 && (
-                           <div className="flex justify-between items-center text-xs text-emerald-400">
-                              <span className="uppercase font-black text-[9px] tracking-widest">Entrada no Ato (-)</span>
-                              <span className="font-black">{formatBRL(downPaymentNum)}</span>
-                           </div>
-                         )}
-                         <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
-                               Saldo a Parcelar
-                            </span>
-                            <span className={`text-base font-black ${remainingToProgram === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                               {formatBRL(remainingToProgram)}
-                            </span>
-                         </div>
+                        {payments.length === 0 ? (
+                          <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                            Nenhuma parcela programada. Use os botões de preenchimento rápido acima ou clique em "+ Parcela".
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                            {payments.map((p, idx) => (
+                              <div key={p.id} className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center gap-3 shadow-sm">
+                                <span className="text-[11px] font-bold text-slate-400 w-6 text-center">#{idx + 1}</span>
+                                <div className="flex-1 grid grid-cols-2 gap-2">
+                                  <div>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={p.amount}
+                                      onChange={e => updatePaymentRow(p.id, 'amount', parseFloat(e.target.value) || 0)}
+                                      className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-bold outline-none"
+                                      placeholder="Valor R$"
+                                    />
+                                  </div>
+                                  <div>
+                                    <input
+                                      type="date"
+                                      value={p.date}
+                                      onChange={e => updatePaymentRow(p.id, 'date', e.target.value)}
+                                      className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-medium outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removePaymentRow(p.id)}
+                                  className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                                  title="Remover parcela"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                     </div>
                   )}
+
                 </div>
+              )}
+
+              {/* ETAPA 3: REVISÃO & CONFIRMAÇÃO */}
+              {currentStep === 3 && (
+                <div className="space-y-4 animate-in fade-in duration-150 text-xs">
+                  
+                  {/* Resumo do Cliente */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Destinatário</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setCurrentStep(1)} 
+                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                      >
+                        Alterar
+                      </button>
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">{selectedCustomer?.name || 'Cliente Não Selecionado'}</p>
+                    <p className="text-slate-500">
+                      Documento: {selectedCustomer?.document || 'N/A'} {selectedCustomer?.phone ? `• Telefone: ${selectedCustomer.phone}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Resumo dos Itens e Valores */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Carga & Valores</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setCurrentStep(1)} 
+                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                      >
+                        Alterar
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold">VOLUME</span>
+                        <p className="font-bold text-slate-900">{quantity} TON</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold">PREÇO / TON</span>
+                        <p className="font-bold text-slate-900">{formatBRL(parseFloat(unitPrice) || 0)}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
+                        <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
+                        <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Barter (Se houver) */}
+                  {isBarter && (
+                    <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-xs">Operação Barter ({barterCommodityType})</p>
+                        <p className="text-[11px]">Cotação: {formatBRL(parseFloat(cornPricePerTon) || 0)}/TON</p>
+                      </div>
+                      <p className="font-bold text-xs">
+                        {grainTonsEquivalent.toFixed(2)} TON (~{grainBagsEquivalent.toFixed(0)} SC)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Resumo Financeiro / Condições */}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Condições de Pagamento</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setCurrentStep(2)} 
+                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                      >
+                        Alterar
+                      </button>
+                    </div>
+                    {isBudget ? (
+                      <p className="text-slate-600 italic">Orçamento comercial sem parcelas pré-faturadas.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {downPaymentNum > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-600">Entrada no Ato ({downPaymentMethod}):</span>
+                            <span className="font-bold text-emerald-700">{formatBRL(downPaymentNum)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-600">Parcelamento ({payments.length} parcelas):</span>
+                          <span className="font-bold text-slate-900">{formatBRL(totalProgrammed)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              )}
+
+            </form>
+
+            {/* Rodapé de Navegação do Stepper */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
+              <div>
+                {currentStep === 1 ? (
+                  <button 
+                    type="button" 
+                    onClick={handleCloseModal} 
+                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                ) : (
+                  <button 
+                    type="button" 
+                    onClick={handlePrevStep} 
+                    className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors flex items-center gap-1.5"
+                  >
+                    ← Voltar
+                  </button>
+                )}
               </div>
 
-              <div className="pt-6 border-t border-slate-100 flex gap-4">
-                 <button type="button" onClick={handleCloseModal} className="px-8 py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
-                 <button type="submit" className={`flex-1 py-4 rounded-2xl font-black text-white shadow-xl transition-all hover:scale-[1.01] ${isBudget ? 'bg-amber-500 shadow-amber-100 text-slate-900' : 'bg-purple-600 shadow-purple-100'}`}>
-                   {editingOrder ? 'Salvar Alterações' : (isBudget ? 'Emitir Orçamento' : 'Finalizar Pedido de Venda')}
-                 </button>
+              <div className="flex items-center gap-2">
+                {currentStep < 3 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    {currentStep === 1 ? 'Avançar para Faturamento' : 'Avançar para Revisão'} →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCreateOrUpdateOrder}
+                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-sm flex items-center gap-1.5 ${
+                      isBudget ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'
+                    }`}
+                  >
+                    <CheckCircle2 size={15} />
+                    {editingOrder ? 'Salvar Alterações' : (isBudget ? 'Emitir Orçamento' : 'Emitir Pedido de Venda')}
+                  </button>
+                )}
               </div>
-            </form>
+            </div>
+
           </div>
         </div>
       )}
