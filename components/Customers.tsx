@@ -209,6 +209,7 @@ const Customers: React.FC<CustomersProps> = ({
         const idxCity = headers.findIndex(h => h.includes('cidade') || h.includes('município') || h.includes('municipio'));
         const idxState = headers.findIndex(h => h.includes('estado') || h === 'uf');
         const idxZip = headers.findIndex(h => h.includes('cep'));
+        const idxIbge = headers.findIndex(h => h.includes('ibge') || h.includes('código município') || h.includes('codigo municipio') || h.includes('cod municipio'));
 
         const newCustomers: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>[] = [];
 
@@ -249,7 +250,8 @@ const Customers: React.FC<CustomersProps> = ({
             neighborhood: idxNeighborhood !== -1 ? cells[idxNeighborhood] : '',
             city: idxCity !== -1 ? cells[idxCity] : '',
             state: idxState !== -1 ? cells[idxState] : '',
-            zipCode: idxZip !== -1 ? cells[idxZip] : ''
+            zipCode: idxZip !== -1 ? cells[idxZip] : '',
+            ibgeCode: idxIbge !== -1 ? String(cells[idxIbge] || '').replace(/\D/g, '') : ''
           });
         }
 
@@ -441,7 +443,7 @@ const Customers: React.FC<CustomersProps> = ({
                             <span className="flex items-center gap-1"><Phone size={12} className="text-purple-400" /> {c.phone}</span>
                           )}
                           {c.city && (
-                            <span className="text-slate-400 font-medium">{c.city}-{c.state || 'PA'}</span>
+                            <span className="text-slate-400 font-medium">{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>
                           )}
                         </div>
                       </td>
