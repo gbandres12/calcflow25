@@ -5,162 +5,76 @@ import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 
 /**
- * URL Base Oficial da API NotaAs
- * Documentação: https://docs.notaas.com.br / https://platform.notaas.com.br
+ * URL Base Oficial da API NotaAs (NF-e modelo 55)
+ * Documentação: https://docs.notaas.com.br/docs/nfe/endpoints
  */
 export const NOTAAS_API_BASE_URL = 'https://platform.notaas.com.br/api/v1';
 
 /**
- * Tipagens Oficiais do Payload NotaAs
+ * Tipagens oficiais do payload NotaAs NF-e 55
+ * POST /nfe/emitir — emitente NÃO vai no payload (projeto + certificado A1).
  */
 export interface NotaAsEndereco {
   logradouro: string;
-  numero: string;
+  numero?: string;
   complemento?: string;
   bairro: string;
-  municipio: string;
+  codigoMunicipio: number;
+  cidade: string;
   uf: string;
   cep: string;
-  codigoIbge?: string;
-  pais?: string;
-  codigoPais?: string;
-}
-
-export interface NotaAsEmitente {
-  cnpj: string;
-  inscricaoEstadual: string;
-  razaoSocial: string;
-  nomeFantasia?: string;
-  regimeTributario: number; // 1 = Simples Nacional, 2 = Simples Sublimite, 3 = Regime Normal
-  endereco?: NotaAsEndereco;
-  telefone?: string;
-  email?: string;
 }
 
 export interface NotaAsDestinatario {
-  cpfCnpj: string;
-  tipoPessoa?: 'PF' | 'PJ';
-  razaoSocial: string;
-  inscricaoEstadual?: string;
-  indicadorIe?: number; // 1 = Contribuinte, 2 = Isento, 9 = Nao Contribuinte
+  cnpj?: string;
+  cpf?: string;
+  nome: string;
+  ie?: string;
+  indicadorIE?: number;
   email?: string;
-  telefone?: string;
   endereco: NotaAsEndereco;
 }
 
-export interface NotaAsTributosItem {
-  icms?: {
-    origem?: number;
-    cst?: string; // Ex: '102', '00', '101', '40'
-    csosn?: string;
-    aliquota?: number;
-    baseCalculo?: number;
-    valor?: number;
-    percentualReducaoBaseCalculo?: number;
-  };
-  pis?: {
-    cst?: string; // Ex: '07', '01'
-    aliquota?: number;
-    valor?: number;
-  };
-  cofins?: {
-    cst?: string; // Ex: '07', '01'
-    aliquota?: number;
-    valor?: number;
-  };
-  ipi?: {
-    cst?: string;
-    aliquota?: number;
-    valor?: number;
-  };
-  ibpt?: {
-    aliquotaFederal?: number;
-    aliquotaEstadual?: number;
-    aliquotaMunicipal?: number;
-    valorAproximado?: number;
-  };
-}
-
 export interface NotaAsItemPayload {
-  numeroItem: number;
-  codigo: string;
   descricao: string;
+  codigo?: string;
   ncm: string;
   cfop: string;
-  unidadeComercial: string;
-  quantidadeComercial: number;
-  valorUnitarioComercial: number;
-  valorTotalBruto: number;
-  valorDesconto?: number;
-  valorFrete?: number;
-  valorOutrasDespesas?: number;
-  tributos: NotaAsTributosItem;
-}
-
-export interface NotaAsTotais {
-  valorProdutos: number;
-  valorFrete?: number;
-  valorSeguro?: number;
-  valorDesconto?: number;
-  valorOutrasDespesas?: number;
-  baseCalculoIcms?: number;
-  valorIcms?: number;
-  valorTotalNFe: number;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
+  unidade: string;
+  csosn?: string;
+  cst?: string;
+  aliquotaIcms?: number;
 }
 
 export interface NotaAsPagamento {
-  formaPagamento: string; // '01' = Dinheiro, '03' = Cartão Crédito, '15' = Boleto, '17' = PIX, '90' = Sem Pagamento
+  tipoPagamento: string;
   valor: number;
-  tipoIntegracao?: number;
 }
 
 export interface NotaAsTransporte {
-  modalidadeFrete: number; // 0 = Remetente (CIF), 1 = Destinatario (FOB), 9 = Sem Frete
-  transportadora?: {
-    cpfCnpj?: string;
-    razaoSocial?: string;
-    inscricaoEstadual?: string;
-    enderecoCompleto?: string;
-    municipio?: string;
-    uf?: string;
-  };
-  veiculo?: {
-    placa?: string;
-    uf?: string;
-  };
-  volume?: {
-    quantidade?: number;
-    especie?: string;
-    marca?: string;
-    pesoLiquido?: number;
-    pesoBruto?: number;
-  };
+  modalidadeFrete: number;
 }
 
 /**
- * Payload completo para criação/emissão de NF-e na NotaAs
- * Endpoint: POST /api/v1/nfe/emitir ou POST /api/v1/nfe
+ * Payload oficial POST /api/v1/nfe/emitir (modelo 55).
+ * Não envia emitente, ambiente, serie, numero, total, destinatario ou itens (nomes antigos).
  */
 export interface NotaAsCriarNFePayload {
-  referenciaExterna?: string;
+  modelo: 55;
   naturezaOperacao: string;
-  ambiente: 'producao' | 'homologacao';
-  modelo?: number; // 55 = NF-e (Padrão), 65 = NFC-e
-  serie: number;
-  numero?: number;
-  dataEmissao: string;
-  tipoDocumento: number; // 0 = Entrada, 1 = Saída
-  finalidade: number; // 1 = Normal, 2 = Complementar, 3 = Ajuste, 4 = Devolução
-  consumidorFinal: number; // 0 = Não, 1 = Sim
-  presencaComprador: number; // 1 = Presencial, 2 = Internet, 9 = Outros
-  emitente: NotaAsEmitente;
-  destinatario: NotaAsDestinatario;
-  itens: NotaAsItemPayload[];
-  total: NotaAsTotais;
-  pagamentos?: NotaAsPagamento[];
+  dest: NotaAsDestinatario;
+  items: NotaAsItemPayload[];
+  pagamentos: NotaAsPagamento[];
   transporte?: NotaAsTransporte;
-  informacoesAdicionais?: string;
-  observacoesFisco?: string;
+  valorFrete?: number;
+  tipoOperacao: 1;
+  finalidade: 1;
+  consumidorFinal: 0 | 1;
+  presencaComprador: 1;
+  infCpl?: string;
 }
 
 /**
@@ -168,17 +82,23 @@ export interface NotaAsCriarNFePayload {
  */
 export interface NotaAsNFeDetalhes {
   id: string;
+  invoiceId?: string;
   referenciaExterna?: string;
   status: 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' | 'erro' | 'pendente';
   ambiente: 'producao' | 'homologacao';
   modelo: number;
   numero: number | string;
+  nNf?: number | string;
   serie: number | string;
   chaveAcesso?: string;
   protocolo?: string;
+  nProt?: string;
   motivoStatus?: string;
   codigoStatusSefaz?: string;
+  cStat?: number | string;
+  xMotivo?: string;
   danfeUrl?: string;
+  pdfUrl?: string;
   xmlUrl?: string;
   dataEmissao?: string;
   dataAutorizacao?: string;
@@ -225,15 +145,25 @@ export interface StatusSefazResult {
  * Módulo Auxiliar Fiscal para NotaAs (NF-e 4.0 / SEFAZ)
  */
 
-/** Só marca autorizada se a API fiscal disse isso. Qualquer outro valor vira processando, nunca mock. */
+/** Só marca autorizada se a API fiscal disse issued/autorizada. queued → processando. Nunca mock. */
 export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus {
   const s = (raw || '').toString().toLowerCase();
   if (['autorizada', 'issued', 'authorized', 'autorizado'].includes(s)) return 'autorizada';
   if (['cancelada', 'cancelled', 'canceled', 'cancelado'].includes(s)) return 'cancelada';
   if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao'].includes(s)) return 'rejeitada';
-  if (['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending'].includes(s) || httpStatus === 202) return 'processando';
+  if (
+    ['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending', 'queued'].includes(s)
+    || httpStatus === 202
+  ) return 'processando';
   if (s === 'simulada') return 'simulada';
   return 'processando';
+}
+
+function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | undefined, chaveAcesso?: string): NfeStatus {
+  if (httpStatus === 202) return 'processando';
+  const mapped = mapRemoteNfeStatus(rawStatus, httpStatus);
+  if (mapped === 'autorizada' && !chaveAcesso) return 'processando';
+  return mapped;
 }
 
 async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; isJson: boolean }> {
@@ -242,6 +172,10 @@ async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: bo
   const isJson = contentType.includes('application/json');
   const data = isJson ? await res.json().catch(() => ({})) : { error: 'Resposta não-JSON do proxy fiscal' };
   return { ok: res.ok || res.status === 201 || res.status === 202, status: res.status, data, isJson };
+}
+
+function onlyDigits(value?: string): string {
+  return (value || '').replace(/\D/g, '');
 }
 
 export const fiscalService = {
@@ -269,12 +203,12 @@ export const fiscalService = {
 
   /**
    * Gera cabeçalhos autenticados para as requisições HTTP da API NotaAs
+   * Auth oficial: header x-api-key ONLY (nunca Bearer).
    */
   getHeaders(apiKey?: string): HeadersInit {
     const key = (apiKey || '').trim();
     return {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
       ...(key ? { 'x-api-key': key } : {})
     };
   },
@@ -308,6 +242,7 @@ export const fiscalService = {
 
   /**
    * Validação prévia dos dados cadastrais e fiscais do pedido e cliente
+   * Sem fallbacks de endereço (Santarém/CEP fake). Falta de campo = falha.
    */
   validarDadosFiscais(order: SaleOrder, customer?: Customer): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
@@ -317,13 +252,36 @@ export const fiscalService = {
       return { valid: false, errors };
     }
 
-    const docClean = (customer.document || '').replace(/\D/g, '');
+    const docClean = onlyDigits(customer.document);
     if (docClean.length !== 11 && docClean.length !== 14) {
       errors.push('CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário é obrigatório.');
     }
 
-    if (!customer.name || customer.name.trim().length === 0) {
-      errors.push('Razão Social / Nome do destinatário é obrigatório.');
+    if (!customer.name || customer.name.trim().length < 2) {
+      errors.push('Razão Social / Nome do destinatário é obrigatório (mínimo 2 caracteres).');
+    }
+
+    if (!customer.street || !customer.street.trim()) {
+      errors.push('Logradouro (street) do destinatário é obrigatório.');
+    }
+    if (!customer.neighborhood || !customer.neighborhood.trim()) {
+      errors.push('Bairro (neighborhood) do destinatário é obrigatório.');
+    }
+    if (!customer.city || !customer.city.trim()) {
+      errors.push('Cidade do destinatário é obrigatória.');
+    }
+    if (!customer.state || !customer.state.trim()) {
+      errors.push('UF (state) do destinatário é obrigatória.');
+    }
+
+    const zip = onlyDigits(customer.zipCode);
+    if (zip.length !== 8) {
+      errors.push('CEP (zipCode) do destinatário deve ter 8 dígitos.');
+    }
+
+    const ibge = onlyDigits(customer.ibgeCode);
+    if (ibge.length !== 7) {
+      errors.push('Código IBGE (ibgeCode) do município deve ter 7 dígitos.');
     }
 
     if (!order.items || order.items.length === 0) {
@@ -331,17 +289,19 @@ export const fiscalService = {
     }
 
     order.items?.forEach((item, idx) => {
-      if (!item.ncm) {
-        errors.push(`Item ${idx + 1} (${item.productName}) não possui código NCM informado.`);
+      const ncm = onlyDigits(item.ncm);
+      if (ncm.length !== 8) {
+        errors.push(`Item ${idx + 1} (${item.productName}) precisa de NCM com 8 dígitos.`);
       }
-      if (!item.cfop) {
-        errors.push(`Item ${idx + 1} (${item.productName}) não possui CFOP fiscal.`);
+      const cfop = onlyDigits(item.cfop);
+      if (cfop.length !== 4) {
+        errors.push(`Item ${idx + 1} (${item.productName}) precisa de CFOP com 4 dígitos.`);
       }
-      if (item.quantity <= 0) {
+      if (!(item.quantity > 0)) {
         errors.push(`Item ${idx + 1} (${item.productName}) tem quantidade inválida.`);
       }
-      if (item.unitPrice < 0) {
-        errors.push(`Item ${idx + 1} (${item.productName}) possui valor unitário incorreto.`);
+      if (!(item.total > 0)) {
+        errors.push(`Item ${idx + 1} (${item.productName}) precisa de valorTotal > 0.`);
       }
     });
 
@@ -352,124 +312,94 @@ export const fiscalService = {
   },
 
   /**
-   * Constrói o payload oficial no formato da API NotaAs a partir dos dados do ERP
+   * Constrói o payload oficial NF-e 55 da API NotaAs a partir dos dados do ERP.
+   * Emitente NÃO entra no payload (projeto NotaAs + certificado A1).
    */
   montarPayloadNotaAs(
     order: SaleOrder, 
     customer: Customer, 
     config: FiscalConfig
   ): NotaAsCriarNFePayload {
-    const nfeNumero = (config.proxNumeroNFe || 1042).toString();
-    const serie = config.serieNFe || '1';
     const isInterestadual = customer.state && customer.state !== COMPANY_INFO.state;
-    const cfopPadrao = isInterestadual ? config.cfopPadraoInterestadual : config.cfopPadraoEstadual;
-    const docClean = (customer.document || '').replace(/\D/g, '');
+    const cfopPadrao = isInterestadual
+      ? (config.cfopPadraoInterestadual || '6101')
+      : (config.cfopPadraoEstadual || '5101');
+    const docClean = onlyDigits(customer.document);
     const isPF = docClean.length === 11;
-    const cnpjEmitenteClean = (config.cnpjEmitente || COMPANY_INFO.document || '').replace(/\D/g, '').padStart(14, '0');
-    const ieEmitenteClean = (config.inscricaoEstadual || '').replace(/\D/g, '') || 'ISENTO';
+    const ibge = onlyDigits(customer.ibgeCode);
+    const zip = onlyDigits(customer.zipCode);
+    const isSimples = config.regimeTributario === '1';
+    const indicadorIE = customer.isentoIE ? 2 : (customer.ie ? 1 : 9);
 
-    return {
-      referenciaExterna: order.reference || `ORDER-${order.id}`,
-      naturezaOperacao: config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
-      ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
-      modelo: 55,
-      serie: parseInt(serie, 10),
-      numero: parseInt(nfeNumero, 10),
-      dataEmissao: new Date().toISOString(),
-      tipoDocumento: 1, // 1 = Saída
-      finalidade: 1, // 1 = Normal
-      consumidorFinal: isPF ? 1 : 0,
-      presencaComprador: 1, // Operação presencial
-      emitente: {
-        cnpj: cnpjEmitenteClean,
-        inscricaoEstadual: ieEmitenteClean,
-        razaoSocial: config.razaoSocial || COMPANY_INFO.name,
-        nomeFantasia: config.nomeFantasia || COMPANY_INFO.name,
-        regimeTributario: parseInt(config.regimeTributario || '1', 10),
-        endereco: {
-          logradouro: COMPANY_INFO.address || 'Rodovia Mineral BR-163',
-          numero: 'S/N',
-          bairro: 'Distrito Industrial',
-          municipio: COMPANY_INFO.city || 'Santarem',
-          uf: COMPANY_INFO.state || 'PA',
-          cep: '68000000',
-          codigoIbge: '1506807',
-          pais: 'Brasil',
-          codigoPais: '1058'
-        }
-      },
-      destinatario: {
-        cpfCnpj: docClean,
-        tipoPessoa: isPF ? 'PF' : 'PJ',
-        razaoSocial: customer.name || 'Cliente Geral',
-        inscricaoEstadual: customer.isentoIE ? 'ISENTO' : (customer.ie?.replace(/\D/g, '') || ''),
-        indicadorIe: customer.isentoIE ? 2 : (customer.ie ? 1 : 9),
-        email: customer.email || '',
-        telefone: (customer.phone || '').replace(/\D/g, ''),
-        endereco: {
-          logradouro: customer.street || 'Zona Rural Fazenda',
-          numero: customer.number || 'S/N',
-          bairro: customer.neighborhood || 'Zona Rural',
-          municipio: customer.city || 'Santarem',
-          uf: customer.state || 'PA',
-          cep: (customer.zipCode || '68000000').replace(/\D/g, '').padStart(8, '0'),
-          codigoIbge: customer.ibgeCode || '1506807',
-          pais: 'Brasil',
-          codigoPais: '1058'
-        }
-      },
-      itens: (order.items || []).map((it, idx) => ({
-        numeroItem: idx + 1,
-        codigo: it.productCode || `CALC-${idx + 1}`,
-        descricao: it.productName,
-        ncm: (it.ncm || '25171000').replace(/\D/g, '').padStart(8, '0'),
-        cfop: (it.cfop || cfopPadrao).replace(/\D/g, '').padStart(4, '0'),
-        unidadeComercial: it.unit || 'TON',
-        quantidadeComercial: it.quantity,
-        valorUnitarioComercial: it.unitPrice,
-        valorTotalBruto: it.total,
-        tributos: {
-          icms: {
-            origem: 0,
-            cst: config.regimeTributario === '1' ? '102' : '00',
-            csosn: config.regimeTributario === '1' ? '102' : undefined,
-            aliquota: config.aliquotaIcmsPadrao || 0,
-            baseCalculo: config.regimeTributario === '1' ? 0 : it.total,
-            valor: config.regimeTributario === '1' ? 0 : (it.total * ((config.aliquotaIcmsPadrao || 0) / 100))
-          },
-          pis: { cst: '07', aliquota: 0, valor: 0 },
-          cofins: { cst: '07', aliquota: 0, valor: 0 }
-        }
-      })),
-      total: {
-        valorProdutos: order.subtotal,
-        valorFrete: order.shipping || 0,
-        valorDesconto: order.discount || 0,
-        valorTotalNFe: order.total
-      },
-      pagamentos: [
-        {
-          formaPagamento: order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01',
-          valor: order.total,
-          tipoIntegracao: 1
-        }
-      ],
-      transporte: {
-        modalidadeFrete: order.shipping ? 0 : 9,
-        volume: {
-          quantidade: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1), 0),
-          especie: 'CARGAS A GRANEL',
-          pesoBruto: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0),
-          pesoLiquido: (order.items || []).reduce((acc, i) => acc + (i.quantity || 1) * 1000, 0)
-        }
-      },
-      informacoesAdicionais: `${config.observacoesFiscaisPadrao || 'Documento emitido por ME ou EPP optante pelo Simples Nacional.'} Ref. Pedido: ${order.reference} | Vendedor: ${order.sellerName || 'Comercial'}`.trim()
+    const dest: NotaAsDestinatario = {
+      nome: (customer.name || '').trim(),
+      endereco: {
+        logradouro: (customer.street || '').trim(),
+        numero: customer.number || 'SN',
+        bairro: (customer.neighborhood || '').trim(),
+        codigoMunicipio: Number(ibge),
+        cidade: (customer.city || '').trim(),
+        uf: (customer.state || '').trim().toUpperCase(),
+        cep: zip,
+      }
     };
+
+    if (isPF) dest.cpf = docClean;
+    else dest.cnpj = docClean;
+    if (customer.email) dest.email = customer.email;
+    dest.indicadorIE = indicadorIE;
+    if (indicadorIE === 1 && customer.ie) {
+      dest.ie = onlyDigits(customer.ie);
+    }
+
+    const items: NotaAsItemPayload[] = (order.items || []).map((it, idx) => {
+      const row: NotaAsItemPayload = {
+        descricao: it.productName,
+        codigo: it.productCode || `CALC-${idx + 1}`,
+        ncm: onlyDigits(it.ncm),
+        cfop: onlyDigits(it.cfop) || onlyDigits(cfopPadrao),
+        quantidade: it.quantity,
+        valorUnitario: it.unitPrice,
+        valorTotal: it.total,
+        unidade: it.unit || 'TON',
+      };
+      if (isSimples) {
+        row.csosn = '102';
+      } else {
+        row.cst = '00';
+        if (config.aliquotaIcmsPadrao != null) row.aliquotaIcms = config.aliquotaIcmsPadrao;
+      }
+      return row;
+    });
+
+    const tipoPagamento = order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01';
+    const infParts = [
+      config.observacoesFiscaisPadrao,
+      `Pedido: ${order.reference}`,
+      order.sellerName ? `Vendedor: ${order.sellerName}` : ''
+    ].filter(Boolean);
+
+    const payload: NotaAsCriarNFePayload = {
+      modelo: 55,
+      naturezaOperacao: config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
+      dest,
+      items,
+      pagamentos: [{ tipoPagamento, valor: order.total }],
+      transporte: { modalidadeFrete: order.shipping ? 0 : 9 },
+      tipoOperacao: 1,
+      finalidade: 1,
+      consumidorFinal: isPF ? 1 : 0,
+      presencaComprador: 1,
+      infCpl: infParts.join(' | ').trim()
+    };
+
+    if (order.shipping) payload.valorFrete = order.shipping;
+    return payload;
   },
 
   /**
-   * [POST /api/v1/nfe/emitir] ou [POST /api/v1/nfe]
-   * Cria e emite uma nova NF-e de venda na API Fiscal (NotaAs / Focus NFe / Nuvem Fiscal)
+   * [POST /api/v1/nfe/emitir]
+   * Cria e emite uma nova NF-e de venda na API Fiscal (NotaAs / Focus NFe)
    */
   async criarNFe(
     order: SaleOrder, 
@@ -499,8 +429,8 @@ export const fiscalService = {
     const isApiMode = config.modoEmissao === 'api_real' || apiKey.length > 0;
     const provider = config.apiProvider || 'notaas';
     const baseUrl = (config.apiBaseUrl || NOTAAS_API_BASE_URL).replace(/\/$/, '');
+    const referenciaPedido = order.reference || `ORDER-${order.id}`;
 
-    // LOG DETALHADO E RASTREÁVEL COM INVOICE_REQUEST_ID
     console.group(`🚀 [EMISSÃO NF-e API] [ID: ${invoiceRequestId}] Iniciando Envio para API Fiscal (${provider.toUpperCase()})`);
     console.info('🆔 Trace Request ID:', invoiceRequestId);
     console.info('📌 Referência do Pedido:', order.reference);
@@ -510,15 +440,13 @@ export const fiscalService = {
     console.info('📍 URL Base da API:', baseUrl);
 
     console.group(`🔎 Mapeamento Completo do Schema [${invoiceRequestId}]`);
-    console.info('🏢 [EMITENTE]:', payload.emitente);
-    console.info('👤 [DESTINATÁRIO]:', payload.destinatario);
-    console.info('📦 [ITENS DA NOTA] (' + payload.itens.length + ' item(ns)):', payload.itens);
-    console.info('💰 [TOTAIS]:', payload.total);
+    console.info('👤 [DEST]:', payload.dest);
+    console.info('📦 [ITEMS] (' + payload.items.length + ' item(ns)):', payload.items);
+    console.info('💳 [PAGAMENTOS]:', payload.pagamentos);
     console.info('📄 [PAYLOAD COMPLETO EM JSON]:', JSON.stringify(payload, null, 2));
     console.groupEnd();
     console.groupEnd();
 
-    // Se estiver em modo API Real ou se possuir API Key informada, realiza a transmissão oficial
     if (isApiMode) {
       if (!apiKey) {
         console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
@@ -530,10 +458,7 @@ export const fiscalService = {
         };
       }
 
-      let headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
+      let headers: HeadersInit = this.getHeaders(apiKey);
 
       if (provider === 'focusnfe') {
         let authHeader = '';
@@ -541,42 +466,29 @@ export const fiscalService = {
           authHeader = `Basic ${btoa(`${apiKey}:`)}`;
         } catch {}
         headers = {
-          ...headers,
+          'Content-Type': 'application/json',
           ...(authHeader ? { 'Authorization': authHeader } : {}),
           'x-api-key': apiKey
         };
-      } else {
-        headers = {
-          ...headers,
-          'x-api-key': apiKey,
-          'Authorization': `Bearer ${apiKey}`
-        };
       }
 
-      // Endpoints baseados no provedor selecionado
       let endpoints: string[] = [];
       if (provider === 'focusnfe') {
         const focusBase = config.environment === 'production' 
           ? 'https://api.focusnfe.com.br/v2' 
           : 'https://homologacao.focusnfe.com.br/v2';
         endpoints = [
-          `${focusBase}/nfe?ref=${encodeURIComponent(payload.referenciaExterna || '')}`,
-          `${baseUrl}/nfe?ref=${encodeURIComponent(payload.referenciaExterna || '')}`
+          `${focusBase}/nfe?ref=${encodeURIComponent(referenciaPedido)}`,
+          `${baseUrl}/nfe?ref=${encodeURIComponent(referenciaPedido)}`
         ];
       } else {
-        endpoints = [
-          `${baseUrl}/nfe/emitir`,
-          `${baseUrl}/nfe`,
-          `https://platform.notaas.com.br/api/v1/nfe/emitir`,
-          `${baseUrl}/invoices`
-        ];
+        endpoints = [`${baseUrl}/nfe/emitir`];
       }
 
       let response: Response | null = null;
       let endpointUsado = '';
       let lastFetchError = '';
 
-      // 1. Tentar via Firebase Cloud Function (Infraestrutura SaaS Firebase - Zero CORS)
       if (firebaseFunctions) {
         try {
           console.info(`⚡ [${invoiceRequestId}] Tentando emissão via Firebase Cloud Function (emitirNfe)...`);
@@ -599,26 +511,25 @@ export const fiscalService = {
             const nextNum = parseInt(nfeNumero, 10) + 1;
             await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
 
-            const nfeChave = data.chave || data.chave_acesso || data.chaveNFe || data.chaveAcesso || '';
-            const nfeProtocolo = data.protocolo || data.id || data.invoiceId || '';
-            const danfeUrl = data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
+            const nfeChave = data.chaveAcesso || data.chave || data.chave_acesso || data.chaveNFe || '';
+            const nfeProtocolo = data.nProt || data.protocolo || '';
+            const danfeUrl = data.pdfUrl || data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
             const xmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
-            const statusRetornado = mapRemoteNfeStatus(data.status, fnResult.data.statusHttp);
-            const authorized = statusRetornado === 'autorizada' && !!nfeChave;
+            const statusRetornado = resolveNfeStatus(data.status, fnResult.data.statusHttp, nfeChave);
 
             return {
               success: statusRetornado !== 'rejeitada',
-              nfeStatus: authorized ? 'autorizada' : statusRetornado,
-              nfeId: data.id || data.uuid || data.invoiceId,
+              nfeStatus: statusRetornado,
+              nfeId: data.invoiceId || data.id || data.uuid,
               nfeChave: nfeChave || undefined,
-              nfeNumero: data.numero ? String(data.numero) : nfeNumero,
+              nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
               nfeSerie: data.serie ? String(data.serie) : serie,
               nfeProtocolo: nfeProtocolo || undefined,
               nfeDanfeUrl: danfeUrl || undefined,
               nfeXmlUrl: xmlUrl || undefined,
               nfeEmissao: data.dataEmissao,
               naturezaOperacao: payload.naturezaOperacao,
-              nfeErro: statusRetornado === 'rejeitada' ? (data.motivoStatus || data.message || 'Rejeitada pela SEFAZ') : undefined,
+              nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.motivoStatus || data.message || 'Rejeitada pela SEFAZ') : undefined,
               rawResponse: { invoiceRequestId, viaCloudFunction: true, ...data }
             };
           }
@@ -627,7 +538,6 @@ export const fiscalService = {
         }
       }
 
-      // 2. Tentar via Proxy do Backend (/api/nfe/emitir) para evitar bloqueios de CORS do navegador
       try {
         console.info(`🛡️ [${invoiceRequestId}] Tentando emissão via Proxy Backend Server-to-Server (/api/nfe/emitir)...`);
         const proxyResponse = await fetch('/api/nfe/emitir', {
@@ -654,7 +564,6 @@ export const fiscalService = {
         console.warn(`⚠️ [${invoiceRequestId}] Proxy local não disponível, tentando endpoints diretos:`, proxyErr.message);
       }
 
-      // 3. Se o proxy não respondeu, tentar os endpoints diretos
       if (!response) {
         for (const endpoint of endpoints) {
           try {
@@ -675,7 +584,6 @@ export const fiscalService = {
         }
       }
 
-      // LOG DETALHADO DEPOIS DA CHAMADA DA API
       console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida da API Fiscal (${provider.toUpperCase()})`);
 
       if (response && (response.ok || response.status === 201 || response.status === 202)) {
@@ -689,22 +597,22 @@ export const fiscalService = {
         await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
 
         const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.chave_acesso || data.chaveNFe || '';
-        const statusRetornado = mapRemoteNfeStatus(data.status, response.status);
-        const authorized = statusRetornado === 'autorizada' && !!chaveAcesso;
+        const statusRetornado = resolveNfeStatus(data.status, response.status, chaveAcesso);
+        const nfeProtocolo = data.nProt || data.protocolo || data.protocol || '';
 
         return {
           success: statusRetornado !== 'rejeitada',
-          nfeStatus: authorized ? 'autorizada' : (statusRetornado === 'autorizada' ? 'processando' : statusRetornado),
-          nfeId: data.id || data.uuid || data.invoiceId,
+          nfeStatus: statusRetornado,
+          nfeId: data.invoiceId || data.id || data.uuid,
           nfeChave: chaveAcesso || undefined,
-          nfeNumero: data.numero ? String(data.numero) : nfeNumero,
+          nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
           nfeSerie: data.serie ? String(data.serie) : serie,
-          nfeProtocolo: data.protocolo || data.protocol || undefined,
-          nfeDanfeUrl: data.danfeUrl || data.pdfUrl || data.urlDanfe || data.caminho_danfe,
+          nfeProtocolo: nfeProtocolo || undefined,
+          nfeDanfeUrl: data.pdfUrl || data.danfeUrl || data.urlDanfe || data.caminho_danfe,
           nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
           nfeEmissao: data.dataEmissao,
           naturezaOperacao: payload.naturezaOperacao,
-          nfeErro: statusRetornado === 'rejeitada' ? (data.message || data.erro || data.motivo) : undefined,
+          nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.message || data.erro || data.motivo) : undefined,
           rawResponse: { invoiceRequestId, ...data }
         };
       } else if (response) {
@@ -714,26 +622,25 @@ export const fiscalService = {
         console.error('📦 Body de Erro da API:', errData);
         console.groupEnd();
 
-        let errMsg = errData.message || errData.erro || errData.error || errData.motivo || errData.mensagem;
+        let errMsg = errData.xMotivo || errData.message || errData.erro || errData.error || errData.motivo || errData.mensagem;
         if (Array.isArray(errData.erros) && errData.erros.length > 0) {
           errMsg = errData.erros.map((e: any) => `${e.campo ? e.campo + ': ' : ''}${e.mensagem || e.msg || e}`).join(' | ');
         }
 
-        // TRATAMENTO AUTOMÁTICO DE IDEMPOTÊNCIA / DUPLICIDADE (HTTP 409 OU REJEIÇÃO DE CHAVE DUPLICADA)
         if (response.status === 409 || (errMsg && (errMsg.toLowerCase().includes('duplicidade') || errMsg.toLowerCase().includes('ja emitida') || errMsg.toLowerCase().includes('já existe')))) {
-          console.info(`🔄 [IDEMPOTÊNCIA] [${invoiceRequestId}] Rejeição por duplicidade detectada. Consultando nota previamente transmitida para referência: ${payload.referenciaExterna}`);
-          const consultRes = await this.consultarPorReferencia(payload.referenciaExterna, config);
+          console.info(`🔄 [IDEMPOTÊNCIA] [${invoiceRequestId}] Rejeição por duplicidade detectada. Consultando nota previamente transmitida para referência: ${referenciaPedido}`);
+          const consultRes = await this.consultarPorReferencia(referenciaPedido, config);
           if (consultRes.success && consultRes.nfe) {
-            console.info(`✅ [IDEMPOTÊNCIA RECUPERADA] Nota recuperada com sucesso da API Nótass!`, consultRes.nfe);
+            console.info(`✅ [IDEMPOTÊNCIA RECUPERADA] Nota recuperada com sucesso da API NotaAs!`, consultRes.nfe);
             return {
               success: true,
               nfeStatus: consultRes.status,
-              nfeId: consultRes.nfe.id,
+              nfeId: consultRes.nfe.invoiceId || consultRes.nfe.id,
               nfeChave: consultRes.nfe.chaveAcesso,
-              nfeNumero: (consultRes.nfe.numero || nfeNumero).toString(),
+              nfeNumero: (consultRes.nfe.nNf || consultRes.nfe.numero || nfeNumero).toString(),
               nfeSerie: (consultRes.nfe.serie || serie).toString(),
-              nfeProtocolo: consultRes.nfe.protocolo,
-              nfeDanfeUrl: consultRes.nfe.danfeUrl,
+              nfeProtocolo: consultRes.nfe.nProt || consultRes.nfe.protocolo,
+              nfeDanfeUrl: consultRes.nfe.pdfUrl || consultRes.nfe.danfeUrl,
               nfeXmlUrl: consultRes.nfe.xmlUrl,
               nfeEmissao: consultRes.nfe.dataEmissao,
               naturezaOperacao: payload.naturezaOperacao,
@@ -763,7 +670,6 @@ export const fiscalService = {
       }
     }
 
-    // Modo Sandbox / Treinamento Local (Execução sem API)
     console.info(`🧪 [${invoiceRequestId}] Executando em Modo Simulação Local (Treinamento sem API Externa)`);
     console.groupEnd();
 
@@ -824,7 +730,7 @@ export const fiscalService = {
   },
 
   /**
-   * [GET /api/v1/nfe/{id}] ou [GET /api/v1/invoices/{id}/status]
+   * [GET /api/v1/nfe/invoices/{id}/status]
    * Consulta os dados, status e links de uma NF-e na NotaAs
    */
   async consultarNFe(
@@ -847,6 +753,7 @@ export const fiscalService = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          invoiceId: nfeIdOrChave,
           nfeIdOrChave,
           apiKey,
           apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
@@ -860,25 +767,38 @@ export const fiscalService = {
 
       if (proxied.ok) {
         const data = proxied.data?.data || proxied.data;
-        const st = mapRemoteNfeStatus(data.status || data.nfe?.status, proxied.status);
+        const chaveAcesso = data.chaveAcesso || data.chave || '';
+        const st = resolveNfeStatus(data.status || data.nfe?.status, proxied.status, chaveAcesso);
+        const invoiceId = data.invoiceId || data.id || nfeIdOrChave;
+        const nNf = data.nNf ?? data.numero ?? 0;
+        const nProt = data.nProt || data.protocolo || data.protocol;
+        const pdfUrl = data.pdfUrl || data.danfeUrl;
         return {
           success: st !== 'rejeitada',
           status: st,
           nfe: {
-            id: data.id || nfeIdOrChave,
+            id: invoiceId,
+            invoiceId,
             referenciaExterna: data.referenciaExterna || data.externalReference,
             status: st as any,
             ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
             modelo: 55,
-            numero: data.numero || 0,
+            numero: nNf,
+            nNf,
             serie: data.serie || 1,
-            chaveAcesso: data.chaveAcesso || data.chave || '',
-            protocolo: data.protocolo || data.protocol,
-            danfeUrl: data.danfeUrl || data.pdfUrl,
+            chaveAcesso,
+            protocolo: nProt,
+            nProt,
+            cStat: data.cStat,
+            xMotivo: data.xMotivo,
+            motivoStatus: data.xMotivo || data.motivoStatus,
+            codigoStatusSefaz: data.cStat != null ? String(data.cStat) : undefined,
+            danfeUrl: pdfUrl,
+            pdfUrl,
             xmlUrl: data.xmlUrl,
             dataEmissao: data.dataEmissao || data.createdAt,
             dataAutorizacao: data.dataAutorizacao || data.authorizedAt,
-            valorTotal: data.valorTotal || data.total
+            valorTotal: data.vNf || data.valorTotal || data.total
           }
         };
       }
@@ -894,7 +814,6 @@ export const fiscalService = {
   },
 
   /**
-   * [GET /api/v1/nfe?referencia=...]
    * Consulta uma NF-e a partir da referência interna do pedido
    */
   async consultarPorReferencia(
@@ -918,8 +837,9 @@ export const fiscalService = {
         if (proxied.ok && proxied.isJson) {
           const data = proxied.data?.data || proxied.data;
           const item = Array.isArray(data) ? data[0] : (data.items ? data.items[0] : data);
-          if (item && (item.id || item.chaveAcesso || item.chave)) {
-            const st = mapRemoteNfeStatus(item.status, proxied.status);
+          if (item && (item.invoiceId || item.id || item.chaveAcesso || item.chave)) {
+            const chave = item.chaveAcesso || item.chave || '';
+            const st = resolveNfeStatus(item.status, proxied.status, chave);
             return { success: st === 'autorizada' || st === 'processando' || st === 'cancelada', status: st, nfe: item };
           }
         }
@@ -934,8 +854,7 @@ export const fiscalService = {
   },
 
   /**
-   * [GET /api/v1/status] ou [GET /api/v1/nfe/status]
-   * Consulta o status de operação dos servidores da SEFAZ
+   * Consulta o status de operação dos servidores da SEFAZ via proxy
    */
   async consultarStatusSefaz(overrideConfig?: FiscalConfig): Promise<StatusSefazResult> {
     const config = overrideConfig || (await this.getConfig());
@@ -990,7 +909,7 @@ export const fiscalService = {
   },
 
   /**
-   * [POST /api/v1/nfe/{id}/cancelar] ou [POST /api/v1/cancelar]
+   * [POST /api/v1/nfe/cancelar]
    * Cancela uma NF-e autorizada perante a SEFAZ
    */
   async cancelarNFe(
@@ -1014,8 +933,10 @@ export const fiscalService = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            invoiceId: chaveOuId,
             chaveOuId,
             justificativa: justificativa.trim(),
+            motivo: justificativa.trim(),
             apiKey,
             apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
             provider: config.apiProvider || 'notaas'
@@ -1038,7 +959,6 @@ export const fiscalService = {
   },
 
   /**
-   * [GET /api/v1/nfe/{id}/danfe]
    * Obtém a URL de download ou visualização do DANFE PDF
    */
   async obterDanfePdfUrl(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
@@ -1050,6 +970,7 @@ export const fiscalService = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            invoiceId: chaveOuId,
             nfeIdOrChave: chaveOuId,
             resource: 'danfe',
             apiKey,
@@ -1057,7 +978,7 @@ export const fiscalService = {
             provider: config.apiProvider || 'notaas'
           })
         });
-        const url = proxied.data?.danfeUrl || proxied.data?.data?.danfeUrl || proxied.data?.pdfUrl;
+        const url = proxied.data?.pdfUrl || proxied.data?.danfeUrl || proxied.data?.data?.pdfUrl || proxied.data?.data?.danfeUrl;
         if (proxied.ok && url) return url;
       } catch {}
     }
@@ -1065,7 +986,6 @@ export const fiscalService = {
   },
 
   /**
-   * [GET /api/v1/nfe/{id}/xml]
    * Obtém o XML assinado da NF-e
    */
   async obterXmlNFe(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
@@ -1077,6 +997,7 @@ export const fiscalService = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            invoiceId: chaveOuId,
             nfeIdOrChave: chaveOuId,
             resource: 'xml',
             apiKey,
