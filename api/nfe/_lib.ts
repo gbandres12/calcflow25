@@ -8,20 +8,12 @@ export function applyCors(res: any) {
   );
 }
 
-export function fiscalAuthHeaders(apiKey: string, provider: string): Record<string, string> {
-  const headers: Record<string, string> = {
+export function fiscalAuthHeaders(apiKey: string, _provider?: string): Record<string, string> {
+  return {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'x-api-key': (apiKey || '').trim(),
   };
-  const key = (apiKey || '').trim();
-  if (provider === 'focusnfe') {
-    headers['Authorization'] = `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
-    headers['x-api-key'] = key;
-  } else {
-    headers['x-api-key'] = key;
-    headers['Authorization'] = `Bearer ${key}`;
-  }
-  return headers;
 }
 
 /** Continua para o próximo endpoint só em falha de rede. HTTP 4xx/5xx da API fiscal é retornado na hora. */
@@ -29,7 +21,7 @@ export async function proxyToFiscal(opts: {
   method: string;
   endpoints: string[];
   apiKey: string;
-  provider: string;
+  provider?: string;
   body?: any;
 }): Promise<{ status: number; data: any; isJson: boolean }> {
   let lastNetworkError = '';
