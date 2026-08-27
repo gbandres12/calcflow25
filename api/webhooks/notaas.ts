@@ -9,17 +9,28 @@ const STATUS_MAP: Record<string, string> = {
   autorizada: 'autorizada',
   issued: 'autorizada',
   authorized: 'autorizada',
+  'nfe.issued': 'autorizada',
+  'nfce.issued': 'autorizada',
   'invoice.rejected': 'rejeitada',
   'invoice.error': 'rejeitada',
   rejeitado: 'rejeitada',
   rejeitada: 'rejeitada',
   erro_autorizacao: 'rejeitada',
+  error: 'rejeitada',
+  'nfe.error': 'rejeitada',
+  'nfce.error': 'rejeitada',
   'invoice.canceled': 'cancelada',
   cancelado: 'cancelada',
   cancelada: 'cancelada',
+  cancelled: 'cancelada',
+  canceled: 'cancelada',
+  'nfe.cancelled': 'cancelada',
+  'nfce.cancelled': 'cancelada',
   'invoice.processing': 'processando',
   processando_autorizacao: 'processando',
   processando: 'processando',
+  queued: 'processando',
+  processing: 'processando',
 };
 
 function firestoreBase() {
@@ -30,17 +41,8 @@ function fieldString(fields: any, key: string): string {
   return fields?.[key]?.stringValue || '';
 }
 
-async function findOrder(companyId: string, reference: string, orderId?: string) {
-  if (orderId) {
-    const byId = await fetch(
-      `${firestoreBase()}/sales_orders_${companyId}/${encodeURIComponent(orderId)}?key=${API_KEY}`
-    );
-    if (byId.ok) {
-      const doc = await byId.json();
-      return { name: doc.name as string, fields: doc.fields, id: orderId };
-    }
-  }
-
+async function queryByField(companyId: string, fieldPath: string, value: string) {
+  if (!value) return null;
   const queryRes = await fetch(`${firestoreBase()}:runQuery?key=${API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -49,9 +51,9 @@ async function findOrder(companyId: string, reference: string, orderId?: string)
         from: [{ collectionId: `sales_orders_${companyId}` }],
         where: {
           fieldFilter: {
-            field: { fieldPath: 'reference' },
+            field: { fieldPath },
             op: 'EQUAL',
-            value: { stringValue: reference },
+            value: { stringValue: value },
           },
         },
         limit: 5,
@@ -66,6 +68,31 @@ async function findOrder(companyId: string, reference: string, orderId?: string)
   const name: string = hit.document.name;
   const id = name.split('/').pop() || '';
   return { name, fields: hit.document.fields, id };
+}
+
+async function findOrder(companyId: string, reference: string, orderId?: string, invoiceId?: string) {
+  if (orderId) {
+    const byId = await fetch(
+      `${firestoreBase()}/sales_orders_${companyId}/${encodeURIComponent(orderId)}?key=${API_KEY}`
+    );
+    if (byId.ok) {
+      const doc = await byId.json();
+      return { name: doc.name as string, fields: doc.fields, id: orderId };
+    }
+  }
+
+  // Lookup by nfeId (invoiceId) first, then reference.
+  if (invoiceId) {
+    const byInvoice = await queryByField(companyId, 'nfeId', invoiceId);
+    if (byInvoice) return byInvoice;
+  }
+
+  if (reference) {
+    const byRef = await queryByField(companyId, 'reference', reference);
+    if (byRef) return byRef;
+  }
+
+  return null;
 }
 
 async function patchOrder(docName: string, updates: Record<string, string>) {
@@ -113,6 +140,7 @@ export default async function handler(req: any, res: any) {
       req.body?.referencia ||
       '';
     const orderId = data.orderId || req.body?.orderId || '';
+    const invoiceId = data.invoiceId || req.body?.invoiceId || '';
     const companyId =
       (req.query?.companyId as string) ||
       data.companyId ||
@@ -120,19 +148,23 @@ export default async function handler(req: any, res: any) {
       '';
 
     const rawStatus = data.status || event;
-    const nfeStatus = STATUS_MAP[String(rawStatus).toLowerCase()] || STATUS_MAP[event] || 'processando';
+    const nfeStatus =
+      STATUS_MAP[String(rawStatus).toLowerCase()] ||
+      STATUS_MAP[String(event).toLowerCase()] ||
+      STATUS_MAP[event] ||
+      'processando';
 
     const nfeChave = data.nfeKey || data.chave || data.chaveAcesso || data.chave_nfe || data.chave_acesso || '';
-    const nfeProtocolo = data.protocol || data.protocolo || '';
+    const nfeProtocolo = data.nProt || data.protocol || data.protocolo || '';
     const nfeDanfeUrl = data.danfeUrl || data.pdfUrl || data.url_danfe || data.caminho_danfe || '';
     const nfeXmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
-    const nfeErro = data.rejectionReason || data.motivo_rejeicao || data.mensagem_sefaz || '';
+    const nfeErro = data.xMotivo || data.errorMessage || data.rejectionReason || data.motivo_rejeicao || data.mensagem_sefaz || '';
 
-    if (!reference && !orderId) {
+    if (!reference && !orderId && !invoiceId) {
       return res.status(200).json({
         received: true,
         updated: false,
-        reason: 'Webhook sem referenciaExterna/orderId; pedido não atualizado.',
+        reason: 'Webhook sem invoiceId/referenciaExterna/orderId; pedido não atualizado.',
         event,
       });
     }
@@ -142,12 +174,13 @@ export default async function handler(req: any, res: any) {
     let matchedId = '';
 
     for (const cid of companiesToTry) {
-      const found = await findOrder(cid, reference, orderId);
+      const found = await findOrder(cid, reference, orderId, invoiceId);
       if (!found) continue;
       const patch: Record<string, string> = {
         nfeStatus,
         updatedAt: new Date().toISOString(),
       };
+      if (invoiceId) patch.nfeId = invoiceId;
       if (nfeChave) patch.nfeChave = nfeChave;
       if (nfeProtocolo) patch.nfeProtocolo = nfeProtocolo;
       if (nfeDanfeUrl) patch.nfeDanfeUrl = nfeDanfeUrl;
@@ -164,6 +197,7 @@ export default async function handler(req: any, res: any) {
       event,
       nfeStatus,
       orderId: matchedId || orderId || null,
+      invoiceId: invoiceId || null,
       reference: reference || null,
       timestamp: new Date().toISOString(),
     });
