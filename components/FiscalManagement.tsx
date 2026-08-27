@@ -123,25 +123,20 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     const payload = fiscalService.montarPayloadNotaAs(sampleOrder, sampleCustomer, config);
     setMappedPayload(payload);
 
-    // Verificação dos campos obrigatórios do Schema da API
-    addLog('info', '📋 Checando integridade do Emitente:', {
-      cnpj: payload.emitente.cnpj,
-      inscricaoEstadual: payload.emitente.inscricaoEstadual,
-      razaoSocial: payload.emitente.razaoSocial,
-      endereco: payload.emitente.endereco
+    // Verificação dos campos obrigatórios do Schema oficial NF-e 55
+    addLog('info', '📋 Emitente NÃO vai no payload — vem do projeto NotaAs + certificado A1.');
+    addLog('info', '📋 Checando dest (destinatário oficial):', {
+      cnpj: payload.dest?.cnpj,
+      cpf: payload.dest?.cpf,
+      nome: payload.dest?.nome,
+      ie: payload.dest?.ie,
+      indicadorIE: payload.dest?.indicadorIE,
+      email: payload.dest?.email,
+      endereco: payload.dest?.endereco
     });
 
-    addLog('info', '📋 Checando integridade do Destinatário:', {
-      cpfCnpj: payload.destinatario.cpfCnpj,
-      tipoPessoa: payload.destinatario.tipoPessoa,
-      razaoSocial: payload.destinatario.razaoSocial,
-      indicadorIe: payload.destinatario.indicadorIe,
-      inscricaoEstadual: payload.destinatario.inscricaoEstadual,
-      endereco: payload.destinatario.endereco
-    });
-
-    addLog('info', `📋 Checando ${payload.itens.length} Item(ns) da Nota (NCM e CFOP):`, payload.itens);
-    addLog('info', '📋 Checando Totais da Nota:', payload.total);
+    addLog('info', `📋 Checando ${payload.items?.length || 0} item(ns) (NCM e CFOP):`, payload.items);
+    addLog('info', '📋 Checando pagamentos:', payload.pagamentos);
 
     addLog('success', '✅ Etapa 2: Mapeamento do Schema concluído com sucesso!');
 
@@ -218,7 +213,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Módulo Fiscal & NotaAs (NF-e)</h1>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">Módulo Fiscal & NotaAs NF-e 55</h1>
             <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full border ${
               config.environment === 'production' 
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
