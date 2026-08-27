@@ -42,7 +42,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
     try {
       const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config);
-      const result = await fiscalService.emitirNFe(order, customer, config);
+      const result = await fiscalService.emitirNFe(order, customer, config, order.companyId);
 
       if (result.success) {
         let finalStatus = result.nfeStatus;
@@ -50,9 +50,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         // Se o servidor respondeu status processando, dispara polling de acompanhamento
         if (result.nfeStatus === 'processando' && result.nfeId) {
           const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 3, 2000);
-          if (pollResult.success && pollResult.status) {
+          if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
             finalStatus = pollResult.status;
           }
+        }
+        if (finalStatus === 'simulada') {
+          // Simulação local: não é autorização SEFAZ.
         }
 
         const updatedOrder: SaleOrder = {
