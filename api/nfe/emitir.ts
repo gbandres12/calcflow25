@@ -40,7 +40,13 @@ async function proxyToFiscal(opts: {
   apiKey: string;
   body?: any;
 }): Promise<{ status: number; data: any }> {
+  const keyTail = (opts.apiKey || '').trim().slice(-4);
   try {
+    console.log('[nfe-proxy] outbound', {
+      method: opts.method,
+      endpoint: opts.endpoint,
+      apiKeyTail: keyTail ? `…${keyTail}` : '(empty)',
+    });
     const response = await fetch(opts.endpoint, {
       method: opts.method,
       headers: {
@@ -59,8 +65,20 @@ async function proxyToFiscal(opts: {
       const preview = await response.text().catch(() => '');
       data = { error: 'Resposta não-JSON da API fiscal', preview: preview.slice(0, 240) };
     }
+    const bodyPreview =
+      typeof data === 'string' ? data.slice(0, 400) : JSON.stringify(data).slice(0, 400);
+    console.log('[nfe-proxy] response', {
+      endpoint: opts.endpoint,
+      status: response.status,
+      contentType,
+      bodyPreview,
+    });
     return { status: response.status, data };
   } catch (err: any) {
+    console.error('[nfe-proxy] fetch failed', {
+      endpoint: opts.endpoint,
+      error: err?.message || 'Falha de rede',
+    });
     return {
       status: 502,
       data: { error: 'Não foi possível conectar aos servidores da API Fiscal.', details: err?.message || 'Falha de rede' },
