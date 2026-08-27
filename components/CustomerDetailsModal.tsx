@@ -172,6 +172,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                   {customer.city && (
                     <span className="flex items-center gap-1 text-slate-300">
                       <MapPin size={13} className="text-amber-400" /> {customer.city} - {customer.state || 'PA'}
+                      {customer.ibgeCode ? ` · IBGE ${customer.ibgeCode}` : ''}
                     </span>
                   )}
                 </div>
@@ -269,6 +270,27 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           {/* ABA 1: VISÃO GERAL */}
           {activeTab === 'OVERVIEW' && (
             <div className="space-y-6">
+
+              {(customer.street || customer.zipCode || customer.ibgeCode) && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Logradouro</span>
+                    <p className="font-bold text-slate-800">{customer.street || '—'}{customer.number ? `, ${customer.number}` : ''}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">CEP</span>
+                    <p className="font-mono font-bold text-slate-800">{customer.zipCode || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Cidade / UF</span>
+                    <p className="font-bold text-slate-800">{customer.city || '—'} - {customer.state || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Código IBGE</span>
+                    <p className="font-mono font-black text-slate-800">{customer.ibgeCode || 'não informado'}</p>
+                  </div>
+                </div>
+              )}
               
               {/* 4 Cards de Indicadores Consolidados */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
