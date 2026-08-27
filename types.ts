@@ -295,7 +295,7 @@ export interface Transaction {
   payments?: TransactionPayment[]; // Histórico de pagamentos parciais / abatimentos
 }
 
-export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
+export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' | 'simulada';
 
 export interface SaleOrder {
   id: string;

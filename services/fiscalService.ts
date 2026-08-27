@@ -224,6 +224,26 @@ export interface StatusSefazResult {
 /**
  * Módulo Auxiliar Fiscal para NotaAs (NF-e 4.0 / SEFAZ)
  */
+
+/** Só marca autorizada se a API fiscal disse isso. Qualquer outro valor vira processando, nunca mock. */
+export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus {
+  const s = (raw || '').toString().toLowerCase();
+  if (['autorizada', 'issued', 'authorized', 'autorizado'].includes(s)) return 'autorizada';
+  if (['cancelada', 'cancelled', 'canceled', 'cancelado'].includes(s)) return 'cancelada';
+  if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao'].includes(s)) return 'rejeitada';
+  if (['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending'].includes(s) || httpStatus === 202) return 'processando';
+  if (s === 'simulada') return 'simulada';
+  return 'processando';
+}
+
+async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; isJson: boolean }> {
+  const res = await fetch(path, init);
+  const contentType = res.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  const data = isJson ? await res.json().catch(() => ({})) : { error: 'Resposta não-JSON do proxy fiscal' };
+  return { ok: res.ok || res.status === 201 || res.status === 202, status: res.status, data, isJson };
+}
+
 export const fiscalService = {
   
   /**
@@ -454,8 +474,10 @@ export const fiscalService = {
   async criarNFe(
     order: SaleOrder, 
     customer: Customer, 
-    overrideConfig?: FiscalConfig
+    overrideConfig?: FiscalConfig,
+    companyId?: string
   ): Promise<EmitirNFeResult> {
+    const resolvedCompanyId = companyId || order.companyId;
     const invoiceRequestId = `inv_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const config = overrideConfig || (await this.getConfig());
     const validation = this.validarDadosFiscais(order, customer);
@@ -561,7 +583,7 @@ export const fiscalService = {
           const emitirNfeFn = httpsCallable<any, any>(firebaseFunctions, 'emitirNfe');
           const fnResult = await emitirNfeFn({
             payload,
-            companyId: activeCompanyId,
+            companyId: resolvedCompanyId,
             provider,
             apiKey,
             apiBaseUrl: baseUrl,
@@ -577,26 +599,26 @@ export const fiscalService = {
             const nextNum = parseInt(nfeNumero, 10) + 1;
             await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
 
-            const nfeChave = data.chave || data.chave_acesso || data.chaveNFe || data.protocolo || '';
+            const nfeChave = data.chave || data.chave_acesso || data.chaveNFe || data.chaveAcesso || '';
             const nfeProtocolo = data.protocolo || data.id || data.invoiceId || '';
             const danfeUrl = data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
             const xmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
-            const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao' || fnResult.data.statusHttp === 202)
-              ? (data.status === 'processando_autorizacao' || fnResult.data.statusHttp === 202 ? 'processando' : 'autorizada')
-              : 'autorizada';
+            const statusRetornado = mapRemoteNfeStatus(data.status, fnResult.data.statusHttp);
+            const authorized = statusRetornado === 'autorizada' && !!nfeChave;
 
             return {
-              success: true,
-              nfeStatus: statusRetornado as NfeStatus,
-              nfeId: data.id || data.uuid || data.invoiceId || `api-${Date.now()}`,
-              nfeChave: nfeChave || this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero),
-              nfeNumero: (data.numero || nfeNumero).toString(),
-              nfeSerie: (data.serie || serie).toString(),
-              nfeProtocolo: nfeProtocolo || `PROT-${Date.now()}`,
+              success: statusRetornado !== 'rejeitada',
+              nfeStatus: authorized ? 'autorizada' : statusRetornado,
+              nfeId: data.id || data.uuid || data.invoiceId,
+              nfeChave: nfeChave || undefined,
+              nfeNumero: data.numero ? String(data.numero) : nfeNumero,
+              nfeSerie: data.serie ? String(data.serie) : serie,
+              nfeProtocolo: nfeProtocolo || undefined,
               nfeDanfeUrl: danfeUrl || undefined,
               nfeXmlUrl: xmlUrl || undefined,
-              nfeEmissao: data.dataEmissao || new Date().toISOString(),
+              nfeEmissao: data.dataEmissao,
               naturezaOperacao: payload.naturezaOperacao,
+              nfeErro: statusRetornado === 'rejeitada' ? (data.motivoStatus || data.message || 'Rejeitada pela SEFAZ') : undefined,
               rawResponse: { invoiceRequestId, viaCloudFunction: true, ...data }
             };
           }
@@ -615,13 +637,18 @@ export const fiscalService = {
             payload,
             apiKey,
             apiBaseUrl: baseUrl,
-            provider
+            provider,
+            companyId: resolvedCompanyId,
+            orderId: order.id
           })
         });
 
-        if (proxyResponse && proxyResponse.status !== 404 && proxyResponse.status !== 502) {
+        const proxyType = proxyResponse.headers.get('content-type') || '';
+        if (proxyResponse && proxyResponse.status !== 404 && proxyResponse.status !== 502 && proxyType.includes('json')) {
           response = proxyResponse;
           endpointUsado = '/api/nfe/emitir (Proxy Backend Anti-CORS)';
+        } else if (proxyResponse) {
+          console.warn(`⚠️ [${invoiceRequestId}] Proxy respondeu ${proxyResponse.status} (${proxyType || 'sem content-type'}), ignorando.`);
         }
       } catch (proxyErr: any) {
         console.warn(`⚠️ [${invoiceRequestId}] Proxy local não disponível, tentando endpoints diretos:`, proxyErr.message);
@@ -661,23 +688,23 @@ export const fiscalService = {
         const nextNum = parseInt(nfeNumero, 10) + 1;
         await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
 
-        const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.cstat_msg;
-        const statusRetornado = (data.status === 'autorizada' || data.status === 'issued' || data.status === 'processando_autorizacao' || response.status === 202) 
-          ? (data.status === 'processando_autorizacao' || response.status === 202 ? 'processando' : 'autorizada') 
-          : 'autorizada';
+        const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.chave_acesso || data.chaveNFe || '';
+        const statusRetornado = mapRemoteNfeStatus(data.status, response.status);
+        const authorized = statusRetornado === 'autorizada' && !!chaveAcesso;
 
         return {
-          success: true,
-          nfeStatus: statusRetornado as NfeStatus,
-          nfeId: data.id || data.uuid || data.invoiceId || `api-${Date.now()}`,
-          nfeChave: chaveAcesso || this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero),
-          nfeNumero: (data.numero || nfeNumero).toString(),
-          nfeSerie: (data.serie || serie).toString(),
-          nfeProtocolo: data.protocolo || data.protocol || `11526000${Math.floor(1000000 + Math.random() * 9000000)}`,
+          success: statusRetornado !== 'rejeitada',
+          nfeStatus: authorized ? 'autorizada' : (statusRetornado === 'autorizada' ? 'processando' : statusRetornado),
+          nfeId: data.id || data.uuid || data.invoiceId,
+          nfeChave: chaveAcesso || undefined,
+          nfeNumero: data.numero ? String(data.numero) : nfeNumero,
+          nfeSerie: data.serie ? String(data.serie) : serie,
+          nfeProtocolo: data.protocolo || data.protocol || undefined,
           nfeDanfeUrl: data.danfeUrl || data.pdfUrl || data.urlDanfe || data.caminho_danfe,
           nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
-          nfeEmissao: data.dataEmissao || new Date().toISOString(),
+          nfeEmissao: data.dataEmissao,
           naturezaOperacao: payload.naturezaOperacao,
+          nfeErro: statusRetornado === 'rejeitada' ? (data.message || data.erro || data.motivo) : undefined,
           rawResponse: { invoiceRequestId, ...data }
         };
       } else if (response) {
@@ -748,15 +775,15 @@ export const fiscalService = {
 
     return {
       success: true,
-      nfeStatus: 'autorizada',
-      nfeId: `notaas-doc-${Date.now()}`,
-      nfeChave: mockChave,
+      nfeStatus: 'simulada',
+      nfeId: `sim-${Date.now()}`,
+      nfeChave: `SIMULACAO-${mockChave}`,
       nfeNumero,
       nfeSerie: serie,
-      nfeProtocolo: mockProtocolo,
+      nfeProtocolo: `SIM-${mockProtocolo}`,
       nfeEmissao: new Date().toISOString(),
       naturezaOperacao: payload.naturezaOperacao,
-      rawResponse: { invoiceRequestId, mode: 'simulation' }
+      rawResponse: { invoiceRequestId, mode: 'simulation', aviso: 'Simulação local. Esta nota NÃO foi autorizada pela SEFAZ.' }
     };
   },
 
@@ -783,17 +810,17 @@ export const fiscalService = {
       }
     }
     return {
-      success: true,
+      success: false,
       status: 'processando',
-      error: 'Nota permanece em processamento na SEFAZ. Tente consultar novamente em alguns instantes.'
+      error: 'Nota ainda em processamento na SEFAZ. Não foi possível confirmar autorização.'
     };
   },
 
   /**
    * Alias de compatibilidade com outros componentes
    */
-  async emitirNFe(order: SaleOrder, customer: Customer, overrideConfig?: FiscalConfig): Promise<EmitirNFeResult> {
-    return this.criarNFe(order, customer, overrideConfig);
+  async emitirNFe(order: SaleOrder, customer: Customer, overrideConfig?: FiscalConfig, companyId?: string): Promise<EmitirNFeResult> {
+    return this.criarNFe(order, customer, overrideConfig, companyId || order.companyId);
   },
 
   /**
@@ -809,72 +836,61 @@ export const fiscalService = {
     }
 
     const config = overrideConfig || (await this.getConfig());
+    const apiKey = (config.apiKey || '').trim();
 
-    if (config.apiKey && config.apiKey.trim().length > 10) {
-      try {
-        const endpoints = [
-          `${NOTAAS_API_BASE_URL}/nfe/${nfeIdOrChave}`,
-          `${NOTAAS_API_BASE_URL}/invoices/${nfeIdOrChave}/status`,
-          `${NOTAAS_API_BASE_URL}/nfe/chave/${nfeIdOrChave}`
-        ];
-
-        for (const url of endpoints) {
-          try {
-            const res = await fetch(url, {
-              method: 'GET',
-              headers: this.getHeaders(config.apiKey)
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              const st = data.status === 'issued' || data.status === 'autorizada' ? 'autorizada' :
-                         data.status === 'cancelada' || data.status === 'cancelled' ? 'cancelada' :
-                         data.status === 'rejeitada' || data.status === 'rejected' ? 'rejeitada' : 'autorizada';
-
-              return {
-                success: true,
-                status: st as NfeStatus,
-                nfe: {
-                  id: data.id || nfeIdOrChave,
-                  referenciaExterna: data.referenciaExterna || data.externalReference,
-                  status: st as any,
-                  ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
-                  modelo: 55,
-                  numero: data.numero || 1042,
-                  serie: data.serie || 1,
-                  chaveAcesso: data.chaveAcesso || data.chave || nfeIdOrChave,
-                  protocolo: data.protocolo || data.protocol,
-                  danfeUrl: data.danfeUrl || data.pdfUrl,
-                  xmlUrl: data.xmlUrl,
-                  dataEmissao: data.dataEmissao || data.createdAt,
-                  dataAutorizacao: data.dataAutorizacao || data.authorizedAt,
-                  valorTotal: data.valorTotal || data.total
-                }
-              };
-            }
-          } catch {}
-        }
-      } catch (err: any) {
-        console.warn('[NotaAs API] Falha na consulta remota:', err);
-      }
+    if (!apiKey) {
+      return { success: false, status: 'nao_emitida', error: 'Chave de API não configurada. Não é possível consultar a SEFAZ.' };
     }
 
-    // Modo local / Fallback
-    return {
-      success: true,
-      status: 'autorizada',
-      nfe: {
-        id: nfeIdOrChave,
-        status: 'autorizada',
-        ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
-        modelo: 55,
-        numero: 1042,
-        serie: 1,
-        chaveAcesso: nfeIdOrChave,
-        protocolo: '115260004928192',
-        dataEmissao: new Date().toISOString()
+    try {
+      const proxied = await fiscalApiFetch('/api/nfe/consultar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nfeIdOrChave,
+          apiKey,
+          apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+          provider: config.apiProvider || 'notaas'
+        })
+      });
+
+      if (!proxied.isJson) {
+        return { success: false, status: 'nao_emitida', error: 'Proxy de consulta fiscal retornou resposta inválida.' };
       }
-    };
+
+      if (proxied.ok) {
+        const data = proxied.data?.data || proxied.data;
+        const st = mapRemoteNfeStatus(data.status || data.nfe?.status, proxied.status);
+        return {
+          success: st !== 'rejeitada',
+          status: st,
+          nfe: {
+            id: data.id || nfeIdOrChave,
+            referenciaExterna: data.referenciaExterna || data.externalReference,
+            status: st as any,
+            ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
+            modelo: 55,
+            numero: data.numero || 0,
+            serie: data.serie || 1,
+            chaveAcesso: data.chaveAcesso || data.chave || '',
+            protocolo: data.protocolo || data.protocol,
+            danfeUrl: data.danfeUrl || data.pdfUrl,
+            xmlUrl: data.xmlUrl,
+            dataEmissao: data.dataEmissao || data.createdAt,
+            dataAutorizacao: data.dataAutorizacao || data.authorizedAt,
+            valorTotal: data.valorTotal || data.total
+          }
+        };
+      }
+
+      return {
+        success: false,
+        status: 'nao_emitida',
+        error: proxied.data?.error || proxied.data?.message || `Falha ao consultar NF-e (HTTP ${proxied.status}).`
+      };
+    } catch (err: any) {
+      return { success: false, status: 'nao_emitida', error: err.message || 'Erro ao consultar NF-e via proxy.' };
+    }
   },
 
   /**
@@ -886,21 +902,25 @@ export const fiscalService = {
     overrideConfig?: FiscalConfig
   ): Promise<ConsultarNFeResult> {
     const config = overrideConfig || (await this.getConfig());
-    if (config.apiKey && config.apiKey.trim().length > 10) {
+    const apiKey = (config.apiKey || '').trim();
+    if (apiKey) {
       try {
-        const res = await fetch(`${NOTAAS_API_BASE_URL}/nfe?referencia=${encodeURIComponent(referencia)}`, {
-          method: 'GET',
-          headers: this.getHeaders(config.apiKey)
+        const proxied = await fiscalApiFetch('/api/nfe/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            referencia,
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas'
+          })
         });
-        if (res.ok) {
-          const data = await res.json();
+        if (proxied.ok && proxied.isJson) {
+          const data = proxied.data?.data || proxied.data;
           const item = Array.isArray(data) ? data[0] : (data.items ? data.items[0] : data);
-          if (item) {
-            return {
-              success: true,
-              status: (item.status === 'issued' || item.status === 'autorizada') ? 'autorizada' : 'rejeitada',
-              nfe: item
-            };
+          if (item && (item.id || item.chaveAcesso || item.chave)) {
+            const st = mapRemoteNfeStatus(item.status, proxied.status);
+            return { success: st === 'autorizada' || st === 'processando' || st === 'cancelada', status: st, nfe: item };
           }
         }
       } catch {}
@@ -921,32 +941,51 @@ export const fiscalService = {
     const config = overrideConfig || (await this.getConfig());
     const start = Date.now();
 
-    if (config.apiKey && config.apiKey.trim().length > 10) {
+    const apiKey = (config.apiKey || '').trim();
+    if (apiKey) {
       try {
-        const res = await fetch(`${NOTAAS_API_BASE_URL}/status`, {
-          method: 'GET',
-          headers: this.getHeaders(config.apiKey)
+        const proxied = await fiscalApiFetch('/api/nfe/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas'
+          })
         });
         const elapsed = Date.now() - start;
-        if (res.ok) {
-          const data = await res.json();
+        if (proxied.ok && proxied.isJson) {
+          const data = proxied.data?.data || proxied.data;
           return {
             success: true,
-            status: 'online',
-            mensagem: data.mensagem || 'Servidores da SEFAZ-PA operando normalmente.',
+            status: (data.status === 'offline' || data.status === 'instavel') ? data.status : 'online',
+            mensagem: data.mensagem || data.message || 'SEFAZ respondeu ao status.',
             tempoRespostaMs: elapsed,
-            uf: config.estadoEmitente || 'PA'
+            uf: (config as any).estadoEmitente || 'PA'
           };
         }
-      } catch {}
+        return {
+          success: false,
+          status: 'offline',
+          mensagem: proxied.data?.error || `Não foi possível consultar a SEFAZ (HTTP ${proxied.status}).`,
+          tempoRespostaMs: elapsed,
+          uf: (config as any).estadoEmitente || 'PA'
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          status: 'offline',
+          mensagem: err.message || 'Falha ao consultar status da SEFAZ.',
+          uf: (config as any).estadoEmitente || 'PA'
+        };
+      }
     }
 
     return {
-      success: true,
-      status: 'online',
-      mensagem: 'Serviço de Autorização SEFAZ-PA em operação normal.',
-      tempoRespostaMs: 120,
-      uf: config.estadoEmitente || 'PA'
+      success: false,
+      status: 'offline',
+      mensagem: 'Chave de API não configurada. Status da SEFAZ não foi consultado.',
+      uf: (config as any).estadoEmitente || 'PA'
     };
   },
 
@@ -968,41 +1007,34 @@ export const fiscalService = {
 
     const config = overrideConfig || (await this.getConfig());
 
-    if (config.apiKey && config.apiKey.trim().length > 10) {
+    const apiKey = (config.apiKey || '').trim();
+    if (apiKey) {
       try {
-        const endpoints = [
-          `${NOTAAS_API_BASE_URL}/nfe/${chaveOuId}/cancelar`,
-          `${NOTAAS_API_BASE_URL}/cancelar`
-        ];
-
-        for (const url of endpoints) {
-          try {
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: this.getHeaders(config.apiKey),
-              body: JSON.stringify({
-                id: chaveOuId,
-                chaveAcesso: chaveOuId,
-                justificativa: justificativa.trim()
-              })
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              return { success: true, rawResponse: data };
-            } else {
-              const errData = await response.json().catch(() => ({}));
-              return { success: false, error: errData.message || errData.erro || 'Cancelamento rejeitado pela SEFAZ.' };
-            }
-          } catch {}
+        const proxied = await fiscalApiFetch('/api/nfe/cancelar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chaveOuId,
+            justificativa: justificativa.trim(),
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas'
+          })
+        });
+        if (proxied.ok && proxied.isJson) {
+          return { success: true, rawResponse: proxied.data };
         }
+        return {
+          success: false,
+          error: proxied.data?.error || proxied.data?.message || proxied.data?.erro || 'Cancelamento rejeitado pela SEFAZ.',
+          rawResponse: proxied.data
+        };
       } catch (err: any) {
-        return { success: false, error: err.message || 'Erro de comunicação com NotaAs' };
+        return { success: false, error: err.message || 'Erro de comunicação com o proxy fiscal' };
       }
     }
 
-    // Modo Sandbox
-    return { success: true };
+    return { success: false, error: 'Cancelamento em simulação local não é enviado à SEFAZ. Configure a chave de API.' };
   },
 
   /**
@@ -1011,16 +1043,22 @@ export const fiscalService = {
    */
   async obterDanfePdfUrl(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
     const config = overrideConfig || (await this.getConfig());
-    if (config.apiKey && config.apiKey.trim().length > 10) {
+    const apiKey = (config.apiKey || '').trim();
+    if (apiKey) {
       try {
-        const res = await fetch(`${NOTAAS_API_BASE_URL}/nfe/${chaveOuId}/danfe`, {
-          method: 'GET',
-          headers: this.getHeaders(config.apiKey)
+        const proxied = await fiscalApiFetch('/api/nfe/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nfeIdOrChave: chaveOuId,
+            resource: 'danfe',
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas'
+          })
         });
-        if (res.ok) {
-          const blob = await res.blob();
-          return URL.createObjectURL(blob);
-        }
+        const url = proxied.data?.danfeUrl || proxied.data?.data?.danfeUrl || proxied.data?.pdfUrl;
+        if (proxied.ok && url) return url;
       } catch {}
     }
     return null;
@@ -1032,15 +1070,22 @@ export const fiscalService = {
    */
   async obterXmlNFe(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
     const config = overrideConfig || (await this.getConfig());
-    if (config.apiKey && config.apiKey.trim().length > 10) {
+    const apiKey = (config.apiKey || '').trim();
+    if (apiKey) {
       try {
-        const res = await fetch(`${NOTAAS_API_BASE_URL}/nfe/${chaveOuId}/xml`, {
-          method: 'GET',
-          headers: this.getHeaders(config.apiKey)
+        const proxied = await fiscalApiFetch('/api/nfe/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nfeIdOrChave: chaveOuId,
+            resource: 'xml',
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas'
+          })
         });
-        if (res.ok) {
-          return await res.text();
-        }
+        const xml = proxied.data?.xml || proxied.data?.data?.xml || proxied.data?.xmlUrl;
+        if (proxied.ok && xml) return typeof xml === 'string' ? xml : null;
       } catch {}
     }
     return null;

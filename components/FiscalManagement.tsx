@@ -145,24 +145,17 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
     addLog('success', '✅ Etapa 2: Mapeamento do Schema concluído com sucesso!');
 
-    // 4. Teste de Chamada de API Real / Simulação
-    addLog('info', '🔍 Etapa 3: Transmitindo requisição para a API Fiscal...');
+    // 4. Teste de conectividade (NÃO emite NF-e de verdade)
+    addLog('info', '🔍 Etapa 3: Consultando status da SEFAZ via proxy (sem emitir nota)...');
     try {
-      const res = await fiscalService.criarNFe(sampleOrder, sampleCustomer, config);
-
+      const res = await fiscalService.consultarStatusSefaz(config);
       if (res.success) {
-        addLog('success', `🎉 TRANSMISSÃO BEM-SUCEDIDA! Status SEFAZ: ${res.nfeStatus.toUpperCase()}`, {
-          nfeId: res.nfeId,
-          nfeChave: res.nfeChave,
-          nfeNumero: res.nfeNumero,
-          nfeProtocolo: res.nfeProtocolo,
-          rawResponse: res.rawResponse
-        });
+        addLog('success', `SEFAZ respondeu: ${res.status.toUpperCase()} — ${res.mensagem}`, res);
       } else {
-        addLog('error', `❌ REJEIÇÃO OU ERRO DA API: ${res.nfeErro}`, res.rawResponse);
+        addLog('error', `Falha no diagnóstico: ${res.mensagem}`, res);
       }
     } catch (err: any) {
-      addLog('error', `💥 Exceção HTTP durante chamada da API: ${err.message}`, err);
+      addLog('error', `Exceção ao consultar status: ${err.message}`, err);
     } finally {
       setIsTestingApi(false);
     }
@@ -174,7 +167,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       const res = await fiscalService.consultarStatusSefaz(overrideCfg || config || undefined);
       setSefazStatus({ status: res.status, mensagem: res.mensagem, loading: false });
     } catch {
-      setSefazStatus({ status: 'online', mensagem: 'Serviço de Autorização SEFAZ-PA em operação.', loading: false });
+      setSefazStatus({ status: 'offline', mensagem: 'Não foi possível consultar a SEFAZ.', loading: false });
     }
   };
 
