@@ -406,7 +406,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-600 block">Bairro / Comunidade</label>
                 <input
@@ -438,6 +438,20 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                   onChange={e => setState(e.target.value.toUpperCase())}
                   placeholder="PA"
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:border-purple-600 outline-none text-xs font-black uppercase text-center"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-600 block">Código IBGE</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={7}
+                  value={ibgeCode}
+                  onChange={e => setIbgeCode(e.target.value.replace(/\D/g, '').slice(0, 7))}
+                  placeholder="1506807"
+                  title="Preenchido automaticamente pelo CEP. Digite só se a busca falhar (zona rural)."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-purple-600 outline-none text-xs font-mono font-black text-center tracking-wider"
                 />
               </div>
             </div>
