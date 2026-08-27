@@ -3,6 +3,7 @@ import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
 import { db } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
+import { resolveIbgeCode } from './cepService';
 
 /**
  * URL Base Oficial da API NotaAs (NF-e modelo 55)
@@ -244,12 +245,17 @@ export const fiscalService = {
    * Validação prévia dos dados cadastrais e fiscais do pedido e cliente
    * Sem fallbacks de endereço (Santarém/CEP fake). Falta de campo = falha.
    */
-  validarDadosFiscais(order: SaleOrder, customer?: Customer): { valid: boolean; errors: string[] } {
+  validarDadosFiscais(
+    order: SaleOrder,
+    customer?: Customer,
+    options?: { requireResolvedIbge?: boolean }
+  ): { valid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
+    const warnings: string[] = [];
 
     if (!customer) {
       errors.push('Cliente não identificado no pedido.');
-      return { valid: false, errors };
+      return { valid: false, errors, warnings };
     }
 
     const docClean = onlyDigits(customer.document);
@@ -281,7 +287,16 @@ export const fiscalService = {
 
     const ibge = onlyDigits(customer.ibgeCode);
     if (ibge.length !== 7) {
-      errors.push('Código IBGE (ibgeCode) do município deve ter 7 dígitos.');
+      // Não bloqueia a tela de emissão se CEP/cidade permitirem auto-resolver.
+      // Após resolveIbgeCode em criarNFe, requireResolvedIbge=true falha de verdade.
+      const canAuto =
+        onlyDigits(customer.zipCode).length === 8 ||
+        (!!(customer.city || '').trim() && !!(customer.state || '').trim());
+      if (options?.requireResolvedIbge || !canAuto) {
+        errors.push('Código IBGE do município não encontrado. Confira o CEP e a cidade do cliente.');
+      } else {
+        warnings.push('Código IBGE ausente — tentaremos preencher automaticamente pelo CEP e pela cidade.');
+      }
     }
 
     if (!order.items || order.items.length === 0) {
@@ -307,7 +322,8 @@ export const fiscalService = {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
+      warnings
     };
   },
 
@@ -410,7 +426,29 @@ export const fiscalService = {
     const resolvedCompanyId = companyId || order.companyId;
     const invoiceRequestId = `inv_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const config = overrideConfig || (await this.getConfig());
-    const validation = this.validarDadosFiscais(order, customer);
+
+    let dest: Customer = customer;
+    if (customer) {
+      const resolvedIbge = await resolveIbgeCode({
+        zipCode: customer.zipCode,
+        city: customer.city,
+        state: customer.state,
+        ibgeCode: customer.ibgeCode
+      });
+      dest = { ...customer, ibgeCode: resolvedIbge || customer.ibgeCode };
+
+      const persistCompanyId = customer.companyId || order.companyId || resolvedCompanyId;
+      const digits = (resolvedIbge || '').replace(/\D/g, '');
+      if (digits.length === 7 && customer.id && persistCompanyId) {
+        try {
+          await db.upsert('customers', persistCompanyId, { id: customer.id, ibgeCode: digits });
+        } catch (persistErr) {
+          console.warn(`⚠️ [FISCAL SERVICE] [${invoiceRequestId}] Não foi possível persistir ibgeCode no cliente:`, persistErr);
+        }
+      }
+    }
+
+    const validation = this.validarDadosFiscais(order, dest, { requireResolvedIbge: true });
 
     if (!validation.valid) {
       console.warn(`⚠️ [FISCAL SERVICE] [${invoiceRequestId}] Falha na validação prévia dos dados fiscais:`, validation.errors);
@@ -422,7 +460,7 @@ export const fiscalService = {
       };
     }
 
-    const payload = this.montarPayloadNotaAs(order, customer, config);
+    const payload = this.montarPayloadNotaAs(order, dest, config);
     const nfeNumero = (config.proxNumeroNFe || 1042).toString();
     const serie = config.serieNFe || '1';
     const apiKey = (config.apiKey || '').trim();
