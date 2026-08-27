@@ -142,6 +142,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   ))}
                 </ul>
               )}
+              {validation.warnings && validation.warnings.length > 0 && (
+                <ul className="list-disc pl-4 space-y-0.5 text-amber-800 mt-1">
+                  {validation.warnings.map((w, idx) => (
+                    <li key={`w-${idx}`}>{w}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -164,6 +171,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               <p className="text-xs font-bold text-slate-800">{customer.name}</p>
               <p className="text-[11px] text-slate-600">Doc: {customer.document} | IE: {customer.isentoIE ? 'Isento' : (customer.ie || 'Não Informada')}</p>
               <p className="text-[10px] text-slate-500">{customer.street || 'Zona Rural'}, {customer.city || 'Santarém'} - {customer.state || 'PA'}</p>
+              <p className="text-[10px] text-slate-500 font-mono">CEP: {customer.zipCode || '—'} · IBGE: {customer.ibgeCode || 'auto (CEP/cidade)'}</p>
             </div>
 
           </div>
