@@ -123,7 +123,7 @@ export const db = {
                 const docRef = doc(firestoreDb, remoteCollectionName, id);
                 batch.set(docRef, { ...item, companyId: item.companyId || compKey });
               });
-              batch.commit().catch(() => {});
+              batch.commit().catch((e) => console.error('[Firestore] Falha ao reenviar cache local:', e));
             } catch {}
             return localData;
           }
@@ -134,7 +134,7 @@ export const db = {
               const docRef = doc(firestoreDb, remoteCollectionName, item.id || `doc-${Date.now()}-${Math.random()}`);
               batch.set(docRef, { ...item, companyId: compKey });
             });
-            batch.commit().catch(() => {});
+            batch.commit().catch((e) => console.error('[Firestore] Falha ao reenviar cache local:', e));
           }
           storage.set(storageKey, initialData);
           return initialData;
@@ -170,19 +170,21 @@ export const db = {
     });
     storage.set(storageKey, updated);
 
-    // 2. Persiste no Firebase Firestore
+    // 2. Persiste no Firebase Firestore — falha visível, não some no reload
+    if (!firestoreDb) {
+      throw new Error(`Firestore indisponível ao gravar '${tableName}'. Dado ficou só neste computador.`);
+    }
     try {
-      if (firestoreDb) {
-        const remoteCollectionName = `${tableName}_${compKey}`;
-        for (const item of records) {
-          const tagged = { ...item, companyId: item.companyId || compKey };
-          const docId = tagged.id || `id-${Date.now()}`;
-          const docRef = doc(firestoreDb, remoteCollectionName, docId);
-          await setDoc(docRef, tagged, { merge: true });
-        }
+      const remoteCollectionName = `${tableName}_${compKey}`;
+      for (const item of records) {
+        const tagged = { ...item, companyId: item.companyId || compKey };
+        const docId = tagged.id || `id-${Date.now()}`;
+        const docRef = doc(firestoreDb, remoteCollectionName, docId);
+        await setDoc(docRef, tagged, { merge: true });
       }
     } catch (e) {
-      console.warn(`[Firestore] Erro ao sincronizar documento na coleção '${tableName}':`, e);
+      console.error(`[Firestore] Erro ao sincronizar documento na coleção '${tableName}':`, e);
+      throw e;
     }
 
     return updated;
@@ -209,6 +211,9 @@ export const db = {
   // Reset total para base 100% limpa
   async resetCompanyToClean(companyId: string) {
     const compKey = companyId && companyId !== 'main' ? companyId : 'matriz-demo';
+    if (compKey !== 'matriz-demo' && compKey !== 'demo') {
+      throw new Error('Reset de base bloqueado em produção.');
+    }
     const tables = [
       'customers', 'sales_orders', 'transactions', 
       'machines', 'store_items', 'maintenance_records', 

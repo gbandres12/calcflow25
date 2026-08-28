@@ -100,6 +100,13 @@ const App: React.FC = () => {
   // ID isolado da empresa / tenant SaaS atual
   const activeCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
 
+  const persistCloud = (tableName: string, record: any) => {
+    db.upsert(tableName, activeCompanyId, record).catch((err) => {
+      console.error('[PERSISTÊNCIA] Falha ao gravar na nuvem:', tableName, err);
+      window.alert('Atenção: o registro ficou só neste computador. A nuvem não confirmou a gravação. Não recarregue a página e tente salvar de novo.');
+    });
+  };
+
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
     if (!currentUser) return;
@@ -154,7 +161,7 @@ const App: React.FC = () => {
   const handleAddCategory = (name: string, type: 'INFLOW' | 'OUTFLOW') => {
     const newCat: Category = { id: `cat-${Date.now()}`, name, type };
     setCategories(prev => [...prev, newCat]);
-    db.upsert('categories', activeCompanyId, newCat);
+    persistCloud('categories', newCat);
   };
 
   const handleDeleteCategory = (id: string) => {
@@ -166,14 +173,14 @@ const App: React.FC = () => {
   const handleAddMachine = (machineData: Omit<Machine, 'id'>) => {
     const newMachine: Machine = { ...machineData, id: `mach-${Date.now()}` };
     setMachines(prev => [...prev, newMachine]);
-    db.upsert('machines', activeCompanyId, newMachine);
+    persistCloud('machines', newMachine);
   };
 
   const handleUpdateHorimeter = (machineId: string, newHorimeter: number) => {
     setMachines(prev => prev.map(m => {
       if (m.id === machineId) {
         const updated = { ...m, currentHorimeter: newHorimeter };
-        db.upsert('machines', activeCompanyId, updated);
+        persistCloud('machines', updated);
         return updated;
       }
       return m;
@@ -184,7 +191,7 @@ const App: React.FC = () => {
   const handleAddFuel = (fuelData: Omit<FuelRecord, 'id'>) => {
     const newFuel: FuelRecord = { ...fuelData, id: `fuel-${Date.now()}` };
     setFuelRecords(prev => [...prev, newFuel]);
-    db.upsert('fuel_records', activeCompanyId, newFuel);
+    persistCloud('fuel_records', newFuel);
     handleUpdateHorimeter(fuelData.machineId, fuelData.horimeter);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
@@ -202,7 +209,7 @@ const App: React.FC = () => {
   const handleAddFuelPurchase = (purchaseData: Omit<FuelPurchase, 'id'>) => {
     const newPurchase: FuelPurchase = { ...purchaseData, id: `pur-${Date.now()}` };
     setFuelPurchases(prev => [...prev, newPurchase]);
-    db.upsert('fuel_purchases', activeCompanyId, newPurchase);
+    persistCloud('fuel_purchases', newPurchase);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc3',
@@ -220,7 +227,7 @@ const App: React.FC = () => {
   const handleAddMaintenance = (maintData: Omit<MaintenanceRecord, 'id'>) => {
     const newMaint: MaintenanceRecord = { ...maintData, id: `maint-${Date.now()}` };
     setMaintenances(prev => [...prev, newMaint]);
-    db.upsert('maintenance_records', activeCompanyId, newMaint);
+    persistCloud('maintenance_records', newMaint);
     handleAddTransaction({
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc5',
@@ -238,18 +245,18 @@ const App: React.FC = () => {
   const handleAddStoreItem = (itemData: Omit<StoreItem, 'id'>) => {
     const newItem: StoreItem = { ...itemData, id: `store-${Date.now()}` };
     setStoreItems(prev => [...prev, newItem]);
-    db.upsert('store_items', activeCompanyId, newItem);
+    persistCloud('store_items', newItem);
   };
 
   const handleUpdateStoreItem = (item: StoreItem) => {
     setStoreItems(prev => prev.map(s => s.id === item.id ? item : s));
-    db.upsert('store_items', activeCompanyId, item);
+    persistCloud('store_items', item);
   };
 
   // Contas Financeiras
   const handleUpdateAccount = (updatedAccount: FinancialAccount) => {
     setAccounts(prev => prev.map(acc => acc.id === updatedAccount.id ? updatedAccount : acc));
-    db.upsert('financial_accounts', activeCompanyId, updatedAccount);
+    persistCloud('financial_accounts', updatedAccount);
   };
 
   // Transações Financeiras
@@ -283,7 +290,7 @@ const App: React.FC = () => {
       totalSpent: 0
     }));
     setCustomers(prev => [...prev, ...formatted]);
-    db.upsert('customers', activeCompanyId, formatted);
+    persistCloud('customers', formatted);
   };
 
   const handleAddCustomer = (newCustomer: Omit<Customer, 'id' | 'totalSpent'>): Customer => {
@@ -293,7 +300,7 @@ const App: React.FC = () => {
       totalSpent: 0
     };
     setCustomers(prev => [...prev, customer]);
-    db.upsert('customers', activeCompanyId, customer);
+    persistCloud('customers', customer);
     return customer;
   };
 
@@ -312,12 +319,12 @@ const App: React.FC = () => {
   const handleAddInventoryItem = (item: Omit<InventoryItem, 'id'> & { id?: string }) => {
     const newItem: InventoryItem = { ...item, id: item.id || `prod-${Date.now()}` };
     setInventory(prev => [...prev, newItem]);
-    db.upsert('inventory', activeCompanyId, newItem);
+    persistCloud('inventory', newItem);
   };
 
   const handleUpdateInventoryItem = (item: InventoryItem) => {
     setInventory(prev => prev.map(i => i.id === item.id ? item : i));
-    db.upsert('inventory', activeCompanyId, item);
+    persistCloud('inventory', item);
   };
 
   const handleDeleteInventoryItem = (id: string) => {
@@ -353,7 +360,7 @@ const App: React.FC = () => {
     const reference = `PED-${new Date().getFullYear()}-${(orders.length + 1).toString().padStart(4, '0')}`;
     const newOrder: SaleOrder = { ...orderData, id: `ord-${Date.now()}`, reference };
     setOrders(prev => [...prev, newOrder]);
-    db.upsert('sales_orders', activeCompanyId, newOrder);
+    persistCloud('sales_orders', newOrder);
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments);
     }
@@ -401,7 +408,7 @@ const App: React.FC = () => {
             totalSpent: Number(c.totalSpent || 0) + order.total,
             status: 'Ativo' as const
           };
-          db.upsert('customers', activeCompanyId, updatedCustomer);
+          persistCloud('customers', updatedCustomer);
           return updatedCustomer;
         }
         return c;
@@ -410,7 +417,7 @@ const App: React.FC = () => {
     });
     const finalizedOrder = { ...order, payments, status: OrderStatus.FINALIZED };
     setOrders(prev => prev.map(o => o.id === order.id ? finalizedOrder : o));
-    db.upsert('sales_orders', activeCompanyId, finalizedOrder);
+    persistCloud('sales_orders', finalizedOrder);
   };
 
   const handlePaymentReceived = (receipt: PaymentReceipt, _updatedOrder: SaleOrder) => {
@@ -445,7 +452,7 @@ const App: React.FC = () => {
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-    db.upsert('sales_orders', activeCompanyId, updatedOrder);
+    persistCloud('sales_orders', updatedOrder);
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(updatedOrder, updatedOrder.payments);
     }
@@ -453,6 +460,10 @@ const App: React.FC = () => {
 
   // Resetar empresa para banco 100% limpo
   const handleResetCompanyDatabase = async () => {
+    if (activeCompanyId !== 'matriz-demo' && activeCompanyId !== 'demo') {
+      window.alert('Reset de base está bloqueado em produção para não perder pedidos reais.');
+      return;
+    }
     if (!window.confirm(`Tem certeza que deseja zerar todos os registros de "${currentUser.companyName || 'sua empresa'}" e deixar a base 100% limpa?`)) {
       return;
     }
@@ -592,24 +603,6 @@ const App: React.FC = () => {
                   <span className={`font-black uppercase px-2 py-0.5 rounded-lg ${activeCompanyId === 'matriz-demo' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                     {activeCompanyId === 'matriz-demo' ? 'Demonstração' : 'Produção SaaS'}
                   </span>
-                  {activeCompanyId !== 'matriz-demo' && (
-                    <button
-                      onClick={handleResetCompanyDatabase}
-                      title="Zerar todos os dados e deixar a base limpa"
-                      className="ml-1 px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-black transition-colors border border-rose-200"
-                    >
-                      Limpar
-                    </button>
-                  )}
-                  {activeCompanyId !== 'matriz-demo' && orders.length === 0 && customers.length === 0 && (
-                    <button
-                      onClick={handleLoadDemoData}
-                      title="Carregar registros de demonstração para testes rápidos"
-                      className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg font-black transition-colors border border-purple-200"
-                    >
-                      Testar Demo
-                    </button>
-                  )}
                 </div>
 
                 {currentUser.onboardingCompleted === false && (
