@@ -6,8 +6,9 @@ import { INITIAL_USERS } from '../constants';
 import { 
   Lock, Mail, Loader2, ArrowRight, Factory, ShieldCheck, 
   Sparkles, UserCheck, Briefcase, Wrench, Building2, Phone, 
-  UserPlus, LogIn, CheckCircle2, Shield, HardHat 
+  UserPlus, LogIn, CheckCircle2, Shield, HardHat, Database 
 } from 'lucide-react';
+import { DatabaseStatusModal } from './DatabaseStatusModal';
 
 interface LoginProps {
   onLoginSuccess: (user: User, isNewRegistration?: boolean) => void;
@@ -15,6 +16,7 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [showDbModal, setShowDbModal] = useState(false);
   
   // Login State
   const [email, setEmail] = useState('admin@calcarioflow.com.br');
@@ -355,14 +357,27 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          <div className="pt-2 border-t border-slate-100 text-center">
+          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              © 2026 CalcárioFlow ERP • Plataforma SaaS de Moagem Mineral
+              © 2026 CalcárioFlow ERP • Moagem Mineral
             </p>
+            <button
+              type="button"
+              onClick={() => setShowDbModal(true)}
+              className="text-[11px] text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-purple-50 transition"
+            >
+              <Database size={13} className="text-emerald-500" />
+              Status Supabase Cloud
+            </button>
           </div>
         </div>
 
       </div>
+
+      <DatabaseStatusModal 
+        isOpen={showDbModal} 
+        onClose={() => setShowDbModal(false)} 
+      />
     </div>
   );
 };

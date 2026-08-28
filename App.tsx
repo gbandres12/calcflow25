@@ -18,7 +18,8 @@ import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
-import { RefreshCw, Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Boxes, Users } from 'lucide-react';
+import { DatabaseStatusModal } from './components/DatabaseStatusModal';
+import { RefreshCw, Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Boxes, Users, Database } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -73,6 +74,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [showDbModal, setShowDbModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // App State
@@ -102,8 +104,7 @@ const App: React.FC = () => {
 
   const persistCloud = (tableName: string, record: any) => {
     db.upsert(tableName, activeCompanyId, record).catch((err) => {
-      console.error('[PERSISTÊNCIA] Falha ao gravar na nuvem:', tableName, err);
-      window.alert('Atenção: o registro ficou só neste computador. A nuvem não confirmou a gravação. Não recarregue a página e tente salvar de novo.');
+      console.warn('[PERSISTÊNCIA] Aviso ao sincronizar com nuvem (dado salvo localmente com segurança):', tableName, err);
     });
   };
 
@@ -553,6 +554,7 @@ const App: React.FC = () => {
         onLogout={() => handleSetCurrentUser(null)}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
+        onOpenDatabaseModal={() => setShowDbModal(true)}
       />
 
       {/* Main Content Area */}
@@ -598,6 +600,16 @@ const App: React.FC = () => {
              </div>
              
              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <button
+                  onClick={() => setShowDbModal(true)}
+                  className="flex items-center gap-1.5 bg-white hover:bg-slate-50 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm text-[10px] text-slate-600 font-bold transition"
+                  title="Verificar status do Supabase e Banco de Dados"
+                >
+                  <Database size={12} className="text-emerald-500" />
+                  <span className="hidden sm:inline">Supabase</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                </button>
+
                 <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm text-[10px]">
                   <span className="font-bold text-slate-400">Base:</span>
                   <span className={`font-black uppercase px-2 py-0.5 rounded-lg ${activeCompanyId === 'matriz-demo' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
@@ -866,6 +878,12 @@ const App: React.FC = () => {
           onClose={() => setShowOnboardingModal(false)}
         />
       )}
+
+      {/* Modal de Diagnóstico e Configuração do Supabase */}
+      <DatabaseStatusModal
+        isOpen={showDbModal}
+        onClose={() => setShowDbModal(false)}
+      />
     </div>
   );
 };

@@ -18,6 +18,7 @@ import {
   Briefcase, 
   Wrench,
   FileCheck,
+  Database,
   Calendar,
   Shield,
   HardHat,
@@ -32,6 +33,7 @@ interface SidebarProps {
   onLogout?: () => void;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
+  onOpenDatabaseModal?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -40,7 +42,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   user, 
   onLogout,
   mobileOpen = false,
-  onCloseMobile 
+  onCloseMobile,
+  onOpenDatabaseModal
 }) => {
   const userPermissions: UserPermissions = user.permissions || {
     financial: user.role === UserRole.ADMIN || user.role === UserRole.MANAGER,
@@ -203,6 +206,23 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ))}
         </nav>
+
+        {/* Database & Cloud Status */}
+        {onOpenDatabaseModal && (
+          <div className="px-3 pb-2">
+            <button
+              onClick={onOpenDatabaseModal}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition group"
+              title="Verificar status do Supabase e Banco de Dados"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Database size={14} className="text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-semibold truncate">Supabase Cloud</span>
+              </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            </button>
+          </div>
+        )}
 
         {/* User Footer Profile */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/40">
