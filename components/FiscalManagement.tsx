@@ -533,6 +533,26 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               />
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Estadual</label>
+              <input
+                type="text"
+                value={config.cfopTransferenciaEstadual || '5152'}
+                onChange={(e) => setConfig({ ...config, cfopTransferenciaEstadual: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Interestadual</label>
+              <input
+                type="text"
+                value={config.cfopTransferenciaInterestadual || '6152'}
+                onChange={(e) => setConfig({ ...config, cfopTransferenciaInterestadual: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              />
+            </div>
+
           </div>
 
           <div className="space-y-1.5 pt-2">

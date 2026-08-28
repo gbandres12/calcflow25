@@ -16,7 +16,7 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { DanfeModal } from './DanfeModal';
@@ -102,6 +102,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   // NF-e Modals
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
   const [devolutionChave, setDevolutionChave] = useState<string | undefined>(undefined);
+  const [emitTransferencia, setEmitTransferencia] = useState(false);
   const [orderToViewDanfe, setOrderToViewDanfe] = useState<SaleOrder | null>(null);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
 
@@ -801,12 +802,29 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setOrderToEmitNfe(order)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm transition-all"
-                        >
-                          <Send size={12} /> Emitir NF-e
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setEmitTransferencia(false);
+                              setDevolutionChave(undefined);
+                              setOrderToEmitNfe(order);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm transition-all"
+                          >
+                            <Send size={12} /> Emitir NF-e
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEmitTransferencia(true);
+                              setDevolutionChave(undefined);
+                              setOrderToEmitNfe(order);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-[10px] font-black transition-all"
+                            title="NF-e de transferência de estoque (CFOP 5152/6152)"
+                          >
+                            <ArrowRightLeft size={12} /> Transferência
+                          </button>
+                        </div>
                       )
                     )}
                   </div>
@@ -1877,14 +1895,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           config={fiscalConfig}
           company={company}
           devolutionChave={devolutionChave}
+          transferencia={emitTransferencia}
           onClose={() => {
             setOrderToEmitNfe(null);
             setDevolutionChave(undefined);
+            setEmitTransferencia(false);
           }}
           onSuccess={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
             setOrderToEmitNfe(null);
             setDevolutionChave(undefined);
+            setEmitTransferencia(false);
             setOrderToViewDanfe(updatedOrder);
           }}
         />

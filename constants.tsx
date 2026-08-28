@@ -38,6 +38,8 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   naturezaOperacaoPadrao: 'Venda de produção do estabelecimento',
   cfopPadraoEstadual: '5101',
   cfopPadraoInterestadual: '6101',
+  cfopTransferenciaEstadual: '5152',
+  cfopTransferenciaInterestadual: '6152',
   aliquotaIcmsPadrao: 0,
   cstIcmsPadrao: '40',
   cstPisCofins: '07',

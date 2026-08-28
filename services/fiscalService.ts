@@ -60,6 +60,7 @@ export interface NotaAsItemPayload {
 
 export interface NfeEmitOpts {
   devolucao?: { chaveAcesso: string; nItem?: number };
+  transferencia?: boolean;
 }
 
 export interface NotaAsPagamento {
@@ -350,13 +351,18 @@ export const fiscalService = {
     opts?: NfeEmitOpts
   ): NotaAsCriarNFePayload {
     const isDevolucao = Boolean(opts?.devolucao?.chaveAcesso);
+    const isTransferencia = Boolean(opts?.transferencia) && !isDevolucao;
     const isInterestadual = customer.state && customer.state !== COMPANY_INFO.state;
     const cfopVenda = isInterestadual
       ? (config.cfopPadraoInterestadual || '6101')
       : (config.cfopPadraoEstadual || '5101');
     const cfopPadrao = isDevolucao
       ? (isInterestadual ? '6202' : '5202')
-      : cfopVenda;
+      : isTransferencia
+        ? (isInterestadual
+            ? (config.cfopTransferenciaInterestadual || '6152')
+            : (config.cfopTransferenciaEstadual || '5152'))
+        : cfopVenda;
     const docClean = onlyDigits(customer.document);
     const isPF = docClean.length === 11;
     const ibge = onlyDigits(customer.ibgeCode);
@@ -390,7 +396,7 @@ export const fiscalService = {
         descricao: it.productName,
         codigo: it.productCode || `CALC-${idx + 1}`,
         ncm: onlyDigits(it.ncm),
-        cfop: isDevolucao ? onlyDigits(cfopPadrao) : (onlyDigits(it.cfop) || onlyDigits(cfopPadrao)),
+        cfop: (isDevolucao || isTransferencia) ? onlyDigits(cfopPadrao) : (onlyDigits(it.cfop) || onlyDigits(cfopPadrao)),
         quantidade: it.quantity,
         valorUnitario: it.unitPrice,
         valorTotal: it.total,
@@ -411,33 +417,37 @@ export const fiscalService = {
       return row;
     });
 
-    const tipoPagamento = isDevolucao
+    const semPagamento = isDevolucao || isTransferencia;
+    const tipoPagamento = semPagamento
       ? '90'
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
     const infParts = [
       config.observacoesFiscaisPadrao,
       `Pedido: ${order.reference}`,
       order.sellerName ? `Vendedor: ${order.sellerName}` : '',
-      isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : ''
+      isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
+      isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
     ].filter(Boolean);
 
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
       naturezaOperacao: isDevolucao
         ? 'Devolucao de mercadoria'
-        : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
+        : isTransferencia
+          ? 'Transferencia de producao do estabelecimento'
+          : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
       dest,
       items,
-      pagamentos: [{ tipoPagamento, valor: isDevolucao ? 0 : order.total }],
-      transporte: { modalidadeFrete: order.shipping && !isDevolucao ? 0 : 9 },
+      pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],
+      transporte: { modalidadeFrete: order.shipping && !semPagamento ? 0 : 9 },
       tipoOperacao: 1,
       finalidade: isDevolucao ? 4 : 1,
-      consumidorFinal: isPF ? 1 : 0,
+      consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
       infCpl: infParts.join(' | ').trim()
     };
 
-    if (order.shipping) payload.valorFrete = order.shipping;
+    if (order.shipping && !semPagamento) payload.valorFrete = order.shipping;
     return payload;
   },
 

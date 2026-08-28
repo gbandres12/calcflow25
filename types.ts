@@ -373,6 +373,8 @@ export interface FiscalConfig {
   naturezaOperacaoPadrao: string;
   cfopPadraoEstadual: string;
   cfopPadraoInterestadual: string;
+  cfopTransferenciaEstadual?: string;
+  cfopTransferenciaInterestadual?: string;
   aliquotaIcmsPadrao?: number;
   cstIcmsPadrao?: string;
   cstPisCofins?: string;
