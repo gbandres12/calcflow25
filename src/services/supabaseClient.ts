@@ -26,8 +26,13 @@ const supabaseUrl: string =
 
 const supabaseAnonKey: string = 
   getEnvVar('VITE_SUPABASE_ANON_KEY') || 
+  getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY') || 
+  getEnvVar('VITE_SUPABASE_KEY') || 
   getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || 
-  getEnvVar('SUPABASE_ANON_KEY');
+  getEnvVar('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') || 
+  getEnvVar('SUPABASE_ANON_KEY') || 
+  getEnvVar('SUPABASE_PUBLISHABLE_KEY') || 
+  getEnvVar('SUPABASE_KEY');
 
 let _supabase: SupabaseClient | null = null;
 

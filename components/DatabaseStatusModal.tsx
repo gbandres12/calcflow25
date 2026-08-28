@@ -141,7 +141,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
                 </span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800/80">
-                <span className="text-slate-400 font-mono">VITE_SUPABASE_ANON_KEY</span>
+                <span className="text-slate-400 font-mono">Chave Pública (ANON / PUBLISHABLE)</span>
                 <span className="font-mono text-slate-200">
                   {config.hasKey ? (
                     <span className="text-emerald-400">Configurada ({config.keyPrefix})</span>
