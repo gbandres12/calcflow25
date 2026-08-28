@@ -1,6 +1,6 @@
 import React from 'react';
 import { SaleOrder, Customer, Company } from '../types';
-import { Printer, Download, X, Copy, Check, ShieldCheck, Wheat, Truck, DollarSign, Calendar, MapPin, Phone, Building2 } from 'lucide-react';
+import { Printer, X, Copy, Check, ShieldCheck, Sprout, Globe, Mountain, Phone } from 'lucide-react';
 
 interface SalesOrderPdfModalProps {
   order: SaleOrder;
@@ -8,6 +8,18 @@ interface SalesOrderPdfModalProps {
   company: Company;
   onClose: () => void;
 }
+
+const NAVY = '#1A2B48';
+const GREEN = '#2E5236';
+
+const PRINT_ADDR = {
+  street: 'Estrada Vicinal do Arrozal, Km 08, S/N – Zona Rural',
+  city: 'Mojuí dos Campos',
+  state: 'PA',
+  cep: '68.129-000',
+  phones: '(93) 99106-2474  ·  (93) 99224-2747',
+  instagram: '@cbamineracao',
+};
 
 export const SalesOrderPdfModal: React.FC<SalesOrderPdfModalProps> = ({
   order,
@@ -18,7 +30,6 @@ export const SalesOrderPdfModal: React.FC<SalesOrderPdfModalProps> = ({
   const [copied, setCopied] = React.useState(false);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
   const isBudget = order.status === 'Orçamento';
 
   const handlePrint = () => {
@@ -26,7 +37,7 @@ export const SalesOrderPdfModal: React.FC<SalesOrderPdfModalProps> = ({
   };
 
   const handleCopySummary = () => {
-    const isBarterText = order.isBarter 
+    const isBarterText = order.isBarter
       ? `\n🌾 OPERAÇÃO DE BARTER: ${order.barterCommodityType || 'MILHO'} | Cotação: R$ ${order.cornPricePerTon}/TON | Qtd Grãos: ${order.cornTons?.toFixed(2)} TON`
       : '';
 
@@ -39,352 +50,278 @@ export const SalesOrderPdfModal: React.FC<SalesOrderPdfModalProps> = ({
 📦 *Quantidade:* ${order.items.reduce((s, i) => s + (i.quantity || 0), 0)} TON
 
 Obrigado pela parceria!
-_CalcárioFlow Mineração & Nutrição Vegetal_`;
+_CBA Mineração_`;
 
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const totalQtyTons = order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-  const totalPaidReceipts = (order.receipts || []).reduce((sum, r) => sum + r.amount, 0);
+  const customerAddr = customer?.street
+    ? `${customer.street}, ${customer.number || 'S/N'}${customer.neighborhood ? ` – ${customer.neighborhood}` : ''}`
+    : 'Zona Rural';
+
+  const paddedItems = [...(order.items || [])];
+  while (paddedItems.length < 3) paddedItems.push(null as any);
 
   return (
     <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-3 md:p-6 overflow-y-auto print:p-0 print:static print:bg-white">
-      
-      {/* Container Principal */}
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:w-full print:rounded-none">
-        
-        {/* Barra Superior com Ações do Modal (Escondida no Print) */}
-        <div className="bg-slate-900 text-white p-4 px-6 flex items-center justify-between border-b border-slate-800 print:hidden shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-600/30 text-purple-300 rounded-xl border border-purple-500/30">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <h3 className="font-black text-sm tracking-tight text-white flex items-center gap-2">
-                Documento Oficial de Venda / Contrato
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-900/80 text-purple-200 border border-purple-700">
-                  REF: {order.reference}
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Visualização formatada para impressão A4 e exportação em PDF.
-              </p>
-            </div>
-          </div>
 
+        <div className="text-white p-4 px-6 flex items-center justify-between print:hidden shrink-0" style={{ background: NAVY }}>
+          <div>
+            <h3 className="font-black text-sm tracking-tight text-white">Pedido de Venda CBA</h3>
+            <p className="text-[11px] text-slate-300">Layout A4 para impressão e PDF · REF {order.reference}</p>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopySummary}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all border border-slate-700"
-              title="Copiar resumo textual para WhatsApp"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-all border border-white/15"
             >
-              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+              {copied ? <Check size={14} className="text-emerald-300" /> : <Copy size={14} />}
               <span>{copied ? 'Copiado!' : 'Copiar Resumo'}</span>
             </button>
-
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-purple-900/40"
+              className="flex items-center gap-2 px-5 py-2 text-white text-xs font-black rounded-xl transition-all"
+              style={{ background: GREEN }}
             >
               <Printer size={16} />
               <span>Imprimir / Salvar PDF</span>
             </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-colors ml-1"
-            >
+            <button onClick={onClose} className="p-2 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl transition-colors ml-1">
               <X size={20} />
             </button>
           </div>
         </div>
 
-        {/* Corpo do Documento A4 Printable */}
-        <div className="p-8 md:p-12 overflow-y-auto space-y-8 print:p-0 print:overflow-visible text-slate-800 font-sans" id="printable-sales-order">
-          
-          {/* Topo / Cabeçalho do Documento */}
-          <div className="border-b-2 border-slate-900 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-purple-950 text-white flex items-center justify-center font-black text-2xl shadow-md border border-purple-800">
-                CF
-              </div>
-              <div className="space-y-0.5">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">{company.name}</h1>
-                <p className="text-xs text-slate-600 font-bold">
-                  CNPJ: {company.document || '10.375.218/0001-50'} &bull; IE: 15.829.401-2
+        <div className="overflow-y-auto print:overflow-visible bg-white" id="printable-sales-order">
+          <div className="px-8 pt-7 pb-4 flex items-start justify-between gap-6">
+            <div className="flex items-center gap-4 min-w-0">
+              <img
+                src="/cba-logo.png"
+                alt="CBA Mineração"
+                className="h-16 w-auto object-contain shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-wide uppercase" style={{ color: NAVY }}>
+                  {company.name || 'CBA Mineração'}
                 </p>
-                <p className="text-xs text-slate-500 font-medium">
-                  {company.address || 'Rodovia Mineral BR-163, Km 42 - Distrito Industrial'} &bull; {company.city || 'Santarém'}-{company.state || 'PA'}
-                </p>
-                <p className="text-xs text-slate-500 font-medium flex items-center gap-2">
-                  <span>Fone: {company.phone || '(93) 3522-8000'}</span> &bull; <span>vendas@calcarioflow.com.br</span>
+                <p className="text-[10px] text-slate-500">
+                  CNPJ: {company.document || '10.375.218/0001-84'}
                 </p>
               </div>
             </div>
-
-            <div className="text-left md:text-right space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 min-w-[220px]">
-              <span className={`inline-block px-3 py-1 text-[11px] font-black uppercase rounded-lg tracking-wider ${
-                isBudget ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-slate-900 text-white'
-              }`}>
-                {isBudget ? 'ORÇAMENTO COMERCIAL' : 'PEDIDO DE VENDA'}
-              </span>
-              <p className="text-2xl font-black text-slate-900 tracking-tight">Nº {order.reference}</p>
-              <div className="text-[11px] text-slate-500 font-medium space-y-0.5 pt-1 border-t border-slate-200">
-                <p>Data Emissão: <strong className="text-slate-800">{order.date}</strong></p>
-                <p>Vendedor: <strong className="text-slate-800">{order.sellerName || 'Atendimento Comercial'}</strong></p>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-black tracking-tight uppercase" style={{ color: GREEN }}>
+                {isBudget ? 'Orçamento' : 'Pedido de Venda'}
+              </p>
+              <div className="mt-1 inline-flex items-center gap-2">
+                <span className="text-[10px] font-black text-white px-2 py-1 rounded-sm" style={{ background: NAVY }}>Nº</span>
+                <span className="text-sm font-black tracking-tight" style={{ color: NAVY }}>{order.reference}</span>
               </div>
             </div>
           </div>
 
-          {/* Seção Cliente / Produtor Rural */}
-          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-5 space-y-3">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 border-b border-slate-200/80 pb-2">
-              <Building2 size={14} className="text-purple-600" />
-              Identificação do Cliente / Produtor Rural
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-2 text-xs">
-              <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Razão Social / Nome:</span>
-                <strong className="text-slate-900 text-sm font-black">{customer?.name || 'Cliente Não Informado'}</strong>
+          <div className="px-8 pb-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { Icon: Mountain, label: 'Calcário Dolomítico' },
+              { Icon: ShieldCheck, label: 'Alto PRNT e Qualidade' },
+              { Icon: Sprout, label: 'Produtividade no Campo' },
+              { Icon: Globe, label: 'Responsabilidade Ambiental' },
+            ].map(({ Icon, label }) => (
+              <div key={label} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide" style={{ color: NAVY }}>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style={{ background: GREEN }}>
+                  <Icon size={14} />
+                </span>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="px-8 pb-3">
+            <div className="text-white text-[11px] font-black uppercase tracking-widest px-3 py-1.5" style={{ background: NAVY }}>
+              Dados do Cliente
+            </div>
+            <div className="border border-slate-200 border-t-0 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 p-3 text-[11px]">
+              <div className="col-span-2">
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Razão Social</span>
+                <strong style={{ color: NAVY }}>{customer?.name || '—'}</strong>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">CPF / CNPJ:</span>
-                <strong className="text-slate-800">{customer?.document || 'Não informado'}</strong>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">CNPJ / CPF</span>
+                <strong>{customer?.document || '—'}</strong>
+              </div>
+              <div className="col-span-2">
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Endereço</span>
+                <strong>{customerAddr}</strong>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Inscrição Estadual:</span>
-                <strong className="text-slate-800">{customer?.isentoIE ? 'ISENTO' : (customer?.ie || 'Não informada')}</strong>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Município / UF</span>
+                <strong>{customer?.city || '—'} / {customer?.state || '—'}</strong>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Telefone / Contato:</span>
-                <strong className="text-slate-800">{customer?.phone || 'Não informado'}</strong>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Contato</span>
+                <strong>{customer?.name || '—'}</strong>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Município / UF:</span>
-                <strong className="text-slate-800">{customer?.city || company.city} - {customer?.state || company.state}</strong>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Telefone</span>
+                <strong>{customer?.phone || '—'}</strong>
               </div>
               <div>
-                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Endereço / Propriedade:</span>
-                <strong className="text-slate-800">{customer?.street ? `${customer.street}, ${customer.number || 'S/N'}` : 'Zona Rural'}</strong>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">E-mail</span>
+                <strong>{customer?.email || '—'}</strong>
               </div>
             </div>
           </div>
 
-          {/* Tabela de Produtos / Calcário */}
-          <div className="space-y-2">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              Discriminativo dos Produtos / Calcário Agrícola
-            </h2>
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-900 text-white font-black uppercase tracking-wider text-[10px]">
-                    <th className="p-3 pl-4">Produto / Minério</th>
-                    <th className="p-3 text-center">NCM</th>
-                    <th className="p-3 text-center">Unidade</th>
-                    <th className="p-3 text-right">Qtd (TON)</th>
-                    <th className="p-3 text-right">Unitário (R$)</th>
-                    <th className="p-3 pr-4 text-right">Total (R$)</th>
+          <div className="px-8 pb-3">
+            <div className="text-white text-[11px] font-black uppercase tracking-widest px-3 py-1.5" style={{ background: NAVY }}>
+              Dados do Pedido
+            </div>
+            <div className="border border-slate-200 border-t-0 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 p-3 text-[11px]">
+              <div>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Data do Pedido</span>
+                <strong>{order.date}</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Previsão de Entrega</span>
+                <strong>{order.deliveryDate || 'A combinar'}</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Cond. de Pagamento</span>
+                <strong>{order.paymentMethod || (order.isBarter ? 'Barter' : 'A combinar')}</strong>
+              </div>
+              <div>
+                <span className="block text-[9px] uppercase font-bold text-slate-400">Vendedor</span>
+                <strong>{order.sellerName || 'Comercial CBA'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-8 pb-4">
+            <table className="w-full text-[11px] border-collapse">
+              <thead>
+                <tr className="text-white text-[10px] uppercase tracking-wider" style={{ background: NAVY }}>
+                  <th className="p-2 text-left font-black">Item</th>
+                  <th className="p-2 text-left font-black">Produto</th>
+                  <th className="p-2 text-left font-black">Descrição</th>
+                  <th className="p-2 text-center font-black">Qtde.</th>
+                  <th className="p-2 text-center font-black">Unid.</th>
+                  <th className="p-2 text-right font-black">Valor Unit.</th>
+                  <th className="p-2 text-right font-black">Valor Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paddedItems.map((item, idx) => (
+                  <tr key={idx} style={{ background: idx % 2 === 0 ? '#fff' : '#F2F2F2' }}>
+                    <td className="p-2 font-bold">{item ? String(idx + 1).padStart(2, '0') : ''}</td>
+                    <td className="p-2 font-bold" style={{ color: NAVY }}>{item?.productName || ''}</td>
+                    <td className="p-2 text-slate-600">{item ? (item.ncm ? `NCM ${item.ncm}` : 'Calcário agrícola') : ''}</td>
+                    <td className="p-2 text-center font-black">{item?.quantity ?? ''}</td>
+                    <td className="p-2 text-center uppercase">{item?.unit || ''}</td>
+                    <td className="p-2 text-right">{item ? formatBRL(item.unitPrice) : ''}</td>
+                    <td className="p-2 text-right font-black">{item ? formatBRL(item.total) : ''}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                  {order.items.map((item, idx) => (
-                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                      <td className="p-3 pl-4 font-bold text-slate-900">{item.productName}</td>
-                      <td className="p-3 text-center text-slate-500 font-mono text-[11px]">{item.ncm || '2517.10.00'}</td>
-                      <td className="p-3 text-center uppercase font-semibold text-slate-600">{item.unit || 'TON'}</td>
-                      <td className="p-3 text-right font-black text-slate-900">{item.quantity}</td>
-                      <td className="p-3 text-right">{formatBRL(item.unitPrice)}</td>
-                      <td className="p-3 pr-4 text-right font-black text-slate-900">{formatBRL(item.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          {/* Destaque Barter / Permuta Agro (se for Barter) */}
           {order.isBarter && (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wider">
-                <Wheat size={16} className="text-amber-600" />
-                Modalidade Barter / Permuta por Grãos Agrícolas
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-bold text-amber-950">
-                <div>
-                  <span className="text-[10px] text-amber-700 block font-normal uppercase">Commodity:</span>
-                  <span>{order.barterCommodityType || 'MILHO'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-amber-700 block font-normal uppercase">Cotação Base:</span>
-                  <span>{formatBRL(order.cornPricePerTon || 0)} / TON</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-amber-700 block font-normal uppercase">Volume de Grãos:</span>
-                  <span>{(order.cornTons || 0).toFixed(2)} TON</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-amber-700 block font-normal uppercase">Equivalência Sacas (60kg):</span>
-                  <span>{((order.cornTons || 0) * 16.6667).toFixed(0)} Sacas</span>
-                </div>
+            <div className="px-8 pb-4">
+              <div className="border px-3 py-2 text-[11px]" style={{ borderColor: GREEN, background: '#f4f8f4' }}>
+                <strong style={{ color: GREEN }}>Barter:</strong> {order.barterCommodityType || 'MILHO'} · Cotação {formatBRL(order.cornPricePerTon || 0)}/TON · {(order.cornTons || 0).toFixed(2)} TON
               </div>
             </div>
           )}
 
-          {/* Resumo Financeiro & Cronograma de Pagamento */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Histórico de Entradas / Recibos */}
-            <div className="md:col-span-2 border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3">
-              <h3 className="text-xs font-black uppercase text-slate-600 border-b border-slate-200 pb-2">
-                Condições de Pagamento & Abatimentos Registrados
-              </h3>
-
-              {order.receipts && order.receipts.length > 0 ? (
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-black uppercase text-emerald-700">Entradas / Abatimentos Pagos:</p>
-                  <table className="w-full text-xs text-left">
-                    <tbody className="divide-y divide-slate-100">
-                      {order.receipts.map(r => (
-                        <tr key={r.id}>
-                          <td className="py-1 text-slate-600 font-medium">{r.date} - Recibo #{r.id} ({r.paymentMethod})</td>
-                          <td className="py-1 text-right font-black text-emerald-600">{formatBRL(r.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">Nenhuma entrada ou sinal registrado até o momento.</p>
-              )}
-
-              {order.payments && order.payments.length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-slate-200">
-                  <p className="text-[10px] font-black uppercase text-slate-500">Parcelas / Vencimentos Programados:</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    {order.payments.map((p, idx) => (
-                      <div key={idx} className="p-2 bg-white rounded-xl border border-slate-200 flex justify-between items-center font-medium">
-                        <span>Venc: <strong>{p.date}</strong></span>
-                        <strong className="text-slate-900">{formatBRL(p.amount)}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Totalizadores */}
-            <div className="bg-slate-900 text-white rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-md">
-              <div className="space-y-2 text-xs border-b border-slate-800 pb-3">
-                <div className="flex justify-between text-slate-400">
-                  <span>Subtotal dos Itens:</span>
-                  <span className="font-bold text-white">{formatBRL(order.subtotal)}</span>
-                </div>
-                {order.discount > 0 && (
-                  <div className="flex justify-between text-rose-400">
-                    <span>Desconto Concedido:</span>
-                    <span className="font-bold">- {formatBRL(order.discount)}</span>
-                  </div>
-                )}
-                {order.shipping > 0 && (
-                  <div className="flex justify-between text-slate-300">
-                    <span>Frete / Transporte:</span>
-                    <span className="font-bold">{formatBRL(order.shipping)}</span>
-                  </div>
-                )}
+          <div className="px-8 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-slate-200 p-4 flex gap-3 items-start" style={{ background: '#F7F8FA' }}>
+              <div className="w-16 h-16 rounded-lg flex items-center justify-center text-white shrink-0" style={{ background: GREEN }}>
+                <Mountain size={28} />
               </div>
-
-              <div className="space-y-1">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Valor Total do Pedido</span>
-                <p className="text-2xl font-black text-emerald-400">{formatBRL(order.total)}</p>
-                <p className="text-[11px] text-slate-400">Volume Total: <strong>{totalQtyTons} TON</strong></p>
+              <div className="text-[11px] space-y-1">
+                <p className="font-black uppercase tracking-wide" style={{ color: NAVY }}>Produto: Calcário Dolomítico</p>
+                <p><strong>PRNT mínimo garantido:</strong> 80%</p>
+                <p><strong>MgO mínimo garantido:</strong> 14%</p>
+                <p className="text-[9px] text-slate-500 pt-1">Valores sujeitos a variação conforme análise laboratorial de cada lote.</p>
               </div>
             </div>
-
-          </div>
-
-          {/* Histórico de Retiradas / Balança (se houver) */}
-          {order.withdrawals && order.withdrawals.length > 0 && (
-            <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2">
-              <h3 className="text-xs font-black uppercase text-slate-600 flex items-center gap-1.5">
-                <Truck size={14} className="text-purple-600" />
-                Histórico de Retirada de Carga / Expedição na Balança
-              </h3>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-200 text-[10px] uppercase font-bold text-left">
-                    <th className="py-1">Data</th>
-                    <th className="py-1">Placa</th>
-                    <th className="py-1">Motorista</th>
-                    <th className="py-1 text-center">Ticket Pesagem</th>
-                    <th className="py-1 text-right">Carga Retirada</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-medium text-slate-700">
-                  {order.withdrawals.map((w, idx) => (
-                    <tr key={idx}>
-                      <td className="py-1.5">{w.date}</td>
-                      <td className="py-1.5 font-bold uppercase">{w.plateNumber}</td>
-                      <td className="py-1.5">{w.driverName}</td>
-                      <td className="py-1.5 text-center font-mono">{w.weighTicketNumber}</td>
-                      <td className="py-1.5 text-right font-black text-slate-900">{w.quantityWithdrawn} TON</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Garantias de Qualidade & Cláusulas Comerciais */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
-            <p className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Especificações Técnicas e Condições de Fornecimento:</p>
-            <p>1. O calcário agrícola fornecido cumpre os requisitos do Ministério da Agricultura (MAPA), com Poder de Neutralização (PN) mínimo de 90% e PRNT mínimo de 85%.</p>
-            <p>2. A entrega/retirada de carga está sujeita à pesagem oficial na balança rodoviária do pátio da mineradora.</p>
-            <p>3. Este documento formaliza as condições comerciais ajustadas entre as partes para posterior emissão da NF-e.</p>
-          </div>
-
-          {/* Assinaturas */}
-          <div className="pt-8 flex justify-between items-center gap-12 text-center text-xs">
-            <div className="flex-1 border-t-2 border-slate-800 pt-2 space-y-0.5">
-              <strong className="block text-slate-900 uppercase font-black">{customer?.name || 'Cliente / Produtor'}</strong>
-              <span className="text-[10px] text-slate-500 block">Assinatura do Produtor Rural / Comprador</span>
-            </div>
-            <div className="flex-1 border-t-2 border-slate-800 pt-2 space-y-0.5">
-              <strong className="block text-slate-900 uppercase font-black">{company.name}</strong>
-              <span className="text-[10px] text-slate-500 block">Representante Comercial / Expedição</span>
+            <div>
+              <div className="text-white text-[11px] font-black uppercase tracking-widest px-3 py-1.5" style={{ background: NAVY }}>
+                Resumo do Pedido
+              </div>
+              <div className="border border-slate-200 border-t-0 text-[12px]">
+                <div className="flex justify-between px-3 py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Subtotal (R$)</span>
+                  <strong>{formatBRL(order.subtotal)}</strong>
+                </div>
+                <div className="flex justify-between px-3 py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Frete (R$)</span>
+                  <strong>{formatBRL(order.shipping || 0)}</strong>
+                </div>
+                <div className="flex justify-between px-3 py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Desconto (R$)</span>
+                  <strong>{formatBRL(order.discount || 0)}</strong>
+                </div>
+                <div className="flex justify-between px-3 py-2 text-white font-black" style={{ background: GREEN }}>
+                  <span>Total Geral (R$)</span>
+                  <span>{formatBRL(order.total)}</span>
+                </div>
+              </div>
             </div>
           </div>
 
+          <div className="px-8 pb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-white text-[11px] font-black uppercase tracking-widest px-3 py-1.5" style={{ background: NAVY }}>
+                Observações
+              </div>
+              <div className="border border-slate-200 border-t-0 min-h-[72px] p-3 text-[11px] text-slate-700 whitespace-pre-wrap">
+                {order.notes || ''}
+              </div>
+            </div>
+            <div>
+              <div className="text-white text-[11px] font-black uppercase tracking-widest px-3 py-1.5" style={{ background: NAVY }}>
+                Assinatura do Cliente
+              </div>
+              <div className="border border-slate-200 border-t-0 min-h-[72px] p-3 flex flex-col justify-end">
+                <div className="border-t border-slate-400 pt-1 text-center text-[10px] text-slate-500">
+                  {customer?.name || 'Cliente'} · Data: ____/____/________
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-white px-8 py-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px]" style={{ background: NAVY }}>
+            <div className="md:col-span-2 space-y-1">
+              <p className="font-black tracking-widest uppercase text-[11px]">CBA Mineração</p>
+              <p>{PRINT_ADDR.street}, {PRINT_ADDR.city} – {PRINT_ADDR.state}, CEP {PRINT_ADDR.cep}</p>
+              <p className="flex items-center gap-1.5"><Phone size={11} /> {PRINT_ADDR.phones}</p>
+              <p>Instagram {PRINT_ADDR.instagram}</p>
+            </div>
+            <div className="flex items-end justify-end opacity-80">
+              <p className="text-[9px] uppercase tracking-widest text-right">Mineração &amp; Nutrição do Solo</p>
+            </div>
+          </div>
         </div>
-
       </div>
 
-      {/* Regras CSS de Impressão Global para A4 */}
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          #printable-sales-order, #printable-sales-order * {
-            visibility: visible;
-          }
+          body * { visibility: hidden; }
+          #printable-sales-order, #printable-sales-order * { visibility: visible; }
           #printable-sales-order {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
-            padding: 15mm;
             margin: 0;
           }
-          @page {
-            size: A4 portrait;
-            margin: 0;
-          }
+          @page { size: A4 portrait; margin: 8mm; }
         }
       `}</style>
-
     </div>
   );
 };

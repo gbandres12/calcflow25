@@ -463,6 +463,54 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST ICMS Padrão</label>
+              <select
+                value={config.cstIcmsPadrao || '40'}
+                onChange={(e) => setConfig({ ...config, cstIcmsPadrao: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              >
+                <option value="40">40 — Isenção</option>
+                <option value="41">41 — Não tributada</option>
+                <option value="00">00 — Tributada integralmente</option>
+                <option value="20">20 — Com redução de BC</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST PIS/COFINS</label>
+              <select
+                value={config.cstPisCofins || '07'}
+                onChange={(e) => setConfig({ ...config, cstPisCofins: e.target.value })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              >
+                <option value="07">07 — Isento</option>
+                <option value="08">08 — Sem incidência</option>
+                <option value="01">01 — Tributável alíquota básica</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota PIS (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={config.aliquotaPis ?? 0}
+                onChange={(e) => setConfig({ ...config, aliquotaPis: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota COFINS (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={config.aliquotaCofins ?? 0}
+                onChange={(e) => setConfig({ ...config, aliquotaCofins: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
             
             <div className="space-y-1.5">

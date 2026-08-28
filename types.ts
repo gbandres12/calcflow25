@@ -374,6 +374,10 @@ export interface FiscalConfig {
   cfopPadraoEstadual: string;
   cfopPadraoInterestadual: string;
   aliquotaIcmsPadrao?: number;
+  cstIcmsPadrao?: string;
+  cstPisCofins?: string;
+  aliquotaPis?: number;
+  aliquotaCofins?: number;
   observacoesFiscaisPadrao?: string;
   autoEmitirAoFinalizar?: boolean;
 }

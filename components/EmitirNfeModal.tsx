@@ -13,6 +13,7 @@ interface EmitirNfeModalProps {
   company: Company;
   onClose: () => void;
   onSuccess: (updatedOrder: SaleOrder) => void;
+  devolutionChave?: string;
 }
 
 export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
@@ -21,11 +22,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   config,
   company,
   onClose,
-  onSuccess
+  onSuccess,
+  devolutionChave
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
   const isSubmittingRef = useRef(false);
+  const isDevolucao = Boolean(devolutionChave);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const validation = fiscalService.validarDadosFiscais(order, customer);
@@ -41,8 +45,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config);
-      const result = await fiscalService.emitirNFe(order, customer, config, order.companyId);
+      const opts = isDevolucao
+        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        : undefined;
+      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config, opts);
+      const result = await fiscalService.emitirNFe(order, customer, config, order.companyId, opts);
 
       if (result.success) {
         let finalStatus = result.nfeStatus;
@@ -98,7 +105,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">Emissão de NF-e Eletrônica</h3>
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">{isDevolucao ? 'Nota de Devolução (NF-e)' : 'Emissão de NF-e Eletrônica'}</h3>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   config.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
@@ -176,6 +183,20 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           </div>
 
+          {isDevolucao && (
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Chave da NF-e original (44 dígitos)</label>
+              <input
+                type="text"
+                value={chaveDevolucao}
+                onChange={(e) => setChaveDevolucao(e.target.value)}
+                placeholder="Chave de acesso da nota a devolver"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+              />
+              <p className="text-[10px] text-slate-400">Finalidade 4 · CFOP 5202/6202 · pagamento 90 (sem pagamento). Não envia refNFe na raiz.</p>
+            </div>
+          )}
+
           {/* Itens do Pedido com NCM e CFOP */}
           <div className="space-y-2">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
@@ -197,7 +218,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="px-4 py-3 font-bold text-slate-800">{it.productName}</td>
                       <td className="px-3 py-3 font-mono text-slate-600">{it.ncm || '2517.10.00'}</td>
-                      <td className="px-3 py-3 font-mono text-slate-600">{it.cfop || config.cfopPadraoEstadual}</td>
+                      <td className="px-3 py-3 font-mono text-slate-600">{isDevolucao ? ((customer.state && customer.state !== 'PA') ? '6202' : '5202') : (it.cfop || config.cfopPadraoEstadual)}</td>
                       <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
                       <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
                     </tr>
@@ -245,7 +266,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               </>
             ) : (
               <>
-                <Send size={16} /> Transmitir e Emitir NF-e (NotaAs)
+                <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : 'Transmitir e Emitir NF-e (NotaAs)'}
               </>
             )}
           </button>

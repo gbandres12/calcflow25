@@ -114,13 +114,25 @@ export const db = {
           storage.set(storageKey, remoteData);
           return remoteData;
         } else {
-          // Se for demo, seed demo; se for novo SaaS, seed apenas estrutura inicial limpa
+          const localData = storage.get(storageKey);
+          if (Array.isArray(localData) && localData.length > 0) {
+            try {
+              const batch = writeBatch(firestoreDb);
+              localData.forEach((item: any) => {
+                const id = String(item.id || `doc-${Date.now()}-${Math.random()}`);
+                const docRef = doc(firestoreDb, remoteCollectionName, id);
+                batch.set(docRef, { ...item, companyId: item.companyId || compKey });
+              });
+              batch.commit().catch(() => {});
+            } catch {}
+            return localData;
+          }
           const initialData = isDemo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
           if (initialData.length > 0) {
             const batch = writeBatch(firestoreDb);
             initialData.forEach(item => {
               const docRef = doc(firestoreDb, remoteCollectionName, item.id || `doc-${Date.now()}-${Math.random()}`);
-              batch.set(docRef, item);
+              batch.set(docRef, { ...item, companyId: compKey });
             });
             batch.commit().catch(() => {});
           }
@@ -151,9 +163,10 @@ export const db = {
     const current = storage.get(storageKey) || [];
     const updated = [...current];
     records.forEach(newRec => {
-      const idx = updated.findIndex(r => r.id === newRec.id);
-      if (idx >= 0) updated[idx] = { ...updated[idx], ...newRec };
-      else updated.push(newRec);
+      const tagged = { ...newRec, companyId: newRec.companyId || compKey };
+      const idx = updated.findIndex(r => r.id === tagged.id);
+      if (idx >= 0) updated[idx] = { ...updated[idx], ...tagged };
+      else updated.push(tagged);
     });
     storage.set(storageKey, updated);
 
@@ -162,9 +175,10 @@ export const db = {
       if (firestoreDb) {
         const remoteCollectionName = `${tableName}_${compKey}`;
         for (const item of records) {
-          const docId = item.id || `id-${Date.now()}`;
+          const tagged = { ...item, companyId: item.companyId || compKey };
+          const docId = tagged.id || `id-${Date.now()}`;
           const docRef = doc(firestoreDb, remoteCollectionName, docId);
-          await setDoc(docRef, item, { merge: true });
+          await setDoc(docRef, tagged, { merge: true });
         }
       }
     } catch (e) {

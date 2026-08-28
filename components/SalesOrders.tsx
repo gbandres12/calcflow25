@@ -16,7 +16,7 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { DanfeModal } from './DanfeModal';
@@ -101,6 +101,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   // NF-e Modals
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
+  const [devolutionChave, setDevolutionChave] = useState<string | undefined>(undefined);
   const [orderToViewDanfe, setOrderToViewDanfe] = useState<SaleOrder | null>(null);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
 
@@ -787,6 +788,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
                           >
                             <Eye size={12} /> DANFE
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDevolutionChave(order.nfeChave || '');
+                              setOrderToEmitNfe(order);
+                            }}
+                            className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                            title="Emitir NF-e de devolução"
+                          >
+                            <Undo2 size={12} /> Devolver
                           </button>
                         </div>
                       ) : (
@@ -1865,10 +1876,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
           config={fiscalConfig}
           company={company}
-          onClose={() => setOrderToEmitNfe(null)}
+          devolutionChave={devolutionChave}
+          onClose={() => {
+            setOrderToEmitNfe(null);
+            setDevolutionChave(undefined);
+          }}
           onSuccess={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
             setOrderToEmitNfe(null);
+            setDevolutionChave(undefined);
             setOrderToViewDanfe(updatedOrder);
           }}
         />

@@ -36,6 +36,11 @@ export interface NotaAsDestinatario {
   endereco: NotaAsEndereco;
 }
 
+export interface NotaAsNfeReferenciada {
+  chaveAcesso: string;
+  nItem: number;
+}
+
 export interface NotaAsItemPayload {
   descricao: string;
   codigo?: string;
@@ -48,6 +53,13 @@ export interface NotaAsItemPayload {
   csosn?: string;
   cst?: string;
   aliquotaIcms?: number;
+  aliquotaPis?: number;
+  aliquotaCofins?: number;
+  nfeReferenciada?: NotaAsNfeReferenciada;
+}
+
+export interface NfeEmitOpts {
+  devolucao?: { chaveAcesso: string; nItem?: number };
 }
 
 export interface NotaAsPagamento {
@@ -71,8 +83,8 @@ export interface NotaAsCriarNFePayload {
   pagamentos: NotaAsPagamento[];
   transporte?: NotaAsTransporte;
   valorFrete?: number;
-  tipoOperacao: 1;
-  finalidade: 1;
+  tipoOperacao: 0 | 1;
+  finalidade: 1 | 2 | 3 | 4;
   consumidorFinal: 0 | 1;
   presencaComprador: 1;
   infCpl?: string;
@@ -334,17 +346,21 @@ export const fiscalService = {
   montarPayloadNotaAs(
     order: SaleOrder, 
     customer: Customer, 
-    config: FiscalConfig
+    config: FiscalConfig,
+    opts?: NfeEmitOpts
   ): NotaAsCriarNFePayload {
+    const isDevolucao = Boolean(opts?.devolucao?.chaveAcesso);
     const isInterestadual = customer.state && customer.state !== COMPANY_INFO.state;
-    const cfopPadrao = isInterestadual
+    const cfopVenda = isInterestadual
       ? (config.cfopPadraoInterestadual || '6101')
       : (config.cfopPadraoEstadual || '5101');
+    const cfopPadrao = isDevolucao
+      ? (isInterestadual ? '6202' : '5202')
+      : cfopVenda;
     const docClean = onlyDigits(customer.document);
     const isPF = docClean.length === 11;
     const ibge = onlyDigits(customer.ibgeCode);
     const zip = onlyDigits(customer.zipCode);
-    const isSimples = config.regimeTributario === '1';
     const indicadorIE = customer.isentoIE ? 2 : (customer.ie ? 1 : 9);
 
     const dest: NotaAsDestinatario = {
@@ -368,42 +384,54 @@ export const fiscalService = {
       dest.ie = onlyDigits(customer.ie);
     }
 
+    const cstIcms = (config.cstIcmsPadrao || '40').trim();
     const items: NotaAsItemPayload[] = (order.items || []).map((it, idx) => {
       const row: NotaAsItemPayload = {
         descricao: it.productName,
         codigo: it.productCode || `CALC-${idx + 1}`,
         ncm: onlyDigits(it.ncm),
-        cfop: onlyDigits(it.cfop) || onlyDigits(cfopPadrao),
+        cfop: isDevolucao ? onlyDigits(cfopPadrao) : (onlyDigits(it.cfop) || onlyDigits(cfopPadrao)),
         quantidade: it.quantity,
         valorUnitario: it.unitPrice,
         valorTotal: it.total,
         unidade: it.unit || 'TON',
+        cst: cstIcms,
+        aliquotaPis: config.aliquotaPis ?? 0,
+        aliquotaCofins: config.aliquotaCofins ?? 0,
       };
-      if (isSimples) {
-        row.csosn = '102';
-      } else {
-        row.cst = '00';
+      if (cstIcms === '00' || cstIcms === '10' || cstIcms === '20') {
         if (config.aliquotaIcmsPadrao != null) row.aliquotaIcms = config.aliquotaIcmsPadrao;
+      }
+      if (isDevolucao && opts?.devolucao?.chaveAcesso) {
+        row.nfeReferenciada = {
+          chaveAcesso: onlyDigits(opts.devolucao.chaveAcesso),
+          nItem: opts.devolucao.nItem || idx + 1
+        };
       }
       return row;
     });
 
-    const tipoPagamento = order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01';
+    const tipoPagamento = isDevolucao
+      ? '90'
+      : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
     const infParts = [
       config.observacoesFiscaisPadrao,
       `Pedido: ${order.reference}`,
-      order.sellerName ? `Vendedor: ${order.sellerName}` : ''
+      order.sellerName ? `Vendedor: ${order.sellerName}` : '',
+      isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : ''
     ].filter(Boolean);
 
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
-      naturezaOperacao: config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
+      naturezaOperacao: isDevolucao
+        ? 'Devolucao de mercadoria'
+        : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
       dest,
       items,
-      pagamentos: [{ tipoPagamento, valor: order.total }],
-      transporte: { modalidadeFrete: order.shipping ? 0 : 9 },
+      pagamentos: [{ tipoPagamento, valor: isDevolucao ? 0 : order.total }],
+      transporte: { modalidadeFrete: order.shipping && !isDevolucao ? 0 : 9 },
       tipoOperacao: 1,
-      finalidade: 1,
+      finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isPF ? 1 : 0,
       presencaComprador: 1,
       infCpl: infParts.join(' | ').trim()
@@ -421,7 +449,8 @@ export const fiscalService = {
     order: SaleOrder, 
     customer: Customer, 
     overrideConfig?: FiscalConfig,
-    companyId?: string
+    companyId?: string,
+    opts?: NfeEmitOpts
   ): Promise<EmitirNFeResult> {
     const resolvedCompanyId = companyId || order.companyId;
     const invoiceRequestId = `inv_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -460,7 +489,7 @@ export const fiscalService = {
       };
     }
 
-    const payload = this.montarPayloadNotaAs(order, dest, config);
+    const payload = this.montarPayloadNotaAs(order, dest, config, opts);
     const nfeNumero = (config.proxNumeroNFe || 1042).toString();
     const serie = config.serieNFe || '1';
     const apiKey = (config.apiKey || '').trim();
@@ -763,8 +792,8 @@ export const fiscalService = {
   /**
    * Alias de compatibilidade com outros componentes
    */
-  async emitirNFe(order: SaleOrder, customer: Customer, overrideConfig?: FiscalConfig, companyId?: string): Promise<EmitirNFeResult> {
-    return this.criarNFe(order, customer, overrideConfig, companyId || order.companyId);
+  async emitirNFe(order: SaleOrder, customer: Customer, overrideConfig?: FiscalConfig, companyId?: string, opts?: NfeEmitOpts): Promise<EmitirNFeResult> {
+    return this.criarNFe(order, customer, overrideConfig, companyId || order.companyId, opts);
   },
 
   /**

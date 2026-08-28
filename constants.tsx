@@ -32,14 +32,18 @@ export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
   inscricaoEstadual: '15.489.201-9',
   razaoSocial: 'CALCARIOFLOW MINERACAO E INDUSTRIA LTDA',
   nomeFantasia: 'CalcárioFlow Mineração',
-  regimeTributario: '1', // Simples Nacional
+  regimeTributario: '3', // Regime Normal (Lucro Presumido / Real)
   serieNFe: '1',
   proxNumeroNFe: 1042,
   naturezaOperacaoPadrao: 'Venda de produção do estabelecimento',
   cfopPadraoEstadual: '5101',
   cfopPadraoInterestadual: '6101',
   aliquotaIcmsPadrao: 0,
-  observacoesFiscaisPadrao: 'Documento emitido por ME ou EPP optante pelo Simples Nacional. Não gera direito a crédito fiscal de IPI.',
+  cstIcmsPadrao: '40',
+  cstPisCofins: '07',
+  aliquotaPis: 0,
+  aliquotaCofins: 0,
+  observacoesFiscaisPadrao: 'ICMS isento (CST 40). PIS/COFINS isentos (CST 07).',
   autoEmitirAoFinalizar: false
 };
 
