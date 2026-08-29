@@ -1,20 +1,35 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# CalcárioFlow ERP
 
-# Run and deploy your AI Studio app
+ERP de usina de calcário: vendas, balança, estoque, financeiro e NF-e.
 
-This contains everything you need to run your app locally.
+Produção: https://calcflow25.vercel.app
 
-View your app in AI Studio: https://ai.studio/apps/drive/1q_veRJ0W88eoUxJjh2KrNYhGTSiPRcIr
+## Stack
 
-## Run Locally
+- React + Vite
+- Persistência principal: **Supabase** (`app_records`)
+- Fallback: localStorage (e Firestore legado, se configurado)
+- Deploy: Vercel
 
-**Prerequisites:**  Node.js
+## Setup
 
+1. `npm install`
+2. Copie `.env.example` para `.env.local` e preencha URL + anon key do Supabase
+3. No SQL Editor do Supabase, rode `supabase/migrations/001_app_records.sql`
+4. `npm run dev`
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Demo: `admin@calcarioflow.com.br` / `123456`
+
+## Variáveis na Vercel
+
+Obrigatórias: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+
+Para webhook de NF-e atualizar pedidos no Supabase: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+
+Não coloque service_role no frontend.
+
+## Segurança (ainda em aberto)
+
+- RLS atual é pública (bootstrap). Trocar após Auth.
+- Login de contas novas agora exige senha (hash SHA-256). Demo aceita só `123456`.
+- Próximo passo: Supabase Auth + policy por `company_id`.
