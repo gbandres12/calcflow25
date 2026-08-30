@@ -62,11 +62,18 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (registerPassword.trim().length < 6) {
+      setError('A senha precisa ter no mínimo 6 caracteres.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const newUser = await userService.registerUser({
         name: registerName,
         email: registerEmail,
         companyName: registerCompany,
+        password: registerPassword,
         cnpj: registerCnpj,
         phone: registerPhone,
         jobTitle: 'Diretor / Gestor Geral',
@@ -98,7 +105,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 md:p-8 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(147,51,234,0.18),rgba(255,255,255,0))]">
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         
-        {/* Painel Esquerdo: Contexto e Acessos Rápidos Estratégicos */}
         <div className="lg:col-span-6 space-y-6 text-white p-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-black uppercase tracking-widest">
             <Sparkles size={14} className="text-purple-400" /> Plataforma SaaS Cloud • Moagem & Balança
@@ -119,7 +125,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </p>
           </div>
 
-          {/* Perfis Estratégicos Rápidos */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
@@ -162,10 +167,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-        {/* Painel Direito: Formulário com Alternância Login / Cadastro SaaS */}
         <div className="lg:col-span-6 bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-10 space-y-6 border border-slate-100 animate-in fade-in duration-500">
-          
-          {/* Seletor de Modo: Entrar vs Criar Conta */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl">
             <button
               type="button"
@@ -192,7 +194,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
 
           {mode === 'login' ? (
-            /* FORMULÁRIO DE LOGIN */
             <div className="space-y-4">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Acesso ao Sistema</h2>
@@ -248,7 +249,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               </form>
             </div>
           ) : (
-            /* FORMULÁRIO DE CADASTRO SAAS */
             <div className="space-y-4">
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Cadastrar Minha Usina</h2>
@@ -383,4 +383,3 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 };
 
 export default Login;
-
