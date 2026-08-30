@@ -45,6 +45,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  passwordHash?: string;
   role: UserRole;
   status: 'Ativo' | 'Inativo';
   lastAccess?: string;
@@ -207,7 +208,7 @@ export interface PaymentReceipt {
   customerDocument?: string;
   amount: number;
   date: string;
-  paymentMethod: string; // 'Dinheiro' | 'PIX' | 'Transferência Bancária' | 'Boleto' | 'Cartão de Débito' | 'Cartão de Crédito' | 'Cheque'
+  paymentMethod: string;
   accountId?: string;
   accountName?: string;
   receivedBy?: string;
@@ -230,7 +231,7 @@ export interface OrderWithdrawal {
   plateNumber: string;
   truckModel?: string;
   truckType?: string;
-  quantityWithdrawn: number; // Toneladas retiradas
+  quantityWithdrawn: number;
   productName?: string;
   weighTicketNumber?: string;
   totalOrderQuantity?: number;
@@ -268,31 +269,31 @@ export interface Transaction {
   id: string;
   accountId: string;
   costCenterId?: string;
-  costCenter?: string; // Nome livre ou sugerido por IA
-  date: string; // Data de competência / vencimento (due_date)
+  costCenter?: string;
+  date: string;
   dueDate?: string;
-  paymentDate?: string; // Data efetiva do pagamento
+  paymentDate?: string;
   type: TransactionType;
   status: TransactionStatus;
   description: string;
   category: string;
-  amount: number; // Valor LÍQUIDO final
-  originalAmount?: number; // Valor cheio antes do desconto
-  discount?: number; // Desconto monetário total calculado
+  amount: number;
+  originalAmount?: number;
+  discount?: number;
   discountType?: 'percentage' | 'fixed';
-  discountValue?: number; // % ou R$ digitado
-  paidAmount: number; // Soma já paga
+  discountValue?: number;
+  paidAmount: number;
   quantity?: number;
   productId?: string;
   customerId?: string;
-  contactId?: string; // ID do cliente ou fornecedor
-  contactName?: string; // Nome do cliente ou fornecedor vinculado
+  contactId?: string;
+  contactName?: string;
   orderId?: string;
   notes?: string;
   companyId?: string;
   receiptId?: string;
   paymentMethod?: string;
-  payments?: TransactionPayment[]; // Histórico de pagamentos parciais / abatimentos
+  payments?: TransactionPayment[];
 }
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' | 'simulada';
@@ -330,17 +331,15 @@ export interface SaleOrder {
   payments: SalePayment[];
   receipts?: PaymentReceipt[];
   withdrawals?: OrderWithdrawal[];
-  // Barter / Permuta Agro (Calcário x Grãos)
   isBarter?: boolean;
   barterCrop?: 'Milho' | 'Soja' | 'Sorgo' | 'Outro' | string;
   barterCommodityType?: 'MILHO' | 'SOJA' | string;
-  cornTons?: number; // Toneladas ou sacas de grãos
-  cornUnitValue?: number; // Cotação da saca / tonelada de grãos
+  cornTons?: number;
+  cornUnitValue?: number;
   cornPricePerTon?: number;
   barterEquivalentValue?: number;
   notes?: string;
   companyId?: string;
-  // Fiscal / NotaAs fields
   nfeStatus?: NfeStatus;
   nfeId?: string;
   nfeChave?: string;
@@ -367,7 +366,7 @@ export interface FiscalConfig {
   inscricaoEstadual: string;
   razaoSocial: string;
   nomeFantasia: string;
-  regimeTributario: '1' | '2' | '3'; // 1 = Simples Nacional, 2 = Simples Nacional Excesso, 3 = Regime Normal
+  regimeTributario: '1' | '2' | '3';
   serieNFe: string;
   proxNumeroNFe: number;
   naturezaOperacaoPadrao: string;
@@ -385,4 +384,3 @@ export interface FiscalConfig {
 }
 
 export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal';
-
