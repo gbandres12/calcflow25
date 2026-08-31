@@ -357,6 +357,7 @@ export interface SaleOrder {
 
 export interface FiscalConfig {
   id: string;
+  companyId?: string;
   apiKey: string;
   apiProvider?: 'notaas' | 'focusnfe' | 'nuvemfiscal' | 'custom';
   apiBaseUrl?: string;

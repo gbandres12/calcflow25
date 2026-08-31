@@ -54,7 +54,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           ? { transferencia: true }
           : undefined;
       const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config, opts);
-      const result = await fiscalService.emitirNFe(order, customer, config, order.companyId, opts);
+      const result = await fiscalService.emitirNFe(
+        { ...order, companyId: order.companyId || company.id },
+        customer,
+        config,
+        order.companyId || company.id,
+        opts
+      );
 
       if (result.success) {
         let finalStatus = result.nfeStatus;

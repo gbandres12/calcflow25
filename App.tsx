@@ -40,14 +40,16 @@ import {
   FuelRecord,
   FuelPurchase,
   User,
-  UserRole,
-  Category
+  Category,
+  Company
 } from './types';
 import { 
   INITIAL_COST_CENTERS,
   COMPANY_INFO
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
+import { hashPassword, toPublicUser } from './services/authLogic';
+import { newId, nextOrderReference } from './services/ids';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -60,10 +62,11 @@ const App: React.FC = () => {
   });
 
   const handleSetCurrentUser = (user: User | null) => {
-    setCurrentUser(user);
-    if (user) {
+    const safe = user ? toPublicUser(user) : null;
+    setCurrentUser(safe);
+    if (safe) {
       try {
-        localStorage.setItem('calcarioflow_active_session_user', JSON.stringify(user));
+        localStorage.setItem('calcarioflow_active_session_user', JSON.stringify(safe));
       } catch {}
     } else {
       try {
@@ -132,7 +135,7 @@ const App: React.FC = () => {
           db.getTable('fuel_purchases', activeCompanyId),
           db.getTable('financial_accounts', activeCompanyId),
           db.getTable('categories', activeCompanyId),
-          userService.getAll()
+          userService.getAll(activeCompanyId)
         ]);
 
         setTransactions(savedTxs);
@@ -160,7 +163,7 @@ const App: React.FC = () => {
 
   // Handlers para Categorias
   const handleAddCategory = (name: string, type: 'INFLOW' | 'OUTFLOW') => {
-    const newCat: Category = { id: `cat-${Date.now()}`, name, type };
+    const newCat: Category = { id: newId('cat'), name, type, companyId: activeCompanyId };
     setCategories(prev => [...prev, newCat]);
     persistCloud('categories', newCat);
   };
@@ -172,7 +175,7 @@ const App: React.FC = () => {
 
   // Handlers de Maquinário
   const handleAddMachine = (machineData: Omit<Machine, 'id'>) => {
-    const newMachine: Machine = { ...machineData, id: `mach-${Date.now()}` };
+    const newMachine: Machine = { ...machineData, id: newId('mach'), companyId: activeCompanyId };
     setMachines(prev => [...prev, newMachine]);
     persistCloud('machines', newMachine);
   };
@@ -190,7 +193,7 @@ const App: React.FC = () => {
 
   // Handlers de Combustível
   const handleAddFuel = (fuelData: Omit<FuelRecord, 'id'>) => {
-    const newFuel: FuelRecord = { ...fuelData, id: `fuel-${Date.now()}` };
+    const newFuel: FuelRecord = { ...fuelData, id: newId('fuel'), companyId: activeCompanyId };
     setFuelRecords(prev => [...prev, newFuel]);
     persistCloud('fuel_records', newFuel);
     handleUpdateHorimeter(fuelData.machineId, fuelData.horimeter);
@@ -208,7 +211,7 @@ const App: React.FC = () => {
   };
 
   const handleAddFuelPurchase = (purchaseData: Omit<FuelPurchase, 'id'>) => {
-    const newPurchase: FuelPurchase = { ...purchaseData, id: `pur-${Date.now()}` };
+    const newPurchase: FuelPurchase = { ...purchaseData, id: newId('pur'), companyId: activeCompanyId };
     setFuelPurchases(prev => [...prev, newPurchase]);
     persistCloud('fuel_purchases', newPurchase);
     handleAddTransaction({
@@ -226,7 +229,7 @@ const App: React.FC = () => {
 
   // Manutenções
   const handleAddMaintenance = (maintData: Omit<MaintenanceRecord, 'id'>) => {
-    const newMaint: MaintenanceRecord = { ...maintData, id: `maint-${Date.now()}` };
+    const newMaint: MaintenanceRecord = { ...maintData, id: newId('maint'), companyId: activeCompanyId };
     setMaintenances(prev => [...prev, newMaint]);
     persistCloud('maintenance_records', newMaint);
     handleAddTransaction({
@@ -244,7 +247,7 @@ const App: React.FC = () => {
 
   // Almoxarifado / Peças
   const handleAddStoreItem = (itemData: Omit<StoreItem, 'id'>) => {
-    const newItem: StoreItem = { ...itemData, id: `store-${Date.now()}` };
+    const newItem: StoreItem = { ...itemData, id: newId('store'), companyId: activeCompanyId };
     setStoreItems(prev => [...prev, newItem]);
     persistCloud('store_items', newItem);
   };
@@ -262,20 +265,15 @@ const App: React.FC = () => {
 
   // Transações Financeiras
   const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
-    const tx: Transaction = { ...newTx, id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}` };
-    setTransactions(prev => {
-      const updated = [tx, ...prev];
-      financeService.saveTransactions(activeCompanyId, updated);
-      return updated;
-    });
+    const tx: Transaction = { ...newTx, id: newId('tx'), companyId: activeCompanyId };
+    setTransactions(prev => [tx, ...prev]);
+    persistCloud('transactions', tx);
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
-    setTransactions(prev => {
-      const updated = prev.map(t => t.id === updatedTx.id ? updatedTx : t);
-      financeService.saveTransactions(activeCompanyId, updated);
-      return updated;
-    });
+    const tagged = { ...updatedTx, companyId: updatedTx.companyId || activeCompanyId };
+    setTransactions(prev => prev.map(t => t.id === tagged.id ? tagged : t));
+    persistCloud('transactions', tagged);
   };
 
   const handleDeleteTransaction = (id: string) => {
@@ -287,7 +285,8 @@ const App: React.FC = () => {
   const handleImportCustomers = (newCustomers: Omit<Customer, 'id' | 'totalSpent'>[]) => {
     const formatted = newCustomers.map(c => ({
       ...c,
-      id: `cust-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: newId('cust'),
+      companyId: activeCompanyId,
       totalSpent: 0
     }));
     setCustomers(prev => [...prev, ...formatted]);
@@ -297,7 +296,8 @@ const App: React.FC = () => {
   const handleAddCustomer = (newCustomer: Omit<Customer, 'id' | 'totalSpent'>): Customer => {
     const customer: Customer = {
       ...newCustomer,
-      id: `cust-${Date.now()}`,
+      id: newId('cust'),
+      companyId: activeCompanyId,
       totalSpent: 0
     };
     setCustomers(prev => [...prev, customer]);
@@ -312,13 +312,13 @@ const App: React.FC = () => {
         (item.id === productId) ? { ...item, quantity: Math.max(0, item.quantity + quantity) } : item
       );
       const updatedItem = newList.find(i => i.id === productId);
-      if (updatedItem) inventoryService.updateStock(activeCompanyId, productId, updatedItem.quantity);
+      if (updatedItem) persistCloud('inventory', updatedItem);
       return newList;
     });
   };
 
   const handleAddInventoryItem = (item: Omit<InventoryItem, 'id'> & { id?: string }) => {
-    const newItem: InventoryItem = { ...item, id: item.id || `prod-${Date.now()}` };
+    const newItem: InventoryItem = { ...item, id: item.id || newId('prod'), companyId: activeCompanyId };
     setInventory(prev => [...prev, newItem]);
     persistCloud('inventory', newItem);
   };
@@ -334,42 +334,60 @@ const App: React.FC = () => {
   };
 
   // Usuários
-  const handleAddUser = (userData: Omit<User, 'id'>) => {
+  const handleAddUser = async (userData: Omit<User, 'id'> & { password?: string }): Promise<User> => {
+    const rawPassword = (userData.password || '').trim() || '123456';
+    const { password: _password, ...rest } = userData as Omit<User, 'id'> & { password?: string };
     const newUser: User = { 
-      ...userData, 
-      id: `u-${Date.now()}`, 
+      ...rest, 
+      id: newId('u'),
+      email: (userData.email || '').trim().toLowerCase(),
+      passwordHash: await hashPassword(rawPassword),
       status: 'Ativo',
       companyId: currentUser?.companyId || activeCompanyId,
       companyName: currentUser?.companyName || 'Sua Empresa'
     };
-    setUsers(prev => [...prev, newUser]);
-    userService.saveUser(newUser);
+    const publicUser = toPublicUser(newUser);
+    setUsers(prev => [...prev, publicUser]);
+    await userService.saveUser(newUser);
+    return publicUser;
   };
 
   const handleUpdateUser = (updatedUser: User) => {
-    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    userService.saveUser(updatedUser);
+    const tagged = {
+      ...updatedUser,
+      email: (updatedUser.email || '').trim().toLowerCase(),
+      companyId: updatedUser.companyId || activeCompanyId
+    };
+    setUsers(prev => prev.map(u => u.id === tagged.id ? toPublicUser(tagged) : u));
+    userService.saveUser(tagged);
   };
 
   const handleDeleteUser = (userId: string) => {
     setUsers(prev => prev.filter(u => u.id !== userId));
-    userService.deleteUser(userId);
+    userService.deleteUser(userId, activeCompanyId);
   };
 
   // Pedidos e Vendas
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'reference'>) => {
-    const reference = `PED-${new Date().getFullYear()}-${(orders.length + 1).toString().padStart(4, '0')}`;
-    const newOrder: SaleOrder = { ...orderData, id: `ord-${Date.now()}`, reference };
+    const reference = nextOrderReference(orders);
+    const newOrder: SaleOrder = {
+      ...orderData,
+      id: newId('ord'),
+      reference,
+      companyId: activeCompanyId,
+      sellerName: orderData.sellerName || currentUser?.name || 'Vendedor'
+    };
     setOrders(prev => [...prev, newOrder]);
     persistCloud('sales_orders', newOrder);
     if (newOrder.status === OrderStatus.FINALIZED) {
-      finalizeSale(newOrder, newOrder.payments);
+      finalizeSale(newOrder, newOrder.payments || []);
+      (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
     order.items.forEach(item => processStockChange(item.productId, -item.quantity));
-    payments.forEach(payment => {
+    (payments || []).forEach(payment => {
       let actualPaid = 0;
       if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
         actualPaid = payment.amount;
@@ -378,6 +396,7 @@ const App: React.FC = () => {
       }
 
       const accId = payment.accountId || accounts[0]?.id || 'acc-1';
+      const txId = newId('tx');
       handleAddTransaction({
         accountId: accId,
         costCenterId: 'cc4',
@@ -391,12 +410,12 @@ const App: React.FC = () => {
         customerId: order.customerId,
         orderId: order.id,
         payments: actualPaid > 0 ? [{
-          id: `pmt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          transactionId: `tx-${Date.now()}`,
+          id: newId('pmt'),
+          transactionId: txId,
           amount: actualPaid,
           paymentDate: payment.date,
           accountId: accId,
-          paymentMethod: 'PIX',
+          paymentMethod: payment.paymentMethod || 'PIX',
           notes: `Recebimento da venda #${order.reference}`
         }] : []
       });
@@ -416,46 +435,100 @@ const App: React.FC = () => {
       });
       return updatedList;
     });
-    const finalizedOrder = { ...order, payments, status: OrderStatus.FINALIZED };
-    setOrders(prev => prev.map(o => o.id === order.id ? finalizedOrder : o));
+    const finalizedOrder = { ...order, payments, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
+    setOrders(prev => {
+      const exists = prev.some(o => o.id === order.id);
+      return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
+    });
     persistCloud('sales_orders', finalizedOrder);
   };
 
-  const handlePaymentReceived = (receipt: PaymentReceipt, _updatedOrder: SaleOrder) => {
+  const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
-    handleAddTransaction({
-      accountId: accId,
-      costCenterId: 'cc4',
-      date: receipt.date,
-      type: TransactionType.SALE,
-      status: TransactionStatus.CONFIRMADO,
-      description: `${receipt.description} - ${receipt.customerName}`,
-      category: 'Venda Calcário Moído Granel',
-      amount: receipt.amount,
-      paidAmount: receipt.amount,
-      customerId: receipt.customerId,
-      orderId: receipt.orderId,
-      receiptId: receipt.id,
-      paymentMethod: receipt.paymentMethod,
-      notes: receipt.notes,
-      payments: [{
-        id: `pmt-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        transactionId: `tx-${Date.now()}`,
-        amount: receipt.amount,
-        paymentDate: receipt.date,
+    setTransactions(prev => {
+      const orderTxs = prev.filter(t => t.orderId === (receipt.orderId || order.id) && t.type === TransactionType.SALE);
+      const allocated = orderTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const alreadyReceipt = orderTxs.some(t => t.receiptId === receipt.id);
+      if (alreadyReceipt) return prev;
+
+      const openTx = orderTxs.find(t => Number(t.paidAmount || 0) < Number(t.amount || 0) - 0.01);
+
+      if (allocated >= order.total - 0.01) {
+        if (!openTx) return prev;
+        const paid = Math.min(openTx.amount, Number(openTx.paidAmount || 0) + receipt.amount);
+        const updated: Transaction = {
+          ...openTx,
+          paidAmount: paid,
+          status: paid >= openTx.amount - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
+          receiptId: receipt.id,
+          paymentMethod: receipt.paymentMethod || openTx.paymentMethod,
+          payments: [
+            ...(openTx.payments || []),
+            {
+              id: newId('pmt'),
+              transactionId: openTx.id,
+              amount: receipt.amount,
+              paymentDate: receipt.date,
+              accountId: accId,
+              paymentMethod: receipt.paymentMethod || 'PIX',
+              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+            }
+          ]
+        };
+        persistCloud('transactions', updated);
+        return prev.map(t => t.id === openTx.id ? updated : t);
+      }
+
+      const tx: Transaction = {
+        id: newId('tx'),
         accountId: accId,
-        paymentMethod: receipt.paymentMethod || 'PIX',
-        notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
-      }]
+        costCenterId: 'cc4',
+        date: receipt.date,
+        type: TransactionType.SALE,
+        status: TransactionStatus.CONFIRMADO,
+        description: `${receipt.description} - ${receipt.customerName}`,
+        category: 'Venda Calcário Moído Granel',
+        amount: receipt.amount,
+        paidAmount: receipt.amount,
+        customerId: receipt.customerId,
+        orderId: receipt.orderId || order.id,
+        receiptId: receipt.id,
+        paymentMethod: receipt.paymentMethod,
+        notes: receipt.notes,
+        companyId: activeCompanyId,
+        payments: [{
+          id: newId('pmt'),
+          transactionId: '',
+          amount: receipt.amount,
+          paymentDate: receipt.date,
+          accountId: accId,
+          paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+        }]
+      };
+      tx.payments![0].transactionId = tx.id;
+      persistCloud('transactions', tx);
+      return [tx, ...prev];
     });
+  };
+
+  const handlePaymentReceived = (receipt: PaymentReceipt, updatedOrder: SaleOrder) => {
+    applyReceiptToFinance(receipt, updatedOrder);
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    db.delete('sales_orders', activeCompanyId, orderId);
   };
 
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-    persistCloud('sales_orders', updatedOrder);
-    if (originalOrder && originalOrder.status === OrderStatus.BUDGET && updatedOrder.status === OrderStatus.FINALIZED) {
-      finalizeSale(updatedOrder, updatedOrder.payments);
+    const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
+    setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
+    persistCloud('sales_orders', tagged);
+    if (originalOrder && originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
+      finalizeSale(tagged, tagged.payments || []);
+      (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }
   };
 
@@ -524,12 +597,13 @@ const App: React.FC = () => {
   const handleCompleteOnboarding = async (updatedUser: User) => {
     handleSetCurrentUser(updatedUser);
     setShowOnboardingModal(false);
+    const companyId = updatedUser.companyId || activeCompanyId;
 
     try {
       const [savedInv, savedAccs, savedUsers] = await Promise.all([
-        inventoryService.getInventory(activeCompanyId),
-        db.getTable('financial_accounts', activeCompanyId),
-        userService.getAll()
+        inventoryService.getInventory(companyId),
+        db.getTable('financial_accounts', companyId),
+        userService.getAll(companyId)
       ]);
       if (savedInv?.length) setInventory(savedInv);
       if (savedAccs?.length) setAccounts(savedAccs);
@@ -540,6 +614,18 @@ const App: React.FC = () => {
   };
 
   if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} />;
+
+  const operatingCompany: Company = {
+    id: activeCompanyId,
+    name: currentUser.companyName || COMPANY_INFO.name,
+    code: activeCompanyId === 'matriz-demo' ? COMPANY_INFO.code : activeCompanyId,
+    document: currentUser.cnpj || COMPANY_INFO.document,
+    city: currentUser.city || COMPANY_INFO.city,
+    state: currentUser.state || COMPANY_INFO.state,
+    phone: currentUser.phone || COMPANY_INFO.phone,
+    address: COMPANY_INFO.address,
+    isActive: true
+  };
 
   const displayUsers = activeCompanyId === 'matriz-demo' 
     ? users 
@@ -661,12 +747,16 @@ const App: React.FC = () => {
               customers={customers} 
               inventory={inventory} 
               accounts={accounts} 
-              company={COMPANY_INFO} 
+              company={operatingCompany}
+              companyId={activeCompanyId}
               onAddOrder={handleAddOrder} 
               onAddCustomer={handleAddCustomer}
               onUpdateOrder={handleUpdateOrder} 
-              onDeleteOrder={(id) => db.delete('sales_orders', activeCompanyId, id)} 
-              onFinalizeOrder={(oid, p) => finalizeSale(orders.find(o => o.id === oid)!, p)} 
+              onDeleteOrder={handleDeleteOrder}
+              onFinalizeOrder={(oid, p) => {
+                const order = orders.find(o => o.id === oid);
+                if (order) finalizeSale(order, p);
+              }} 
               onPaymentReceived={handlePaymentReceived}
             />
           )}
@@ -674,7 +764,8 @@ const App: React.FC = () => {
             <FiscalManagement 
               orders={orders} 
               customers={customers} 
-              company={COMPANY_INFO} 
+              company={operatingCompany}
+              companyId={activeCompanyId}
               onUpdateOrder={handleUpdateOrder} 
             />
           )}
@@ -735,7 +826,7 @@ const App: React.FC = () => {
               accounts={accounts} 
               costCenters={costCenters} 
               categories={categories} 
-              company={COMPANY_INFO}
+              company={operatingCompany}
               customers={customers}
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
@@ -763,7 +854,7 @@ const App: React.FC = () => {
               accounts={accounts} 
               customers={customers}
               orders={orders}
-              company={COMPANY_INFO}
+              company={operatingCompany}
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 
@@ -802,7 +893,7 @@ const App: React.FC = () => {
               maintenances={maintenances} 
               orders={orders}
               customers={customers}
-              company={COMPANY_INFO}
+              company={operatingCompany}
               onAddMaintenance={handleAddMaintenance} 
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 

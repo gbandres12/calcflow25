@@ -25,7 +25,7 @@ export const getDefaultPermissions = (role: UserRole): UserPermissions => {
 interface UserManagementProps {
   users: User[];
   currentUser?: User | null;
-  onAddUser: (user: Omit<User, 'id'>) => void;
+  onAddUser: (user: Omit<User, 'id'> & { password?: string }) => Promise<User> | User;
   onUpdateUser: (user: User) => void;
   onDeleteUser?: (id: string) => void;
   onOpenOnboarding?: () => void;
@@ -46,6 +46,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
   
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [invitePasswords, setInvitePasswords] = useState<Record<string, string>>({});
+  const [savingUser, setSavingUser] = useState(false);
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -54,6 +56,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
     status: 'Ativo' | 'Inativo';
     jobTitle?: string;
     phone?: string;
+    password?: string;
     permissions: UserPermissions;
   }>({
     name: '',
@@ -62,6 +65,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
     status: 'Ativo',
     jobTitle: 'Operador de Balança e Expedição',
     phone: '',
+    password: '',
     permissions: getDefaultPermissions(UserRole.OPERATOR)
   });
 
@@ -71,19 +75,33 @@ const UserManagement: React.FC<UserManagementProps> = ({
     (u.jobTitle && u.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
-      onUpdateUser({ ...editingUser, ...formData });
-    } else {
-      onAddUser({
+      const { password: _pw, ...rest } = formData;
+      onUpdateUser({ ...editingUser, ...rest });
+      handleClose();
+      return;
+    }
+    const password = (formData.password || '').trim() || '123456';
+    if (password.length < 6) return;
+    setSavingUser(true);
+    try {
+      const created = await onAddUser({
         ...formData,
+        email: formData.email.trim().toLowerCase(),
+        password,
         companyName: currentUser?.companyName || 'CalcárioFlow Mineração',
         onboardingCompleted: true,
         createdAt: new Date().toISOString()
       });
+      if (created?.id) {
+        setInvitePasswords(prev => ({ ...prev, [created.id]: password }));
+      }
+      handleClose();
+    } finally {
+      setSavingUser(false);
     }
-    handleClose();
   };
 
   const handleEdit = (user: User) => {
@@ -110,12 +128,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
       status: 'Ativo',
       jobTitle: 'Operador de Balança e Expedição',
       phone: '',
+      password: '',
       permissions: getDefaultPermissions(UserRole.OPERATOR)
     });
   };
 
   const handleCopyCredentials = (user: User) => {
-    const credText = `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n🔑 Senha Provisória: 123456\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${window.location.origin}`;
+    const password = invitePasswords[user.id] || '123456';
+    const credText = `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n🔑 Senha: ${password}\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${window.location.origin}`;
     navigator.clipboard?.writeText(credText);
     setCopiedId(user.id);
     setTimeout(() => setCopiedId(null), 3000);
@@ -123,7 +143,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
   const handleSendWhatsApp = (user: User) => {
     const cleanPhone = (user.phone || '').replace(/\D/g, '');
-    const message = `*Acesso ao CalcárioFlow ERP*\n\nOlá *${user.name}*, seu acesso à plataforma da usina foi gerado com sucesso!\n\n👤 *Usuário:* ${user.email}\n🔑 *Senha Provisória:* 123456\n📌 *Função:* ${user.jobTitle || user.role}\n🏢 *Unidade:* ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📲 *Acesse pelo navegador ou instale como app no celular:*\n${window.location.origin}`;
+    const password = invitePasswords[user.id] || '123456';
+    const message = `*Acesso ao CalcárioFlow ERP*\n\nOlá *${user.name}*, seu acesso à plataforma da usina foi gerado com sucesso!\n\n👤 *Usuário:* ${user.email}\n🔑 *Senha:* ${password}\n📌 *Função:* ${user.jobTitle || user.role}\n🏢 *Unidade:* ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📲 *Acesse pelo navegador ou instale como app no celular:*\n${window.location.origin}`;
     const encoded = encodeURIComponent(message);
     const url = cleanPhone ? `https://wa.me/55${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, '_blank');
@@ -462,6 +483,22 @@ const UserManagement: React.FC<UserManagementProps> = ({
                    />
                 </div>
 
+                {!editingUser && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Senha de Acesso *</label>
+                    <input
+                      required
+                      type="text"
+                      minLength={6}
+                      value={formData.password || ''}
+                      onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm font-mono"
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                    <p className="text-[10px] text-slate-500">Essa senha será enviada no convite de WhatsApp.</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                      <label className="text-xs font-bold text-slate-700">Cargo / Descrição da Função</label>
@@ -672,10 +709,10 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                      <ShieldCheck size={14} className="text-emerald-600" /> Senha Inicial Provisória: <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">123456</span>
+                      <ShieldCheck size={14} className="text-emerald-600" /> Convite de acesso
                    </div>
                    <p className="text-[11px] text-slate-500">
-                     Ao salvar, você poderá enviar o convite diretamente no WhatsApp do colaborador com 1 clique.
+                     Após salvar, copie as credenciais ou envie o convite no WhatsApp do colaborador.
                    </p>
                 </div>
 
@@ -689,9 +726,10 @@ const UserManagement: React.FC<UserManagementProps> = ({
                   </button>
                   <button 
                     type="submit" 
-                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-sm"
+                    disabled={savingUser}
+                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-sm disabled:opacity-60"
                   >
-                    {editingUser ? 'Salvar Alterações & Permissões' : 'Confirmar & Cadastrar'}
+                    {savingUser ? 'Salvando...' : editingUser ? 'Salvar Alterações & Permissões' : 'Confirmar & Cadastrar'}
                   </button>
                 </div>
              </form>

@@ -1,6 +1,4 @@
-const PROJECT_ID = 'gen-lang-client-0353764568';
-const DATABASE_ID = 'ai-studio-calcrioflowerp-e81fd407-c01c-4f57-9894-aa3f60aec01a';
-const API_KEY = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyBlgnANdwa6BKVPTeB_ERali62bKGFt6xM';
+import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin';
 
 const STATUS_MAP: Record<string, string> = {
   'invoice.authorized': 'autorizada',
@@ -33,96 +31,34 @@ const STATUS_MAP: Record<string, string> = {
   processing: 'processando',
 };
 
-function firestoreBase() {
-  return `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
-}
-
-function fieldString(fields: any, key: string): string {
-  return fields?.[key]?.stringValue || '';
-}
-
-async function queryByField(companyId: string, fieldPath: string, value: string) {
-  if (!value) return null;
-  const queryRes = await fetch(`${firestoreBase()}:runQuery?key=${API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: `sales_orders_${companyId}` }],
-        where: {
-          fieldFilter: {
-            field: { fieldPath },
-            op: 'EQUAL',
-            value: { stringValue: value },
-          },
-        },
-        limit: 5,
-      },
-    }),
-  });
-
-  if (!queryRes.ok) return null;
-  const rows = await queryRes.json();
-  const hit = (Array.isArray(rows) ? rows : []).find((r: any) => r.document);
-  if (!hit?.document) return null;
-  const name: string = hit.document.name;
-  const id = name.split('/').pop() || '';
-  return { name, fields: hit.document.fields, id };
-}
-
-async function findOrder(companyId: string, reference: string, orderId?: string, invoiceId?: string) {
-  if (orderId) {
-    const byId = await fetch(
-      `${firestoreBase()}/sales_orders_${companyId}/${encodeURIComponent(orderId)}?key=${API_KEY}`
-    );
-    if (byId.ok) {
-      const doc = await byId.json();
-      return { name: doc.name as string, fields: doc.fields, id: orderId };
-    }
-  }
-
-  // Lookup by nfeId (invoiceId) first, then reference.
-  if (invoiceId) {
-    const byInvoice = await queryByField(companyId, 'nfeId', invoiceId);
-    if (byInvoice) return byInvoice;
-  }
-
-  if (reference) {
-    const byRef = await queryByField(companyId, 'reference', reference);
-    if (byRef) return byRef;
-  }
-
-  return null;
-}
-
-async function patchOrder(docName: string, updates: Record<string, string>) {
-  const masks = Object.keys(updates)
-    .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
-    .join('&');
-  const fields: Record<string, any> = {};
-  for (const [k, v] of Object.entries(updates)) {
-    if (v !== undefined && v !== '') fields[k] = { stringValue: v };
-  }
-  const url = `https://firestore.googleapis.com/v1/${docName}?${masks}&key=${API_KEY}`;
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields }),
-  });
-  return res.ok;
+function webhookAuthorized(req: any): boolean {
+  const expected = (process.env.NOTAAS_WEBHOOK_SECRET || '').trim();
+  if (!expected) return true;
+  const header =
+    req.headers['x-webhook-secret'] ||
+    req.headers['x-notaas-secret'] ||
+    req.headers['authorization'] ||
+    '';
+  const token = String(header).replace(/^Bearer\s+/i, '').trim();
+  return token === expected;
 }
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     return res.status(200).json({
       status: 'ok',
-      service: 'Calcário Flow ERP - Webhook Nótass',
+      service: 'Calcário Flow ERP - Webhook NF-e',
+      store: getAdminSupabase() ? 'supabase' : 'unconfigured',
       timestamp: new Date().toISOString(),
     });
   }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido. Use POST.' });
+  }
+
+  if (!webhookAuthorized(req)) {
+    return res.status(401).json({ error: 'Webhook não autorizado.' });
   }
 
   try {
@@ -140,7 +76,7 @@ export default async function handler(req: any, res: any) {
       req.body?.referencia ||
       '';
     const orderId = data.orderId || req.body?.orderId || '';
-    const invoiceId = data.invoiceId || req.body?.invoiceId || '';
+    const invoiceId = data.invoiceId || data.id || req.body?.invoiceId || '';
     const companyId =
       (req.query?.companyId as string) ||
       data.companyId ||
@@ -159,6 +95,8 @@ export default async function handler(req: any, res: any) {
     const nfeDanfeUrl = data.danfeUrl || data.pdfUrl || data.url_danfe || data.caminho_danfe || '';
     const nfeXmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
     const nfeErro = data.xMotivo || data.errorMessage || data.rejectionReason || data.motivo_rejeicao || data.mensagem_sefaz || '';
+    const nfeNumero = data.nNf != null ? String(data.nNf) : data.numero != null ? String(data.numero) : '';
+    const nfeSerie = data.serie != null ? String(data.serie) : '';
 
     if (!reference && !orderId && !invoiceId) {
       return res.status(200).json({
@@ -169,40 +107,54 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const companiesToTry = companyId ? [companyId] : ['matriz-demo'];
-    let updated = false;
-    let matchedId = '';
+    const found = await findSalesOrder({
+      companyId: companyId || undefined,
+      orderId: orderId || undefined,
+      invoiceId: invoiceId || undefined,
+      reference: reference || undefined,
+    });
 
-    for (const cid of companiesToTry) {
-      const found = await findOrder(cid, reference, orderId, invoiceId);
-      if (!found) continue;
-      const patch: Record<string, string> = {
+    if (!found) {
+      return res.status(200).json({
+        received: true,
+        updated: false,
+        reason: 'Pedido não encontrado no Supabase.',
+        event,
         nfeStatus,
-        updatedAt: new Date().toISOString(),
-      };
-      if (invoiceId) patch.nfeId = invoiceId;
-      if (nfeChave) patch.nfeChave = nfeChave;
-      if (nfeProtocolo) patch.nfeProtocolo = nfeProtocolo;
-      if (nfeDanfeUrl) patch.nfeDanfeUrl = nfeDanfeUrl;
-      if (nfeXmlUrl) patch.nfeXmlUrl = nfeXmlUrl;
-      if (nfeErro) patch.nfeErro = nfeErro;
-      updated = await patchOrder(found.name, patch);
-      matchedId = found.id;
-      break;
+        orderId: orderId || null,
+        invoiceId: invoiceId || null,
+        reference: reference || null,
+        timestamp: new Date().toISOString(),
+      });
     }
+
+    const patch: Record<string, any> = {
+      nfeStatus,
+    };
+    if (invoiceId) patch.nfeId = invoiceId;
+    if (nfeChave) patch.nfeChave = nfeChave;
+    if (nfeProtocolo) patch.nfeProtocolo = nfeProtocolo;
+    if (nfeDanfeUrl) patch.nfeDanfeUrl = nfeDanfeUrl;
+    if (nfeXmlUrl) patch.nfeXmlUrl = nfeXmlUrl;
+    if (nfeNumero) patch.nfeNumero = nfeNumero;
+    if (nfeSerie) patch.nfeSerie = nfeSerie;
+    if (nfeErro) patch.nfeErro = nfeErro;
+    else if (nfeStatus === 'autorizada') patch.nfeErro = '';
+
+    const updated = await patchSalesOrder(found, patch);
 
     return res.status(200).json({
       received: true,
       updated,
       event,
       nfeStatus,
-      orderId: matchedId || orderId || null,
+      orderId: found.id,
       invoiceId: invoiceId || null,
-      reference: reference || null,
+      reference: reference || found.data?.reference || null,
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
-    console.error('Erro no webhook Nótass:', err);
+    console.error('Erro no webhook NF-e:', err);
     return res.status(500).json({ error: err.message || 'Erro interno ao processar webhook' });
   }
 }

@@ -9,10 +9,16 @@ export const hashPassword = async (password: string): Promise<string> => {
 export const isDemoEmail = (email: string) =>
   email === 'admin@calcarioflow.com.br' || email === 'admin' || email.endsWith('@calcarioflow.com.br');
 
+export const toPublicUser = (user: User): User => {
+  const { passwordHash: _hash, ...safe } = user;
+  return safe;
+};
+
 export const passwordMatches = async (user: User, pass: string): Promise<boolean> => {
   if (!pass) return false;
   if (user.passwordHash) {
     return (await hashPassword(pass)) === user.passwordHash;
   }
+  // Contas antigas / demo sem hash ainda aceitam a senha provisória.
   return pass === '123456';
 };

@@ -5,7 +5,10 @@ import {
   Package, Wallet, Users, Rocket, Building2, MapPin, 
   ShieldCheck, DollarSign, Scale, HelpCircle, Check, Award
 } from 'lucide-react';
-import { db, userService } from '../services/dataService';
+import { db, userService, resolveCompanyKey } from '../services/dataService';
+import { hashPassword } from '../services/authLogic';
+import { DEFAULT_FISCAL_CONFIG } from '../constants';
+import { newId } from '../services/ids';
 
 interface OnboardingModalProps {
   user: User;
@@ -62,11 +65,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const handleFinishOnboarding = async () => {
     setSaving(true);
     try {
+      const companyId = resolveCompanyKey(user.companyId || `comp-${user.id}`);
       // 1. Atualiza dados do usuário
       const updatedUser: User = {
         ...user,
+        companyId,
         companyName,
         cnpj,
+        city: cityLocation,
+        state: stateLocation,
         onboardingCompleted: true,
         onboardingStep: 5
       };
@@ -82,43 +89,56 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           unitPrice: Number(p.unitPrice) || 0,
           minStock: 200,
           unit: 'Ton',
-          companyId: 'main'
+          companyId
         }));
-      await db.upsert('inventory', 'main', activeProducts);
+      await db.upsert('inventory', companyId, activeProducts);
 
       // 3. Cria contas bancárias iniciais
       const initialAccounts: FinancialAccount[] = [
         {
-          id: `acc-bank-${Date.now()}`,
+          id: newId('acc-bank'),
           name: `Conta Corrente - ${bankName}`,
           type: AccountType.BANCO,
           bankName,
           accountNumber,
           initialBalance: Number(bankInitialBalance) || 0,
-          companyId: 'main'
+          companyId
         },
         {
-          id: `acc-cash-${Date.now()}`,
+          id: newId('acc-cash'),
           name: 'Caixa Físico da Usina / Balança',
           type: AccountType.CAIXA,
           initialBalance: Number(cashboxInitialBalance) || 0,
-          companyId: 'main'
+          companyId
         }
       ];
-      await db.upsert('financial_accounts', 'main', initialAccounts);
+      await db.upsert('financial_accounts', companyId, initialAccounts);
+
+      const existingFiscal = (await db.getTable('fiscal_config', companyId))[0] || {};
+      await db.upsert('fiscal_config', companyId, {
+        ...DEFAULT_FISCAL_CONFIG,
+        ...existingFiscal,
+        id: 'fiscal-main-config',
+        companyId,
+        cnpjEmitente: cnpj,
+        razaoSocial: companyName,
+        nomeFantasia: companyName
+      });
 
       // 4. Cria operador adicional se preenchido
       if (teamMember.name && teamMember.email) {
         const newOp: User = {
-          id: `usr-op-${Date.now()}`,
+          id: newId('usr-op'),
           name: teamMember.name,
           email: teamMember.email.toLowerCase(),
+          passwordHash: await hashPassword('123456'),
           role: teamMember.role,
           status: 'Ativo',
+          companyId,
           companyName,
           lastAccess: new Date().toISOString()
         };
-        await db.upsert('users', 'main', newOp);
+        await db.upsert('users', companyId, newOp);
       }
 
       if (onProvisionData) {

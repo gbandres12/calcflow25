@@ -12,6 +12,7 @@ interface FiscalManagementProps {
   orders: SaleOrder[];
   customers: Customer[];
   company: Company;
+  companyId?: string;
   onUpdateOrder: (order: SaleOrder) => void;
 }
 
@@ -19,6 +20,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   orders,
   customers,
   company,
+  companyId,
   onUpdateOrder
 }) => {
   const [config, setConfig] = useState<FiscalConfig | null>(null);
@@ -36,11 +38,11 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [mappedPayload, setMappedPayload] = useState<any | null>(null);
 
   useEffect(() => {
-    fiscalService.getConfig().then(c => {
+    fiscalService.getConfig(companyId).then(c => {
       setConfig(c);
       checkSefazStatus(c);
     });
-  }, []);
+  }, [companyId]);
 
   const addLog = (type: 'info' | 'success' | 'warning' | 'error', message: string, data?: any) => {
     const time = new Date().toLocaleTimeString('pt-BR');
@@ -173,7 +175,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     if (!config) return;
     setIsSaving(true);
     try {
-      await fiscalService.saveConfig(config);
+      await fiscalService.saveConfig(config, companyId);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } finally {

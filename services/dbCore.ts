@@ -17,7 +17,7 @@ import {
 import { getSupabase } from './supabaseClient';
 import { firestoreDb } from './firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
-import { SEED_DOC_ID, stripSeedDocs, hasSeedMeta, seedMetaRecord, mapSupabaseRows, seedMetaUpsertRow } from './persistSeed';
+import { SEED_DOC_ID, stripSeedDocs, hasSeedMeta, seedMetaRecord, mapSupabaseRows } from './persistSeed';
 
 const storage = {
   get(key: string) {
@@ -227,11 +227,11 @@ export const db = {
             updated_at: new Date().toISOString()
           };
         });
-        rowsToUpsert.push(seedMetaUpsertRow(tableName, compKey));
         const { error } = await supabase
           .from('app_records')
           .upsert(rowsToUpsert, { onConflict: 'table_name,company_id,id' });
         if (error) console.warn(`[Supabase] Erro ao gravar '${tableName}':`, error.message);
+        return updated;
       } catch (err) {
         console.warn(`[Supabase] Falha de comunicação ao gravar '${tableName}':`, err);
       }
@@ -268,6 +268,7 @@ export const db = {
           .eq('company_id', compKey)
           .eq('id', String(id));
         if (error) console.warn(`[Supabase] Erro ao deletar em '${tableName}':`, error.message);
+        return;
       } catch (err) {
         console.warn(`[Supabase] Falha ao deletar em '${tableName}':`, err);
       }

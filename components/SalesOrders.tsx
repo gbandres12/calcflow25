@@ -35,6 +35,7 @@ interface SalesOrdersProps {
   inventory: InventoryItem[];
   accounts: FinancialAccount[];
   company: Company;
+  companyId?: string;
   onAddOrder: (order: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => void;
   onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
   onUpdateOrder: (order: SaleOrder) => void;
@@ -74,7 +75,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   customers, 
   inventory, 
   accounts, 
-  company, 
+  company,
+  companyId,
   onAddOrder, 
   onAddCustomer,
   onUpdateOrder,
@@ -107,8 +109,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
 
   useEffect(() => {
-    fiscalService.getConfig().then(cfg => setFiscalConfig(cfg));
-  }, []);
+    fiscalService.getConfig(companyId).then(cfg => setFiscalConfig(cfg));
+  }, [companyId]);
   
   // Form State
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -1890,7 +1892,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Modal de Emissão de NF-e via NotaAs */}
       {orderToEmitNfe && (
         <EmitirNfeModal
-          order={orderToEmitNfe}
+          order={{ ...orderToEmitNfe, companyId: orderToEmitNfe.companyId || companyId || company.id }}
           customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
           config={fiscalConfig}
           company={company}

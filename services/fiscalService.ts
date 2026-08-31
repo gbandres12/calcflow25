@@ -1,6 +1,6 @@
 import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
-import { db } from './dataService';
+import { db, resolveCompanyKey } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
@@ -89,6 +89,7 @@ export interface NotaAsCriarNFePayload {
   consumidorFinal: 0 | 1;
   presencaComprador: 1;
   infCpl?: string;
+  referenciaExterna?: string;
 }
 
 /**
@@ -197,22 +198,30 @@ export const fiscalService = {
   /**
    * Obtém as configurações fiscais salvas ou padrão
    */
-  async getConfig(): Promise<FiscalConfig> {
+  async getConfig(companyId?: string): Promise<FiscalConfig> {
+    const compKey = resolveCompanyKey(companyId);
     try {
-      const saved = await db.getTable('fiscal_config');
+      const saved = await db.getTable('fiscal_config', compKey);
       if (saved && saved.length > 0) {
-        return { ...DEFAULT_FISCAL_CONFIG, ...saved[0] };
+        const row = saved.find((c: FiscalConfig) => c?.id && c.id !== '__seed__') || saved[0];
+        return { ...DEFAULT_FISCAL_CONFIG, ...row, companyId: row?.companyId || compKey };
       }
     } catch {}
-    return DEFAULT_FISCAL_CONFIG;
+    return { ...DEFAULT_FISCAL_CONFIG, companyId: compKey };
   },
 
   /**
-   * Salva as configurações fiscais no repositório
+   * Salva as configurações fiscais no repositório da empresa
    */
-  async saveConfig(config: FiscalConfig): Promise<FiscalConfig> {
-    await db.upsert('fiscal_config', 'main', config);
-    return config;
+  async saveConfig(config: FiscalConfig, companyId?: string): Promise<FiscalConfig> {
+    const compKey = resolveCompanyKey(companyId || config.companyId);
+    const tagged: FiscalConfig = {
+      ...config,
+      id: config.id || 'fiscal-main-config',
+      companyId: compKey
+    };
+    await db.upsert('fiscal_config', compKey, tagged);
+    return tagged;
   },
 
   /**
@@ -444,7 +453,8 @@ export const fiscalService = {
       finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
-      infCpl: infParts.join(' | ').trim()
+      infCpl: infParts.join(' | ').trim(),
+      referenciaExterna: order.reference || `ORDER-${order.id}`
     };
 
     if (order.shipping && !semPagamento) payload.valorFrete = order.shipping;
@@ -464,7 +474,7 @@ export const fiscalService = {
   ): Promise<EmitirNFeResult> {
     const resolvedCompanyId = companyId || order.companyId;
     const invoiceRequestId = `inv_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(resolvedCompanyId));
 
     let dest: Customer = customer;
     if (customer) {
@@ -586,7 +596,7 @@ export const fiscalService = {
             console.groupEnd();
 
             const nextNum = parseInt(nfeNumero, 10) + 1;
-            await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+            await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
 
             const nfeChave = data.chaveAcesso || data.chave || data.chave_acesso || data.chaveNFe || '';
             const nfeProtocolo = data.nProt || data.protocolo || '';
@@ -671,7 +681,7 @@ export const fiscalService = {
         console.groupEnd();
 
         const nextNum = parseInt(nfeNumero, 10) + 1;
-        await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+        await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
 
         const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.chave_acesso || data.chaveNFe || '';
         const statusRetornado = resolveNfeStatus(data.status, response.status, chaveAcesso);
@@ -754,7 +764,7 @@ export const fiscalService = {
     const mockChave = this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero);
     const mockProtocolo = `11526000${Math.floor(1000000 + Math.random() * 9000000)}`;
     const nextNum = parseInt(nfeNumero, 10) + 1;
-    await this.saveConfig({ ...config, proxNumeroNFe: nextNum });
+    await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
 
     return {
       success: true,
@@ -818,7 +828,7 @@ export const fiscalService = {
       return { success: false, status: 'nao_emitida', error: 'ID ou chave de acesso não fornecida.' };
     }
 
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     const apiKey = (config.apiKey || '').trim();
 
     if (!apiKey) {
@@ -834,7 +844,8 @@ export const fiscalService = {
           nfeIdOrChave,
           apiKey,
           apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
-          provider: config.apiProvider || 'notaas'
+          provider: config.apiProvider || 'notaas',
+          companyId: config.companyId
         })
       });
 
@@ -897,7 +908,7 @@ export const fiscalService = {
     referencia: string, 
     overrideConfig?: FiscalConfig
   ): Promise<ConsultarNFeResult> {
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     const apiKey = (config.apiKey || '').trim();
     if (apiKey) {
       try {
@@ -908,7 +919,8 @@ export const fiscalService = {
             referencia,
             apiKey,
             apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
-            provider: config.apiProvider || 'notaas'
+            provider: config.apiProvider || 'notaas',
+            companyId: config.companyId
           })
         });
         if (proxied.ok && proxied.isJson) {
@@ -934,7 +946,7 @@ export const fiscalService = {
    * Consulta o status de operação dos servidores da SEFAZ via proxy
    */
   async consultarStatusSefaz(overrideConfig?: FiscalConfig): Promise<StatusSefazResult> {
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     const start = Date.now();
 
     const apiKey = (config.apiKey || '').trim();
@@ -1001,7 +1013,7 @@ export const fiscalService = {
       };
     }
 
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
 
     const apiKey = (config.apiKey || '').trim();
     if (apiKey) {
@@ -1016,7 +1028,8 @@ export const fiscalService = {
             motivo: justificativa.trim(),
             apiKey,
             apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
-            provider: config.apiProvider || 'notaas'
+            provider: config.apiProvider || 'notaas',
+            companyId: config.companyId
           })
         });
         if (proxied.ok && proxied.isJson) {
@@ -1039,7 +1052,7 @@ export const fiscalService = {
    * Obtém a URL de download ou visualização do DANFE PDF
    */
   async obterDanfePdfUrl(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     const apiKey = (config.apiKey || '').trim();
     if (apiKey) {
       try {
@@ -1066,7 +1079,7 @@ export const fiscalService = {
    * Obtém o XML assinado da NF-e
    */
   async obterXmlNFe(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
-    const config = overrideConfig || (await this.getConfig());
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     const apiKey = (config.apiKey || '').trim();
     if (apiKey) {
       try {
