@@ -155,4 +155,136 @@ export const testSupabaseConnection = async (): Promise<{
   }
 };
 
+export interface SupabasePersistenceTestResult {
+  ok: boolean;
+  canWrite: boolean;
+  canRead: boolean;
+  latencyMs?: number;
+  message: string;
+  counts: {
+    salesOrders: number;
+    nfeOrders: number;
+    transactions: number;
+    customers: number;
+    total: number;
+  };
+}
+
+/**
+ * Executa um ciclo completo de teste de persistência em tempo real no Supabase:
+ * 1. Grava um registro de diagnóstico em app_records
+ * 2. Lê de volta para certificar integridade dos dados
+ * 3. Remove o registro de diagnóstico
+ * 4. Obtém o total de pedidos de vendas, notas fiscais e transações já gravados
+ */
+export const testSupabasePersistence = async (): Promise<SupabasePersistenceTestResult> => {
+  const client = getSupabase();
+  if (!client) {
+    return {
+      ok: false,
+      canWrite: false,
+      canRead: false,
+      message: 'Supabase não configurado (URL ou Chave ausentes nas variáveis de ambiente).',
+      counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
+    };
+  }
+
+  const startTime = performance.now();
+  const testId = `diag-${Date.now()}`;
+
+  try {
+    // 1. Testar Gravação (Upsert)
+    const { error: writeError } = await client
+      .from('app_records')
+      .upsert([{
+        id: testId,
+        table_name: '__diagnostic_probe__',
+        company_id: 'probe',
+        data: { probe: true, timestamp: new Date().toISOString() },
+        updated_at: new Date().toISOString()
+      }], { onConflict: 'table_name,company_id,id' });
+
+    if (writeError) {
+      return {
+        ok: false,
+        canWrite: false,
+        canRead: false,
+        message: `Falha ao gravar no Supabase: ${writeError.message}`,
+        counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
+      };
+    }
+
+    // 2. Testar Leitura
+    const { data: readData, error: readError } = await client
+      .from('app_records')
+      .select('id, data')
+      .eq('id', testId)
+      .eq('table_name', '__diagnostic_probe__')
+      .maybeSingle();
+
+    if (readError || !readData) {
+      return {
+        ok: false,
+        canWrite: true,
+        canRead: false,
+        message: `Registro foi gravado, mas falhou na leitura: ${readError?.message || 'Registro não encontrado'}`,
+        counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
+      };
+    }
+
+    // 3. Limpar registro de teste
+    await client
+      .from('app_records')
+      .delete()
+      .eq('id', testId)
+      .eq('table_name', '__diagnostic_probe__');
+
+    const latencyMs = Math.round(performance.now() - startTime);
+
+    // 4. Buscar contagem de registros das áreas de negócio
+    let salesOrders = 0;
+    let nfeOrders = 0;
+    let transactions = 0;
+    let customers = 0;
+    let total = 0;
+
+    const { data: allRecords } = await client
+      .from('app_records')
+      .select('table_name, data');
+
+    if (Array.isArray(allRecords)) {
+      total = allRecords.length;
+      allRecords.forEach((row: any) => {
+        if (row.table_name === 'sales_orders') {
+          salesOrders++;
+          if (row.data?.nfeStatus === 'autorizada' || row.data?.nfeNumero) {
+            nfeOrders++;
+          }
+        } else if (row.table_name === 'transactions') {
+          transactions++;
+        } else if (row.table_name === 'customers') {
+          customers++;
+        }
+      });
+    }
+
+    return {
+      ok: true,
+      canWrite: true,
+      canRead: true,
+      latencyMs,
+      message: `Ciclo completo de gravação e leitura confirmado no Supabase em ${latencyMs}ms!`,
+      counts: { salesOrders, nfeOrders, transactions, customers, total }
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      canWrite: false,
+      canRead: false,
+      message: `Exceção durante teste de persistência: ${err?.message || err}`,
+      counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
+    };
+  }
+};
+
 export default supabase;

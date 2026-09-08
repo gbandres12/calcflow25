@@ -39,6 +39,7 @@ export default async function handler(req: any, res: any) {
       endpoint,
       apiKey: key,
       body: payload,
+      provider
     });
 
     return res.status(result.status).json(result.data);

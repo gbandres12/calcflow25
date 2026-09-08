@@ -366,9 +366,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                 type="password"
                 value={config.apiKey || ''}
                 onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                placeholder="Cole sua chave de API obtida no portal da API..."
+                placeholder="Ex: ntaas_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
               />
+              {config.apiProvider === 'notaas' && config.apiKey && !config.apiKey.startsWith('ntaas_') && (
+                <p className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 rounded-lg p-1.5">
+                  ⚠️ <b>Atenção:</b> As chaves de emissão da Notaas iniciam com <code>ntaas_</code> (Project Key). Certifique-se de ter copiado a chave gerada no Dashboard da Notaas (Menu &gt; API Keys).
+                </p>
+              )}
             </div>
 
             {/* Ambiente */}
@@ -748,7 +753,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
                 <div className="bg-slate-900 p-3.5 rounded-2xl border border-slate-800 space-y-1">
                   <span className="text-slate-500 block text-[10px] uppercase font-bold font-sans">Modo de Operação:</span>
-                  <p className="font-bold text-emerald-400 uppercase">{config.modoEmissao === 'api_real' || config.apiKey ? 'API REAL (TRANSMISSÃO)' : 'SIMULAÇÃO LOCAL'}</p>
+                  <p className="font-bold text-emerald-400 uppercase">{config.modoEmissao === 'sandbox_local' ? 'SIMULAÇÃO LOCAL' : 'API REAL (TRANSMISSÃO)'}</p>
                   <p className="text-slate-400 text-[10px]">Regime: {config.regimeTributario === '1' ? 'Simples Nacional' : 'Regime Normal'}</p>
                 </div>
               </div>

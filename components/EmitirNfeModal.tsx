@@ -122,6 +122,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 }`}>
                   {config.environment === 'production' ? 'Ambiente Produção SEFAZ' : 'Sandbox / Homologação'}
                 </span>
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  config.modoEmissao === 'sandbox_local' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
+                }`}>
+                  {config.modoEmissao === 'sandbox_local' ? 'Modo Simulação' : `API Real (${(config.apiProvider || 'notaas').toUpperCase()})`}
+                </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
                 Pedido <b>{order.reference}</b> | Próximo Nº NF-e: <b>{config.proxNumeroNFe || 1042}</b> (Série {config.serieNFe || 1})

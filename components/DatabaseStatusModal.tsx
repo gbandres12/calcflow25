@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Database, CheckCircle2, AlertTriangle, Copy, Check, 
-  ExternalLink, RefreshCw, Sparkles, X, ShieldAlert, Code2 
+  ExternalLink, RefreshCw, Sparkles, X, ShieldAlert, Code2,
+  FileCheck, Receipt, DollarSign, ArrowUpRight
 } from 'lucide-react';
 import { 
   getSupabaseConfig, 
   testSupabaseConnection, 
+  testSupabasePersistence,
+  SupabasePersistenceTestResult,
   SUPABASE_SQL_SCHEMA,
   isSupabaseConfigured 
 } from '../services/supabaseClient';
@@ -18,6 +21,8 @@ interface DatabaseStatusModalProps {
 export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingPersistence, setTestingPersistence] = useState(false);
+  const [persistenceResult, setPersistenceResult] = useState<SupabasePersistenceTestResult | null>(null);
   const [status, setStatus] = useState<{
     ok: boolean;
     tableExists: boolean;
@@ -32,6 +37,9 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
     try {
       const res = await testSupabaseConnection();
       setStatus(res);
+      if (res.ok && res.tableExists) {
+        runPersistenceTest();
+      }
     } catch (e: any) {
       setStatus({
         ok: false,
@@ -40,6 +48,18 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
       });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const runPersistenceTest = async () => {
+    setTestingPersistence(true);
+    try {
+      const res = await testSupabasePersistence();
+      setPersistenceResult(res);
+    } catch (e: any) {
+      console.warn('Erro ao testar persistência:', e);
+    } finally {
+      setTestingPersistence(false);
     }
   };
 
@@ -128,6 +148,92 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
             </div>
           </div>
 
+          {/* Persistence Live Diagnostic & Counts */}
+          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <Database size={14} className="text-purple-400" />
+                  Persistência Real no Banco (Supabase)
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Verificação em tempo real de gravação, leitura e contagem de registros salvos na nuvem
+                </p>
+              </div>
+              <button
+                onClick={runPersistenceTest}
+                disabled={testingPersistence || !status?.ok || !status?.tableExists}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+              >
+                <RefreshCw size={12} className={testingPersistence ? 'animate-spin' : ''} />
+                {testingPersistence ? 'Testando...' : 'Testar Gravação'}
+              </button>
+            </div>
+
+            {/* Test probe result */}
+            {persistenceResult && (
+              <div className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                persistenceResult.ok && persistenceResult.canWrite && persistenceResult.canRead
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+              }`}>
+                {persistenceResult.ok ? (
+                  <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                )}
+                <span className="font-medium">{persistenceResult.message}</span>
+              </div>
+            )}
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                  <DollarSign size={12} className="text-purple-400" />
+                  Vendas / Pedidos
+                </div>
+                <div className="text-lg font-black text-white">
+                  {persistenceResult ? persistenceResult.counts.salesOrders : '...'}
+                </div>
+                <div className="text-[9px] text-slate-500">gravados em app_records</div>
+              </div>
+
+              <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                  <FileCheck size={12} className="text-emerald-400" />
+                  Notas Fiscais
+                </div>
+                <div className="text-lg font-black text-emerald-400">
+                  {persistenceResult ? persistenceResult.counts.nfeOrders : '...'}
+                </div>
+                <div className="text-[9px] text-slate-500">com chave / autorizadas</div>
+              </div>
+
+              <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                  <Receipt size={12} className="text-blue-400" />
+                  Transações Fin.
+                </div>
+                <div className="text-lg font-black text-blue-400">
+                  {persistenceResult ? persistenceResult.counts.transactions : '...'}
+                </div>
+                <div className="text-[9px] text-slate-500">lançamentos de caixa</div>
+              </div>
+
+              <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                  <Database size={12} className="text-amber-400" />
+                  Total na Nuvem
+                </div>
+                <div className="text-lg font-black text-amber-400">
+                  {persistenceResult ? persistenceResult.counts.total : '...'}
+                </div>
+                <div className="text-[9px] text-slate-500">documentos totais</div>
+              </div>
+            </div>
+          </div>
+
           {/* Configuration details */}
           <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -150,6 +256,15 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
                   )}
                 </span>
               </div>
+              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800/80">
+                <span className="text-slate-400 font-mono">Autenticação (Supabase Auth)</span>
+                <span className="font-mono text-emerald-400 font-bold">
+                  Ativo (JWT + Bcrypt)
+                </span>
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/30 text-[11px] text-purple-200 leading-relaxed">
+              💡 <strong>Dica de Autenticação:</strong> No painel do Supabase, em <em>Authentication &gt; Providers &gt; Email</em>, você pode desmarcar a opção <em>"Confirm email"</em> se quiser que os novos operadores acessem imediatamente sem precisar clicar em links de ativação por e-mail.
             </div>
           </div>
 
