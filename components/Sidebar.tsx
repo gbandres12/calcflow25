@@ -23,7 +23,8 @@ import {
   Shield,
   HardHat,
   X,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Sliders
 } from 'lucide-react';
 import { View, UserRole, User, UserPermissions } from '../types';
 
@@ -58,7 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (itemRoles && !itemRoles.includes(user.role)) {
       return false;
     }
-    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal'].includes(itemId)) {
+    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal', 'fiscal_config'].includes(itemId)) {
       return userPermissions.financial;
     }
     if (['users'].includes(itemId)) {
@@ -87,7 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'orders', label: 'Vendas & Romaneios', icon: FileText },
         { id: 'customers', label: 'Clientes & Produtores', icon: Users },
-        { id: 'fiscal', label: 'Fiscal & Notas (NF-e)', icon: FileCheck, roles: [UserRole.ADMIN, UserRole.MANAGER] },
+        { id: 'fiscal', label: 'Notas Fiscais Emitidas', icon: FileCheck, roles: [UserRole.ADMIN, UserRole.MANAGER] },
       ]
     },
     {
@@ -123,6 +124,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'users', label: 'Usuários & Equipe', icon: UserCog },
+        { id: 'fiscal_config', label: 'Configuração de Nota Fiscal', icon: Sliders, roles: [UserRole.ADMIN, UserRole.MANAGER] },
         { id: 'settings', label: 'Categorias & Configs', icon: Settings, roles: [UserRole.ADMIN] },
       ]
     }

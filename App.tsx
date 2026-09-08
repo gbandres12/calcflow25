@@ -16,6 +16,7 @@ import FuelManagement from './components/FuelManagement';
 import UserManagement from './components/UserManagement';
 import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
+import { FiscalConfigView } from './components/FiscalConfigView';
 import TransferManagement from './components/TransferManagement';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
@@ -832,6 +833,14 @@ const App: React.FC = () => {
               company={operatingCompany}
               companyId={activeCompanyId}
               onUpdateOrder={handleUpdateOrder} 
+              onNavigate={setCurrentView}
+            />
+          )}
+          {currentView === 'fiscal_config' && (
+            <FiscalConfigView 
+              company={operatingCompany}
+              companyId={activeCompanyId}
+              onNavigate={setCurrentView}
             />
           )}
           {currentView === 'inventory' && (
