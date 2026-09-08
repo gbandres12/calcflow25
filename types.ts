@@ -130,8 +130,6 @@ export interface InventoryItem {
   minStock: number;
   unit?: string;
   companyId?: string;
-  
-  // Área Fiscal
   ncm?: string;
   cst?: string;
   cfop?: string;
@@ -363,8 +361,6 @@ export interface FiscalConfig {
   apiBaseUrl?: string;
   modoEmissao?: 'api_real' | 'sandbox_local';
   environment: 'sandbox' | 'production';
-  
-  // Dados Cadastrais da Empresa Emitente
   cnpjEmitente: string;
   inscricaoEstadual: string;
   inscricaoMunicipal?: string;
@@ -373,8 +369,6 @@ export interface FiscalConfig {
   nomeFantasia: string;
   telefoneEmitente?: string;
   emailEmitente?: string;
-  
-  // Endereço do Estabelecimento Emitente
   logradouroEmitente?: string;
   numeroEmitente?: string;
   complementoEmitente?: string;
@@ -383,8 +377,6 @@ export interface FiscalConfig {
   ufEmitente?: string;
   cepEmitente?: string;
   ibgeEmitente?: string;
-  
-  // Regime Tributário e Numeração
   regimeTributario: '1' | '2' | '3';
   serieNFe: string;
   proxNumeroNFe: number;
@@ -423,27 +415,24 @@ export interface TransferItem {
 export interface TransferShipment {
   id: string;
   companyId?: string;
-  code: string; // Ex: TRF-2026-001
-  originLocation: string; // Ex: "Polo de Compras Santarém"
-  destinationLocation: string; // Ex: "Fazenda Usina Matriz"
-  dateSent: string; // YYYY-MM-DD
-  sentBy: string; // Responsável pela remessa em Santarém
-  carrierOrDriver?: string; // Motorista / Transportador
-  vehiclePlate?: string; // Placa do Veículo
+  code: string;
+  originLocation: string;
+  destinationLocation: string;
+  dateSent: string;
+  sentBy: string;
+  carrierOrDriver?: string;
+  vehiclePlate?: string;
   notes?: string;
   items: TransferItem[];
   status: TransferStatus;
-  
-  // Conferência e Recebimento na Fazenda
-  receivedDate?: string; // YYYY-MM-DD HH:mm
-  receivedBy?: string; // Nome de quem recebeu na Fazenda
-  receiverRole?: string; // Cargo/função do recebedor
-  conferenceNotes?: string; // Parecer de conferência
-  receiverSignature?: string; // Data URL da assinatura ou hash de assinatura
-  stockIntegrated?: boolean; // Se deu entrada no estoque da Matriz
+  receivedDate?: string;
+  receivedBy?: string;
+  receiverRole?: string;
+  conferenceNotes?: string;
+  receiverSignature?: string;
+  stockIntegrated?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
-
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
