@@ -1,15 +1,16 @@
-
 import React, { useState } from 'react';
 import { Category } from '../types';
 import { Plus, Trash2, Tag, TrendingUp, TrendingDown, Search, X, AlertCircle } from 'lucide-react';
+import { FiscalSettingsPage } from './FiscalSettingsPage';
 
 interface CategorySettingsProps {
   categories: Category[];
   onAddCategory: (name: string, type: 'INFLOW' | 'OUTFLOW') => void;
   onDeleteCategory: (id: string) => void;
+  companyId?: string;
 }
 
-const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCategory, onDeleteCategory }) => {
+const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCategory, onDeleteCategory, companyId }) => {
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'INFLOW' | 'OUTFLOW'>('OUTFLOW');
   const [search, setSearch] = useState('');
@@ -26,15 +27,15 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
 
   return (
     <div className="space-y-8">
+      <FiscalSettingsPage companyId={companyId} />
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Categorias de Lançamento</h2>
-          <p className="text-slate-500 text-sm font-medium">Personalize as classificações financeiras do sistema</p>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Configurações</h2>
+          <p className="text-slate-500 text-sm font-medium">Categorias financeiras e cadastro fiscal da empresa</p>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Formulário de Adição */}
         <div className="lg:col-span-1 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 h-fit">
           <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2">
             <Plus size={18} className="text-purple-600" /> Nova Categoria
@@ -74,7 +75,6 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
               <Plus size={16} /> Adicionar Categoria
             </button>
           </form>
-
           <div className="mt-8 p-4 bg-amber-50 rounded-2xl flex gap-3">
              <AlertCircle size={20} className="text-amber-500 shrink-0" />
              <p className="text-[9px] text-amber-700 font-bold uppercase leading-relaxed tracking-tighter">
@@ -83,7 +83,6 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
           </div>
         </div>
 
-        {/* Listagem de Categorias */}
         <div className="lg:col-span-2 space-y-6">
            <div className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
               <Search className="text-slate-400" size={18} />
@@ -95,9 +94,7 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
                 className="bg-transparent border-none outline-none font-medium text-sm w-full"
               />
            </div>
-
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Entradas */}
               <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-6 bg-emerald-50/30 border-b border-emerald-50 flex items-center gap-2">
                     <TrendingUp size={18} className="text-emerald-600" />
@@ -121,8 +118,6 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
                     {inflows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-400 italic">Nenhuma categoria de entrada.</p>}
                  </div>
               </div>
-
-              {/* Saídas */}
               <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-6 bg-rose-50/30 border-b border-rose-50 flex items-center gap-2">
                     <TrendingDown size={18} className="text-rose-600" />
