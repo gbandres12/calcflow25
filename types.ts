@@ -39,6 +39,7 @@ export interface UserPermissions {
   users: boolean;
   inventory: boolean;
   orders: boolean;
+  modules?: Partial<Record<string, boolean>>;
 }
 
 export interface User {
