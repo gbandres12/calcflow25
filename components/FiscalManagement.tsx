@@ -4,9 +4,12 @@ import { fiscalService } from '../services/fiscalService';
 import { 
   FileText, ShieldCheck, Key, Settings, Globe, CheckCircle2, 
   AlertCircle, RefreshCw, Send, Printer, Download, Eye, ExternalLink,
-  Layers, BarChart3, Database, Save, Check, X
+  Layers, BarChart3, Database, Save, Check, X,
+  Building2, MapPin, Search, Building, Phone, Mail, Sparkles
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
+import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
+import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 
 interface FiscalManagementProps {
   orders: SaleOrder[];
@@ -31,11 +34,63 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
 
+  // Aba ativa na seção de configurações: 'emitente' | 'api' | 'tributacao'
+  const [activeConfigTab, setActiveConfigTab] = useState<'emitente' | 'api' | 'tributacao'>('emitente');
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [cepStatus, setCepStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [cepMessage, setCepMessage] = useState('');
+
   // Estado para Painel de Diagnóstico e Logs da API
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<Array<{ time: string; type: 'info' | 'success' | 'warning' | 'error'; message: string; data?: any }>>([]);
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [mappedPayload, setMappedPayload] = useState<any | null>(null);
+
+  // Consulta automática de CEP para o emitente
+  const handleCepLookup = async (cepToSearch: string) => {
+    const cleanCep = (cepToSearch || '').replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      setCepStatus('error');
+      setCepMessage('CEP deve ter 8 dígitos');
+      return;
+    }
+
+    setIsLoadingCep(true);
+    setCepStatus('idle');
+    setCepMessage('Buscando endereço via ViaCEP...');
+
+    try {
+      const data = await fetchAddressByCep(cleanCep);
+      if (data && !data.erro) {
+        let ibge = data.ibge || '';
+        if (!ibge && data.localidade && data.uf) {
+          ibge = (await fetchIbgeByCityUf(data.localidade, data.uf)) || '';
+        }
+
+        setConfig(prev => prev ? ({
+          ...prev,
+          cepEmitente: formatCep(cleanCep),
+          logradouroEmitente: data.logradouro || prev.logradouroEmitente,
+          bairroEmitente: data.bairro || prev.bairroEmitente,
+          cidadeEmitente: data.localidade || prev.cidadeEmitente,
+          ufEmitente: data.uf || prev.ufEmitente,
+          ibgeEmitente: ibge || prev.ibgeEmitente
+        }) : prev);
+
+        setCepStatus('success');
+        setCepMessage(`Localizado: ${data.localidade}/${data.uf} (IBGE: ${ibge || 'Consulte'})`);
+      } else {
+        setCepStatus('error');
+        setCepMessage('CEP não localizado.');
+      }
+    } catch {
+      setCepStatus('error');
+      setCepMessage('Erro ao consultar CEP.');
+    } finally {
+      setIsLoadingCep(false);
+    }
+  };
 
   useEffect(() => {
     fiscalService.getConfig(companyId).then(c => {
@@ -231,6 +286,18 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={() => {
+              setActiveConfigTab('emitente');
+              setShowCompanyModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-2xl border border-purple-200 shadow-sm transition-all active:scale-95"
+            title="Configurar Dados da Empresa Emitente (Razão Social, CNPJ, IE, Endereço, etc.)"
+          >
+            <Building2 size={14} className="text-purple-600" />
+            <span>🏢 Configurar Empresa Emitente</span>
+          </button>
+
+          <button
             onClick={handleRunDiagnostic}
             disabled={isTestingApi}
             className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-2xl shadow-sm transition-all disabled:opacity-50"
@@ -299,280 +366,618 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {/* Configurações Fiscais e Integração NotaAs */}
       <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-6 mb-6 gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-600 text-white rounded-2xl">
+            <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-md shadow-purple-100">
               <Key size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-800">Parâmetros de Integração NotaAs API</h2>
-              <p className="text-xs text-slate-400 font-medium">Credenciais e dados fiscais do emitente da mineradora</p>
+              <h2 className="text-lg font-black text-slate-800">Parâmetros Fiscais & Cadastro da Empresa Emitente</h2>
+              <p className="text-xs text-slate-400 font-medium">Dados cadastrais da empresa emissora, credenciais de API NotaAs e tributação padrão</p>
             </div>
           </div>
-          {saveSuccess && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200 animate-in fade-in">
-              <Check size={16} /> Salvo com Sucesso!
-            </div>
-          )}
+          
+          <div className="flex items-center gap-3">
+            {saveSuccess && (
+              <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200 animate-in fade-in">
+                <Check size={16} /> Salvo com Sucesso!
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowCompanyModal(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs rounded-xl border border-purple-200 transition-all active:scale-95"
+            >
+              <Settings size={14} className="text-purple-600" />
+              <span>Abrir Janela de Cadastro</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Abas de Navegação de Configuração */}
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-6 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveConfigTab('emitente')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
+              activeConfigTab === 'emitente'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-100'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Building2 size={16} />
+            <span>1. Empresa Emitente (Razão Social & Endereço)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveConfigTab('api')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
+              activeConfigTab === 'api'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-100'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Key size={16} />
+            <span>2. Integração NotaAs API & SEFAZ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveConfigTab('tributacao')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
+              activeConfigTab === 'tributacao'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-100'
+                : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Layers size={16} />
+            <span>3. Tributação Padrão & CFOPs</span>
+          </button>
         </div>
 
         <form onSubmit={handleSaveConfig} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            
-            {/* Modo de Emissão */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Modo de Operação
-              </label>
-              <select
-                value={config.modoEmissao || 'api_real'}
-                onChange={(e) => setConfig({ ...config, modoEmissao: e.target.value as 'api_real' | 'sandbox_local' })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="api_real">API Real / Transmissão Direta ao Painel</option>
-                <option value="sandbox_local">Simulação Local / Treinamento Interno</option>
-              </select>
-            </div>
+          {/* ABA 1: DADOS DA EMPRESA EMITENTE */}
+          {activeConfigTab === 'emitente' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Card Resumo do Emitente Atual */}
+              <div className="p-4 bg-purple-50/60 border border-purple-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-purple-600 tracking-wider">Emitente da Nota Fiscal (NF-e Modelo 55)</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-white text-purple-700 rounded-full border border-purple-200">
+                      {config.regimeTributario === '1' ? 'Simples Nacional' : config.regimeTributario === '2' ? 'Simples Sublimite' : 'Regime Normal'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-black text-slate-800">{config.razaoSocial} {config.nomeFantasia ? `(${config.nomeFantasia})` : ''}</h4>
+                  <p className="text-xs text-slate-600">
+                    CNPJ: <b>{config.cnpjEmitente}</b> | IE: <b>{config.inscricaoEstadual}</b>
+                    {config.inscricaoMunicipal ? ` | IM: ${config.inscricaoMunicipal}` : ''}
+                    {config.cnae ? ` | CNAE: ${config.cnae}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    📍 {config.logradouroEmitente ? `${config.logradouroEmitente}, ${config.numeroEmitente || 'S/N'}${config.complementoEmitente ? ` (${config.complementoEmitente})` : ''} - ${config.bairroEmitente}, ${config.cidadeEmitente}/${config.ufEmitente} - CEP: ${config.cepEmitente} (IBGE: ${config.ibgeEmitente || 'Não preenchido'})` : 'Endereço ainda não informado'}
+                  </p>
+                </div>
+              </div>
 
-            {/* Provedor da API */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Provedor / Plataforma da API
-              </label>
-              <select
-                value={config.apiProvider || 'notaas'}
-                onChange={(e) => {
-                  const prov = e.target.value as any;
-                  let defaultUrl = 'https://platform.notaas.com.br/api/v1';
-                  if (prov === 'focusnfe') defaultUrl = 'https://homologacao.focusnfe.com.br/v2';
-                  if (prov === 'nuvemfiscal') defaultUrl = 'https://api.nuvemfiscal.com.br/v2';
-                  setConfig({ ...config, apiProvider: prov, apiBaseUrl: defaultUrl });
-                }}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="notaas">NotaAs API (notaas.com.br)</option>
-                <option value="focusnfe">Focus NFe (focusnfe.com.br)</option>
-                <option value="nuvemfiscal">Nuvem Fiscal (nuvemfiscal.com.br)</option>
-                <option value="custom">Personalizado / Servidor Próprio</option>
-              </select>
-            </div>
+              {/* Linha 1: Identificação Cadastral */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                    <Building size={12} /> Razão Social (xNome) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.razaoSocial || ''}
+                    onChange={(e) => setConfig({ ...config, razaoSocial: e.target.value })}
+                    placeholder="Ex: Mineração Calcário Tapajós Ltda"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Nome corporativo legal que constará no topo do DANFE e no XML.</p>
+                </div>
 
-            {/* Chave de API NotaAs */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Chave / Token da API (x-api-key)
-              </label>
-              <input
-                type="password"
-                value={config.apiKey || ''}
-                onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                placeholder="Ex: ntaas_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
-              />
-              {config.apiProvider === 'notaas' && config.apiKey && !config.apiKey.startsWith('ntaas_') && (
-                <p className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 rounded-lg p-1.5">
-                  ⚠️ <b>Atenção:</b> As chaves de emissão da Notaas iniciam com <code>ntaas_</code> (Project Key). Certifique-se de ter copiado a chave gerada no Dashboard da Notaas (Menu &gt; API Keys).
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Nome Fantasia (xFant)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.nomeFantasia || ''}
+                    onChange={(e) => setConfig({ ...config, nomeFantasia: e.target.value })}
+                    placeholder="Ex: CalcárioFlow Santarém"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-400">Nome comercial divulgado da empresa emitente.</p>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Regime Tributário (CRT) *
+                  </label>
+                  <select
+                    value={config.regimeTributario}
+                    onChange={(e) => setConfig({ ...config, regimeTributario: e.target.value as any })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="1">1 - Simples Nacional (ME/EPP)</option>
+                    <option value="2">2 - Simples Nacional (Excesso Sublimite)</option>
+                    <option value="3">3 - Regime Normal (Lucro Presumido / Real)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400">Define a formatação das tags de ICMS (CSOSN vs CST).</p>
+                </div>
+              </div>
+
+              {/* Linha 2: Registros Fiscais */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    CNPJ do Emitente *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.cnpjEmitente || ''}
+                    onChange={(e) => setConfig({ ...config, cnpjEmitente: e.target.value })}
+                    placeholder="00.000.000/0000-00"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Inscrição Estadual (IE) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.inscricaoEstadual || ''}
+                    onChange={(e) => setConfig({ ...config, inscricaoEstadual: e.target.value })}
+                    placeholder="Ex: 15.123.456-7"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Inscrição Municipal (IM)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.inscricaoMunicipal || ''}
+                    onChange={(e) => setConfig({ ...config, inscricaoMunicipal: e.target.value })}
+                    placeholder="Ex: 123456"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    CNAE Principal
+                  </label>
+                  <input
+                    type="text"
+                    value={config.cnae || ''}
+                    onChange={(e) => setConfig({ ...config, cnae: e.target.value })}
+                    placeholder="Ex: 0810-0/04 (Extração de Calcário)"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Linha 3: Endereço & Busca Automática ViaCEP */}
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                    <MapPin size={14} className="text-purple-600" />
+                    Endereço Oficial da Empresa Emitente (Tag &lt;enderEmit&gt;)
+                  </span>
+                  {cepStatus === 'success' && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full animate-in fade-in">
+                      ✓ {cepMessage}
+                    </span>
+                  )}
+                  {cepStatus === 'error' && (
+                    <span className="text-[10px] font-bold text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-full animate-in fade-in">
+                      ✕ {cepMessage}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      CEP do Emitente *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={config.cepEmitente || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setConfig({ ...config, cepEmitente: val });
+                          if (val.replace(/\D/g, '').length === 8) {
+                            handleCepLookup(val);
+                          }
+                        }}
+                        placeholder="68000-000"
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCepLookup(config.cepEmitente || '')}
+                        disabled={isLoadingCep}
+                        className="px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-all disabled:opacity-50 flex items-center justify-center shrink-0"
+                        title="Buscar endereço pelo CEP"
+                      >
+                        {isLoadingCep ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Search size={14} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Logradouro (Rua, Rodovia, Estrada) *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.logradouroEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, logradouroEmitente: e.target.value })}
+                      placeholder="Ex: Rodovia Mineral BR-163"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Número *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.numeroEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, numeroEmitente: e.target.value })}
+                      placeholder="Ex: Km 42 ou S/N"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Complemento
+                    </label>
+                    <input
+                      type="text"
+                      value={config.complementoEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, complementoEmitente: e.target.value })}
+                      placeholder="Ex: Mina Principal"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Bairro *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.bairroEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, bairroEmitente: e.target.value })}
+                      placeholder="Ex: Zona Rural"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Cidade / Município (xMun) *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.cidadeEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, cidadeEmitente: e.target.value })}
+                      placeholder="Ex: Santarém"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      UF (Estado) *
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={config.ufEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, ufEmitente: e.target.value.toUpperCase() })}
+                      placeholder="PA"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none focus:border-purple-500 text-center"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Código IBGE (cMun) *
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={7}
+                      value={config.ibgeEmitente || ''}
+                      onChange={(e) => setConfig({ ...config, ibgeEmitente: e.target.value })}
+                      placeholder="Ex: 1506807"
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                    />
+                    <p className="text-[9px] text-slate-400">Obrigatório pela SEFAZ Nacional</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Linha 4: Contatos e Numeração Inicial */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                    <Phone size={12} /> Telefone do Emitente
+                  </label>
+                  <input
+                    type="text"
+                    value={config.telefoneEmitente || ''}
+                    onChange={(e) => setConfig({ ...config, telefoneEmitente: e.target.value })}
+                    placeholder="(93) 98765-4321"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                    <Mail size={12} /> E-mail Fiscal
+                  </label>
+                  <input
+                    type="email"
+                    value={config.emailEmitente || ''}
+                    onChange={(e) => setConfig({ ...config, emailEmitente: e.target.value })}
+                    placeholder="fiscal@mineradora.com.br"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Série da NF-e *
+                  </label>
+                  <input
+                    type="text"
+                    value={config.serieNFe}
+                    onChange={(e) => setConfig({ ...config, serieNFe: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Próximo Número NF-e *
+                  </label>
+                  <input
+                    type="number"
+                    value={config.proxNumeroNFe}
+                    onChange={(e) => setConfig({ ...config, proxNumeroNFe: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA 2: INTEGRAÇÃO NOTAAS & SEFAZ */}
+          {activeConfigTab === 'api' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Modo de Emissão */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Modo de Operação
+                  </label>
+                  <select
+                    value={config.modoEmissao || 'api_real'}
+                    onChange={(e) => setConfig({ ...config, modoEmissao: e.target.value as 'api_real' | 'sandbox_local' })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="api_real">API Real / Transmissão Direta ao Painel</option>
+                    <option value="sandbox_local">Simulação Local / Treinamento Interno</option>
+                  </select>
+                </div>
+
+                {/* Provedor da API */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Provedor / Plataforma da API
+                  </label>
+                  <select
+                    value={config.apiProvider || 'notaas'}
+                    onChange={(e) => {
+                      const prov = e.target.value as any;
+                      let defaultUrl = 'https://platform.notaas.com.br/api/v1';
+                      if (prov === 'focusnfe') defaultUrl = 'https://homologacao.focusnfe.com.br/v2';
+                      if (prov === 'nuvemfiscal') defaultUrl = 'https://api.nuvemfiscal.com.br/v2';
+                      setConfig({ ...config, apiProvider: prov, apiBaseUrl: defaultUrl });
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="notaas">NotaAs API (notaas.com.br)</option>
+                    <option value="focusnfe">Focus NFe (focusnfe.com.br)</option>
+                    <option value="nuvemfiscal">Nuvem Fiscal (nuvemfiscal.com.br)</option>
+                    <option value="custom">Personalizado / Servidor Próprio</option>
+                  </select>
+                </div>
+
+                {/* Chave de API NotaAs */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Chave / Token da API (x-api-key)
+                  </label>
+                  <input
+                    type="password"
+                    value={config.apiKey || ''}
+                    onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                    placeholder="Ex: ntaas_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
+                  />
+                  {config.apiProvider === 'notaas' && config.apiKey && !config.apiKey.startsWith('ntaas_') && (
+                    <p className="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 rounded-lg p-1.5">
+                      ⚠️ <b>Atenção:</b> As chaves de emissão da Notaas iniciam com <code>ntaas_</code> (Project Key). Certifique-se de ter copiado a chave gerada no Dashboard da Notaas.
+                    </p>
+                  )}
+                </div>
+
+                {/* Ambiente */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Ambiente SEFAZ
+                  </label>
+                  <select
+                    value={config.environment}
+                    onChange={(e) => setConfig({ ...config, environment: e.target.value as 'sandbox' | 'production' })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="sandbox">Sandbox / Homologação (Sem validade fiscal)</option>
+                    <option value="production">Produção Real (SEFAZ Nacional)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                  URL Base do Servidor de API Fiscal
+                </label>
+                <input
+                  type="text"
+                  value={config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}
+                  onChange={(e) => setConfig({ ...config, apiBaseUrl: e.target.value })}
+                  placeholder="https://platform.notaas.com.br/api/v1"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 font-medium">
+                  URL oficial de conexão HTTP. Ao emitir em 'API Real', o sistema enviará a requisição diretamente a este endpoint.
                 </p>
-              )}
+              </div>
             </div>
+          )}
 
-            {/* Ambiente */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Ambiente SEFAZ
-              </label>
-              <select
-                value={config.environment}
-                onChange={(e) => setConfig({ ...config, environment: e.target.value as 'sandbox' | 'production' })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="sandbox">Sandbox / Homologação (Sem validade fiscal)</option>
-                <option value="production">Produção Real (SEFAZ Nacional)</option>
-              </select>
+          {/* ABA 3: TRIBUTAÇÃO PADRÃO & CFOPS */}
+          {activeConfigTab === 'tributacao' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST ICMS Padrão</label>
+                  <select
+                    value={config.cstIcmsPadrao || '40'}
+                    onChange={(e) => setConfig({ ...config, cstIcmsPadrao: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="40">40 — Isenção (Padrão Calcário Agrícola)</option>
+                    <option value="41">41 — Não tributada</option>
+                    <option value="00">00 — Tributada integralmente</option>
+                    <option value="20">20 — Com redução de BC</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST PIS/COFINS</label>
+                  <select
+                    value={config.cstPisCofins || '07'}
+                    onChange={(e) => setConfig({ ...config, cstPisCofins: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  >
+                    <option value="07">07 — Operação Isenta da Contribuição</option>
+                    <option value="08">08 — Operação Sem Incidência</option>
+                    <option value="01">01 — Tributável alíquota básica</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota PIS (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.aliquotaPis ?? 0}
+                    onChange={(e) => setConfig({ ...config, aliquotaPis: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota COFINS (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={config.aliquotaCofins ?? 0}
+                    onChange={(e) => setConfig({ ...config, aliquotaCofins: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Venda Estadual (Dentro do PA)</label>
+                  <input
+                    type="text"
+                    value={config.cfopPadraoEstadual}
+                    onChange={(e) => setConfig({ ...config, cfopPadraoEstadual: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Venda Interestadual (Fora do PA)</label>
+                  <input
+                    type="text"
+                    value={config.cfopPadraoInterestadual}
+                    onChange={(e) => setConfig({ ...config, cfopPadraoInterestadual: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Estadual</label>
+                  <input
+                    type="text"
+                    value={config.cfopTransferenciaEstadual || '5152'}
+                    onChange={(e) => setConfig({ ...config, cfopTransferenciaEstadual: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Interestadual</label>
+                  <input
+                    type="text"
+                    value={config.cfopTransferenciaInterestadual || '6152'}
+                    onChange={(e) => setConfig({ ...config, cfopTransferenciaInterestadual: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Informações Complementares Padrão (Observações na Nota)</label>
+                <textarea
+                  value={config.observacoesFiscaisPadrao}
+                  onChange={(e) => setConfig({ ...config, observacoesFiscaisPadrao: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                />
+              </div>
             </div>
+          )}
 
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                URL Base do Servidor de API Fiscal
-              </label>
-              <input
-                type="text"
-                value={config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}
-                onChange={(e) => setConfig({ ...config, apiBaseUrl: e.target.value })}
-                placeholder="https://platform.notaas.com.br/api/v1"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 font-mono"
-              />
-              <p className="text-[10px] text-slate-400 font-medium">
-                URL oficial de conexão HTTP. Ao emitir em 'API Real', o sistema enviará a requisição diretamente a este endpoint.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Regime Tributário
-              </label>
-              <select
-                value={config.regimeTributario}
-                onChange={(e) => setConfig({ ...config, regimeTributario: e.target.value as any })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="1">1 - Simples Nacional</option>
-                <option value="2">2 - Simples Nacional (Excesso de Sublimite)</option>
-                <option value="3">3 - Regime Normal (Lucro Presumido / Real)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
-            
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CNPJ do Emitente</label>
-              <input
-                type="text"
-                value={config.cnpjEmitente}
-                onChange={(e) => setConfig({ ...config, cnpjEmitente: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Inscrição Estadual (IE)</label>
-              <input
-                type="text"
-                value={config.inscricaoEstadual}
-                onChange={(e) => setConfig({ ...config, inscricaoEstadual: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Série da NF-e</label>
-              <input
-                type="text"
-                value={config.serieNFe}
-                onChange={(e) => setConfig({ ...config, serieNFe: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Próximo Número NF-e</label>
-              <input
-                type="number"
-                value={config.proxNumeroNFe}
-                onChange={(e) => setConfig({ ...config, proxNumeroNFe: parseInt(e.target.value, 10) || 1 })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST ICMS Padrão</label>
-              <select
-                value={config.cstIcmsPadrao || '40'}
-                onChange={(e) => setConfig({ ...config, cstIcmsPadrao: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="40">40 — Isenção</option>
-                <option value="41">41 — Não tributada</option>
-                <option value="00">00 — Tributada integralmente</option>
-                <option value="20">20 — Com redução de BC</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CST PIS/COFINS</label>
-              <select
-                value={config.cstPisCofins || '07'}
-                onChange={(e) => setConfig({ ...config, cstPisCofins: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              >
-                <option value="07">07 — Isento</option>
-                <option value="08">08 — Sem incidência</option>
-                <option value="01">01 — Tributável alíquota básica</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota PIS (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={config.aliquotaPis ?? 0}
-                onChange={(e) => setConfig({ ...config, aliquotaPis: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Alíquota COFINS (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={config.aliquotaCofins ?? 0}
-                onChange={(e) => setConfig({ ...config, aliquotaCofins: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-            
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Padrão Estadual (Dentro do PA)</label>
-              <input
-                type="text"
-                value={config.cfopPadraoEstadual}
-                onChange={(e) => setConfig({ ...config, cfopPadraoEstadual: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Padrão Interestadual (Fora do PA)</label>
-              <input
-                type="text"
-                value={config.cfopPadraoInterestadual}
-                onChange={(e) => setConfig({ ...config, cfopPadraoInterestadual: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Estadual</label>
-              <input
-                type="text"
-                value={config.cfopTransferenciaEstadual || '5152'}
-                onChange={(e) => setConfig({ ...config, cfopTransferenciaEstadual: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">CFOP Transferência Interestadual</label>
-              <input
-                type="text"
-                value={config.cfopTransferenciaInterestadual || '6152'}
-                onChange={(e) => setConfig({ ...config, cfopTransferenciaInterestadual: e.target.value })}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
-              />
-            </div>
-
-          </div>
-
-          <div className="space-y-1.5 pt-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Informações Complementares Padrão (Observações na Nota)</label>
-            <textarea
-              value={config.observacoesFiscaisPadrao}
-              onChange={(e) => setConfig({ ...config, observacoesFiscaisPadrao: e.target.value })}
-              rows={2}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
-            />
-          </div>
-
-          <div className="flex justify-end pt-4 border-t border-slate-100">
+          {/* Botão de Salvar Geral */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-400 font-medium">
+              As alterações serão salvas para a empresa emitente e refletidas imediatamente na geração de XML e emissão via NotaAs.
+            </p>
             <button
               type="submit"
               disabled={isSaving}
@@ -823,6 +1228,21 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* Modal Focado de Cadastro/Edição da Empresa Emitente */}
+      {config && (
+        <CompanyFiscalSettingsModal
+          isOpen={showCompanyModal}
+          onClose={() => setShowCompanyModal(false)}
+          config={config}
+          companyId={companyId}
+          onSaveSuccess={(updated) => {
+            setConfig(updated);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+          }}
+        />
       )}
 
     </div>

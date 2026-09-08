@@ -11,7 +11,9 @@ interface QuickCustomerModalProps {
   onClose: () => void;
   onSuccess: (newCustomer: Customer) => void;
   initialName?: string;
+  customerToEdit?: Customer | null;
   onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
+  onUpdateCustomer?: (customer: Customer) => void;
 }
 
 export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
@@ -19,7 +21,9 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
   onClose,
   onSuccess,
   initialName = '',
-  onAddCustomer
+  customerToEdit,
+  onAddCustomer,
+  onUpdateCustomer
 }) => {
   const [tipoPessoa, setTipoPessoa] = useState<'PRODUTOR' | 'PJ' | 'PF'>('PRODUTOR');
   const [name, setName] = useState(initialName);
@@ -47,7 +51,35 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      if (initialName) setName(initialName);
+      if (customerToEdit) {
+        setName(customerToEdit.name || '');
+        setDocument(customerToEdit.document || '');
+        const cleanDoc = (customerToEdit.document || '').replace(/\D/g, '');
+        if (customerToEdit.tipoPessoa) {
+          setTipoPessoa(customerToEdit.tipoPessoa as any);
+        } else if (cleanDoc.length === 14) {
+          setTipoPessoa('PJ');
+        } else if (cleanDoc.length === 11) {
+          setTipoPessoa('PF');
+        } else {
+          setTipoPessoa('PRODUTOR');
+        }
+        setIe(customerToEdit.ie === 'ISENTO' ? '' : (customerToEdit.ie || ''));
+        setIsentoIE(customerToEdit.isentoIE || customerToEdit.ie === 'ISENTO');
+        setPhone(customerToEdit.phone || '');
+        setEmail(customerToEdit.email || '');
+        setZipCode(customerToEdit.zipCode || '');
+        setStreet(customerToEdit.street || '');
+        setNumber(customerToEdit.number || '');
+        setNeighborhood(customerToEdit.neighborhood || '');
+        setCity(customerToEdit.city || '');
+        setState(customerToEdit.state || '');
+        setIbgeCode(customerToEdit.ibgeCode || '');
+        setCepStatus('idle');
+        setCepMessage('');
+      } else if (initialName) {
+        setName(initialName);
+      }
     } else {
       // Reset form
       setName('');
@@ -66,7 +98,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
       setCepStatus('idle');
       setCepMessage('');
     }
-  }, [isOpen, initialName]);
+  }, [isOpen, initialName, customerToEdit]);
 
   // Handler de mudança de CEP com Busca Automática no ViaCEP
   const handleZipCodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +161,19 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
       ibgeCode: ibgeCode.trim()
     };
 
+    if (customerToEdit) {
+      const updatedCustomer: Customer = {
+        ...customerToEdit,
+        ...newCustomerData
+      };
+      if (onUpdateCustomer) {
+        onUpdateCustomer(updatedCustomer);
+      }
+      onSuccess(updatedCustomer);
+      onClose();
+      return;
+    }
+
     let createdCustomer: Customer;
     if (onAddCustomer) {
       const result = onAddCustomer(newCustomerData);
@@ -167,12 +212,14 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black tracking-tight flex items-center gap-2">
-                Cadastro Rápido de Cliente
+                {customerToEdit ? 'Editar Dados do Cliente' : 'Cadastro Rápido de Cliente'}
                 <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
-                  Express
+                  {customerToEdit ? 'Edição' : 'Express'}
                 </span>
               </h3>
-              <p className="text-xs text-purple-200/80 font-medium">Cadastre e busque endereço automático via CEP</p>
+              <p className="text-xs text-purple-200/80 font-medium">
+                {customerToEdit ? 'Atualize dados cadastrais, fiscais e endereço' : 'Cadastre e busque endereço automático via CEP'}
+              </p>
             </div>
           </div>
           <button 
@@ -471,7 +518,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               type="submit"
               className="flex-[2] py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-purple-200 hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
             >
-              <CheckCircle2 size={16} /> Salvar & Selecionar Cliente
+              <CheckCircle2 size={16} /> {customerToEdit ? 'Salvar Alterações do Cliente' : 'Salvar & Selecionar Cliente'}
             </button>
           </div>
 

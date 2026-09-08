@@ -82,9 +82,13 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
     supplier: ''
   });
 
+  const safeTransfers = useMemo(() => {
+    return Array.isArray(transfers) ? transfers.filter(t => t && typeof t === 'object' && t.id) : [];
+  }, [transfers]);
+
   // Reset / Preenchimento ao abrir modal de criação
   const handleOpenCreateModal = () => {
-    const nextNum = (transfers.length + 1).toString().padStart(3, '0');
+    const nextNum = (safeTransfers.length + 1).toString().padStart(3, '0');
     const year = new Date().getFullYear();
     setFormData({
       code: `TRF-${year}-${nextNum}`,
@@ -208,7 +212,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
   // Filtragem
   const filteredTransfers = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
-    return (transfers || []).filter(t => {
+    return safeTransfers.filter(t => {
       if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
       if (!q) return true;
 
@@ -225,23 +229,23 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
       return matchCode || matchSentBy || matchReceivedBy || matchDriver || matchPlate || matchItem;
     });
-  }, [transfers, searchTerm, statusFilter]);
+  }, [safeTransfers, searchTerm, statusFilter]);
 
   // Estatísticas
   const stats = useMemo(() => {
-    const total = transfers.length;
-    const inTransit = transfers.filter(t => t.status === 'EM_TRANSITO').length;
-    const received = transfers.filter(t => t.status === 'CONFERIDO_E_RECEBIDO').length;
-    const withDivergence = transfers.filter(t => t.status === 'RECEBIDO_COM_DIVERGENCIA').length;
-    const totalItemsTransferred = transfers.reduce((s, t) => {
+    const total = safeTransfers.length;
+    const inTransit = safeTransfers.filter(t => t.status === 'EM_TRANSITO').length;
+    const received = safeTransfers.filter(t => t.status === 'CONFERIDO_E_RECEBIDO').length;
+    const withDivergence = safeTransfers.filter(t => t.status === 'RECEBIDO_COM_DIVERGENCIA').length;
+    const totalItemsTransferred = safeTransfers.reduce((s, t) => {
       return s + (t.items || []).reduce((acc, it) => acc + (Number(it.quantitySent) || 0), 0);
     }, 0);
-    const totalCost = transfers.reduce((s, t) => {
+    const totalCost = safeTransfers.reduce((s, t) => {
       return s + (t.items || []).reduce((acc, it) => acc + (Number(it.totalCost) || 0), 0);
     }, 0);
 
     return { total, inTransit, received, withDivergence, totalItemsTransferred, totalCost };
-  }, [transfers]);
+  }, [safeTransfers]);
 
   const formatBRL = (val?: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 

@@ -4,7 +4,7 @@ import {
   X, User, Phone, Mail, MapPin, FileText, ShoppingCart, 
   CheckCircle2, Clock, AlertTriangle, ArrowUpRight, Truck, 
   Receipt, DollarSign, Calendar, Printer, Download, ExternalLink,
-  ChevronRight, ShieldAlert, BadgePercent, Scale
+  ChevronRight, ShieldAlert, BadgePercent, Scale, Edit3
 } from 'lucide-react';
 import { calculateOrderPayment, PaymentStatusType } from './SalesOrders';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
@@ -16,6 +16,7 @@ interface CustomerDetailsModalProps {
   onClose: () => void;
   orders: SaleOrder[];
   transactions?: Transaction[];
+  onEditCustomer?: (customer: Customer) => void;
 }
 
 export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
@@ -23,19 +24,20 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   isOpen,
   onClose,
   orders,
-  transactions = []
+  transactions = [],
+  onEditCustomer
 }) => {
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'ORDERS' | 'DEBTS' | 'RECEIPTS' | 'WITHDRAWALS'>('OVERVIEW');
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceipt | null>(null);
 
-  const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const formatBRL = (val?: number) => (Number.isFinite(val) ? val!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00');
 
   // Cálculos Consolidados do Cliente
   const customerData = useMemo(() => {
     if (!customer) return null;
 
-    const safeOrders = Array.isArray(orders) ? orders : [];
-    const customerOrders = safeOrders.filter(o => o && o.customerId === customer.id);
+    const safeOrders = Array.isArray(orders) ? orders.filter(Boolean) : [];
+    const customerOrders = safeOrders.filter(o => o && String(o.customerId) === String(customer.id));
     const finalizedOrders = customerOrders.filter(o => o && o.status === OrderStatus.FINALIZED);
     const budgetOrders = customerOrders.filter(o => o && o.status === OrderStatus.BUDGET);
 
@@ -74,12 +76,13 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
       });
     });
     // Ordena recibos por data decrescente
-    receipts.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    receipts.sort((a, b) => (b?.date || '').localeCompare(a?.date || ''));
 
     // Todas as Retiradas / Romaneios do Cliente
     const withdrawals: (OrderWithdrawal & { orderReference?: string })[] = [];
     customerOrders.forEach(o => {
       (o.withdrawals || []).forEach(w => {
+        if (!w) return;
         withdrawals.push({
           ...w,
           orderReference: o.reference
@@ -87,7 +90,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
       });
     });
     // Ordena retiradas por data decrescente
-    withdrawals.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    withdrawals.sort((a, b) => (b?.date || '').localeCompare(a?.date || ''));
 
     // Pedidos com débitos pendentes
     const ordersWithDebt = finalizedOrders.filter(o => calculateOrderPayment(o).remainingDebt > 0.01);
@@ -125,12 +128,25 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
         
         {/* Cabeçalho do Modal com Dados do Cliente */}
         <div className="bg-slate-900 text-white p-6 md:p-8 relative">
-          <button 
-            onClick={onClose}
-            className="absolute top-6 right-6 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all"
-          >
-            <X size={22} />
-          </button>
+          <div className="absolute top-6 right-6 flex items-center gap-2">
+            {onEditCustomer && (
+              <button 
+                type="button"
+                onClick={() => {
+                  onEditCustomer(customer);
+                }}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-purple-600 text-slate-200 hover:text-white rounded-xl transition-all font-bold text-xs flex items-center gap-1.5 border border-slate-700 hover:border-purple-500 shadow-sm"
+              >
+                <Edit3 size={14} /> Editar Cadastro
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all"
+            >
+              <X size={22} />
+            </button>
+          </div>
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-4">
@@ -403,7 +419,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                                 <span className="text-[10px] font-bold text-slate-400">• Emissão: {order.date}</span>
                               </div>
                               <p className="text-xs text-slate-500 font-medium">
-                                {(order.items || []).map(i => `${i.productName} (${i.quantity}T)`).join(', ')}
+                                {(order.items || []).filter(Boolean).map(i => `${i?.productName || 'Item'} (${i?.quantity || 0}T)`).join(', ')}
                               </p>
                             </div>
                           </div>
@@ -519,10 +535,10 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                           <div>
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Itens Adquiridos</span>
                             <ul className="space-y-1">
-                              {(order.items || []).map((it, idx) => (
+                              {(order.items || []).filter(Boolean).map((it, idx) => (
                                 <li key={idx} className="font-bold text-slate-700 flex justify-between">
-                                  <span>{it.productName} ({it.quantity} {it.unit || 'Ton'})</span>
-                                  <span>{formatBRL(it.total)}</span>
+                                  <span>{it?.productName || 'Item'} ({it?.quantity || 0} {it?.unit || 'Ton'})</span>
+                                  <span>{formatBRL(it?.total)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -594,7 +610,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                               <span className="text-xs text-slate-400 font-bold">• Data: {order.date}</span>
                             </div>
                             <p className="text-xs text-slate-600 font-medium mt-0.5">
-                              {(order.items || []).map(i => `${i.productName} (${i.quantity}T)`).join(', ')}
+                              {(order.items || []).filter(Boolean).map(i => `${i?.productName || 'Item'} (${i?.quantity || 0}T)`).join(', ')}
                             </p>
                           </div>
                           <div className="text-right">

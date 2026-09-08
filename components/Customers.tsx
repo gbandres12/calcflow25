@@ -5,7 +5,8 @@ import {
   UserPlus, Search, Mail, Phone, ExternalLink, 
   FileUp, Database, X, Loader2, AlertCircle, 
   CheckCircle2, Download, Filter, UserCheck, AlertTriangle,
-  DollarSign, ShoppingCart, ArrowUpRight, ChevronRight, Eye
+  DollarSign, ShoppingCart, ArrowUpRight, ChevronRight, Eye,
+  Edit3, Trash2
 } from 'lucide-react';
 import { CustomerDetailsModal } from './CustomerDetailsModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
@@ -16,7 +17,9 @@ interface CustomersProps {
   orders?: SaleOrder[];
   transactions?: Transaction[];
   onImportCustomers: (newCustomers: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>[]) => void;
-  onAddCustomer?: (newCustomer: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => void;
+  onAddCustomer?: (newCustomer: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
+  onUpdateCustomer?: (customer: Customer) => void;
+  onDeleteCustomer?: (customerId: string) => void;
 }
 
 const Customers: React.FC<CustomersProps> = ({ 
@@ -24,10 +27,14 @@ const Customers: React.FC<CustomersProps> = ({
   orders = [], 
   transactions = [],
   onImportCustomers, 
-  onAddCustomer 
+  onAddCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer
 }) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDebtOnly, setFilterDebtOnly] = useState<'ALL' | 'DEBT_ONLY' | 'SETTLED_ONLY'>('ALL');
@@ -35,15 +42,19 @@ const Customers: React.FC<CustomersProps> = ({
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<Customer | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const formatBRL = (val?: number) => (Number.isFinite(val) ? val!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00');
+
+  // Lista segura de clientes
+  const safeCustomerList = useMemo(() => {
+    return Array.isArray(customers) ? customers.filter(c => c && typeof c === 'object' && c.id) : [];
+  }, [customers]);
 
   // Mapa de Débitos e Vendas por Cliente
   const customerFinancialStats = useMemo(() => {
     const statsMap: Record<string, { totalPurchased: number; totalPaid: number; totalDebt: number; orderCount: number }> = {};
-    const safeCustomers = Array.isArray(customers) ? customers : [];
     const safeOrders = Array.isArray(orders) ? orders : [];
 
-    safeCustomers.forEach(c => {
+    safeCustomerList.forEach(c => {
       if (c && c.id) {
         statsMap[c.id] = { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
       }
@@ -64,7 +75,7 @@ const Customers: React.FC<CustomersProps> = ({
     });
 
     return statsMap;
-  }, [customers, orders]);
+  }, [safeCustomerList, orders]);
 
   // Métricas Globais da Carteira de Clientes
   const walletStats = useMemo(() => {
@@ -73,8 +84,7 @@ const Customers: React.FC<CustomersProps> = ({
     let customersWithDebtCount = 0;
     let settledCustomersCount = 0;
 
-    const safeCustomers = Array.isArray(customers) ? customers : [];
-    safeCustomers.forEach(c => {
+    safeCustomerList.forEach(c => {
       if (!c || !c.id) return;
       const stats = customerFinancialStats[c.id] || { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
       totalPurchased += Number(stats.totalPurchased || c.totalSpent || 0);
@@ -92,32 +102,12 @@ const Customers: React.FC<CustomersProps> = ({
       customersWithDebtCount,
       settledCustomersCount
     };
-  }, [customers, customerFinancialStats]);
-
-  const [customerForm, setCustomerForm] = useState({
-    name: '',
-    document: '',
-    email: '',
-    phone: ''
-  });
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customerForm.name) return;
-    if (onAddCustomer) {
-      onAddCustomer(customerForm);
-    } else {
-      onImportCustomers([customerForm]);
-    }
-    setIsAddModalOpen(false);
-    setCustomerForm({ name: '', document: '', email: '', phone: '' });
-  };
+  }, [safeCustomerList, customerFinancialStats]);
 
   const filteredCustomers = useMemo(() => {
-    const safeCustomers = Array.isArray(customers) ? customers : [];
     const q = (searchQuery || '').toLowerCase().trim();
 
-    return safeCustomers.filter(c => {
+    return safeCustomerList.filter(c => {
       if (!c) return false;
       const cName = String(c.name || '').toLowerCase();
       const cDoc = String(c.document || '').toLowerCase();
@@ -140,7 +130,7 @@ const Customers: React.FC<CustomersProps> = ({
 
       return true;
     });
-  }, [customers, searchQuery, filterDebtOnly, customerFinancialStats]);
+  }, [safeCustomerList, searchQuery, filterDebtOnly, customerFinancialStats]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -324,7 +314,7 @@ const Customers: React.FC<CustomersProps> = ({
             <div className="p-4 bg-purple-50 text-purple-600 rounded-2xl"><UserCheck size={24}/></div>
             <div>
                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Clientes</p>
-               <p className="text-2xl font-black text-slate-800">{customers.length}</p>
+               <p className="text-2xl font-black text-slate-800">{safeCustomerList.length}</p>
                <p className="text-[10px] font-bold text-slate-400">Produtores & Revendas</p>
             </div>
          </div>
@@ -362,7 +352,7 @@ const Customers: React.FC<CustomersProps> = ({
             <div>
                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Taxa de Adimplência</p>
                <p className="text-2xl font-black text-slate-800">
-                 {customers.length > 0 ? Math.round(((customers.length - walletStats.customersWithDebtCount) / customers.length) * 100) : 100}%
+                 {safeCustomerList.length > 0 ? Math.round(((safeCustomerList.length - walletStats.customersWithDebtCount) / safeCustomerList.length) * 100) : 100}%
                </p>
                <p className="text-[10px] font-bold text-blue-600 font-black">Adimplência da base</p>
             </div>
@@ -390,7 +380,7 @@ const Customers: React.FC<CustomersProps> = ({
                 filterDebtOnly === 'ALL' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Todos ({customers.length})
+              Todos ({safeCustomerList.length})
             </button>
             <button
               onClick={() => setFilterDebtOnly('DEBT_ONLY')}
@@ -419,7 +409,7 @@ const Customers: React.FC<CustomersProps> = ({
                 <th className="px-6 py-4">Documento</th>
                 <th className="px-6 py-4 text-right">Volume Comprado</th>
                 <th className="px-6 py-4 text-center">Situação Financeira</th>
-                <th className="px-6 py-4 text-center">Extrato & Detalhes</th>
+                <th className="px-6 py-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -484,16 +474,44 @@ const Customers: React.FC<CustomersProps> = ({
                         )}
                       </td>
                       <td className="px-6 py-5 text-center">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedCustomerForDetails(c);
-                          }}
-                          className="px-4 py-2 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-xl transition-all font-black text-xs inline-flex items-center gap-1.5 shadow-xs"
-                          title="Abrir Detalhes Consolidados do Cliente"
-                        >
-                          <Eye size={14} /> Ver Detalhes
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCustomerForDetails(c);
+                            }}
+                            className="p-2 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-xl transition-all font-black text-xs inline-flex items-center gap-1 shadow-xs"
+                            title="Ver Detalhes e Extrato"
+                          >
+                            <Eye size={14} />
+                            <span className="hidden xl:inline">Detalhes</span>
+                          </button>
+                          
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCustomerToEdit(c);
+                            }}
+                            className="p-2 bg-slate-100 hover:bg-slate-700 text-slate-700 hover:text-white rounded-xl transition-all font-bold text-xs inline-flex items-center gap-1 shadow-xs"
+                            title="Editar Cadastro do Cliente"
+                          >
+                            <Edit3 size={14} />
+                            <span className="hidden xl:inline">Editar</span>
+                          </button>
+
+                          {onDeleteCustomer && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomerToDelete(c);
+                              }}
+                              className="p-2 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-xl transition-all font-bold text-xs inline-flex items-center shadow-xs"
+                              title="Excluir Cliente"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -511,6 +529,10 @@ const Customers: React.FC<CustomersProps> = ({
         onClose={() => setSelectedCustomerForDetails(null)}
         orders={orders}
         transactions={transactions}
+        onEditCustomer={(cust) => {
+          setSelectedCustomerForDetails(null);
+          setCustomerToEdit(cust);
+        }}
       />
 
       {/* Modal Importação de Clientes */}
@@ -577,18 +599,74 @@ const Customers: React.FC<CustomersProps> = ({
         </div>
       )}
 
-      {/* Modal Cadastro Rápido de Cliente */}
+      {/* Modal Cadastro / Edição de Cliente */}
       <QuickCustomerModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        isOpen={isAddModalOpen || !!customerToEdit}
+        customerToEdit={customerToEdit}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setCustomerToEdit(null);
+        }}
         onAddCustomer={onAddCustomer}
-        onSuccess={(created) => {
-          if (!onAddCustomer) {
-            onImportCustomers([created]);
+        onUpdateCustomer={onUpdateCustomer}
+        onSuccess={(cust) => {
+          if (!customerToEdit && !onAddCustomer) {
+            onImportCustomers([cust]);
           }
           setIsAddModalOpen(false);
+          setCustomerToEdit(null);
         }}
       />
+
+      {/* Modal de Confirmação de Exclusão */}
+      {customerToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[130] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-100 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-800">Excluir Cliente</h3>
+                <p className="text-xs text-slate-500">Confirmação de exclusão da base</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 font-medium">
+              Tem certeza que deseja remover o cliente <span className="font-bold text-slate-900">{customerToDelete.name}</span>?
+            </p>
+
+            {customerFinancialStats[customerToDelete.id]?.totalDebt > 0 && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-bold">
+                <AlertTriangle size={16} />
+                <span>Atenção: Este cliente possui débito pendente de {formatBRL(customerFinancialStats[customerToDelete.id].totalDebt)}.</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCustomerToDelete(null)}
+                className="flex-1 py-2.5 text-xs font-black uppercase text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteCustomer && customerToDelete) {
+                    onDeleteCustomer(customerToDelete.id);
+                  }
+                  setCustomerToDelete(null);
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs uppercase shadow-md shadow-rose-200 transition-all"
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

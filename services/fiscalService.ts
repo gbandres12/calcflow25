@@ -1089,13 +1089,13 @@ export const fiscalService = {
         <xNome>${config.razaoSocial}</xNome>
         <xFant>${config.nomeFantasia}</xFant>
         <enderEmit>
-          <xLgr>Rodovia Mineral BR-163, Km 42</xLgr>
-          <nro>S/N</nro>
-          <xBairro>Distrito Industrial</xBairro>
-          <cMun>1506807</cMun>
-          <xMun>Santarem</xMun>
-          <UF>PA</UF>
-          <CEP>68000000</CEP>
+          <xLgr>${config.logradouroEmitente || 'Rodovia Mineral BR-163, Km 42'}</xLgr>
+          <nro>${config.numeroEmitente || 'S/N'}</nro>
+          <xBairro>${config.bairroEmitente || 'Distrito Industrial'}</xBairro>
+          <cMun>${config.ibgeEmitente || '1506807'}</cMun>
+          <xMun>${config.cidadeEmitente || 'Santarem'}</xMun>
+          <UF>${config.ufEmitente || 'PA'}</UF>
+          <CEP>${(config.cepEmitente || '68000000').replace(/\D/g, '')}</CEP>
           <cPais>1058</cPais>
           <xPais>Brasil</xPais>
         </enderEmit>

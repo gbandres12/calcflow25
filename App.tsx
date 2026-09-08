@@ -142,19 +142,19 @@ const App: React.FC = () => {
           db.getTable('transfers', activeCompanyId)
         ]);
 
-        setTransactions(savedTxs);
-        setInventory(savedInv);
-        setCustomers(savedCust);
-        setOrders(savedOrders);
-        setMachines(savedMachines);
-        setStoreItems(savedStore);
-        setMaintenances(savedMaint);
-        setFuelRecords(savedFuel);
-        setFuelPurchases(savedFuelPurchases);
-        setAccounts(savedAccounts);
-        setCategories(savedCategories);
-        setUsers(savedUsers);
-        setTransfers(savedTransfers);
+        setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
+        setInventory(Array.isArray(savedInv) ? savedInv : []);
+        setCustomers(Array.isArray(savedCust) ? savedCust.filter(c => c && typeof c === 'object') : []);
+        setOrders(Array.isArray(savedOrders) ? savedOrders : []);
+        setMachines(Array.isArray(savedMachines) ? savedMachines : []);
+        setStoreItems(Array.isArray(savedStore) ? savedStore : []);
+        setMaintenances(Array.isArray(savedMaint) ? savedMaint : []);
+        setFuelRecords(Array.isArray(savedFuel) ? savedFuel : []);
+        setFuelPurchases(Array.isArray(savedFuelPurchases) ? savedFuelPurchases : []);
+        setAccounts(Array.isArray(savedAccounts) ? savedAccounts : []);
+        setCategories(Array.isArray(savedCategories) ? savedCategories : []);
+        setUsers(Array.isArray(savedUsers) ? savedUsers : []);
+        setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
 
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
@@ -357,6 +357,17 @@ const App: React.FC = () => {
     setCustomers(prev => [...prev, customer]);
     persistCloud('customers', customer);
     return customer;
+  };
+
+  const handleUpdateCustomer = (updatedCustomer: Customer) => {
+    const tagged = { ...updatedCustomer, companyId: updatedCustomer.companyId || activeCompanyId };
+    setCustomers(prev => prev.map(c => c.id === tagged.id ? tagged : c));
+    persistCloud('customers', tagged);
+  };
+
+  const handleDeleteCustomer = (id: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== id));
+    db.delete('customers', activeCompanyId, id).catch(() => {});
   };
 
   // Estoque
@@ -894,6 +905,8 @@ const App: React.FC = () => {
               transactions={transactions}
               onImportCustomers={handleImportCustomers} 
               onAddCustomer={handleAddCustomer} 
+              onUpdateCustomer={handleUpdateCustomer}
+              onDeleteCustomer={handleDeleteCustomer}
             />
           )}
           {currentView === 'cashflow' && (

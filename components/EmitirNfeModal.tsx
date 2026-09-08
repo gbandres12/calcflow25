@@ -3,8 +3,9 @@ import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
-  Building, User, FileText, Hash, MapPin, Truck, Sparkles 
+  Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings
 } from 'lucide-react';
+import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -27,6 +28,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   devolutionChave,
   transferencia
 }) => {
+  const [currentConfig, setCurrentConfig] = useState<FiscalConfig>(config);
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
@@ -48,8 +51,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setErrorMsg(null);
 
     const activeConfig = forceLocal 
-      ? { ...config, modoEmissao: 'sandbox_local' as const } 
-      : config;
+      ? { ...currentConfig, modoEmissao: 'sandbox_local' as const } 
+      : currentConfig;
 
     try {
       const opts = isDevolucao
@@ -122,18 +125,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-black text-slate-800 tracking-tight">{isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : 'Emissão de NF-e Eletrônica'}</h3>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  config.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {config.environment === 'production' ? 'Ambiente Produção SEFAZ' : 'Sandbox / Homologação'}
+                  {currentConfig.environment === 'production' ? 'Ambiente Produção SEFAZ' : 'Sandbox / Homologação'}
                 </span>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  config.modoEmissao === 'sandbox_local' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
+                  currentConfig.modoEmissao === 'sandbox_local' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
                 }`}>
-                  {config.modoEmissao === 'sandbox_local' ? 'Modo Simulação' : `API Real (${(config.apiProvider || 'notaas').toUpperCase()})`}
+                  {currentConfig.modoEmissao === 'sandbox_local' ? 'Modo Simulação' : `API Real (${(currentConfig.apiProvider || 'notaas').toUpperCase()})`}
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                Pedido <b>{order.reference}</b> | Próximo Nº NF-e: <b>{config.proxNumeroNFe || 1042}</b> (Série {config.serieNFe || 1})
+                Pedido <b>{order.reference}</b> | Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
               </p>
             </div>
           </div>
@@ -182,13 +185,35 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {/* Dados do Destinatário & Emitente */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                <Building size={12} /> Emitente
-              </span>
-              <p className="text-xs font-bold text-slate-800">{config.razaoSocial}</p>
-              <p className="text-[11px] text-slate-600">CNPJ: {config.cnpjEmitente} | IE: {config.inscricaoEstadual}</p>
-              <p className="text-[10px] text-slate-500">Regime: {config.regimeTributario === '1' ? 'Simples Nacional' : 'Regime Normal'}</p>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 relative group hover:border-purple-200 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
+                  <Building size={12} /> Emitente
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyModal(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs active:scale-95"
+                  title="Configurar informações da empresa emitente (Razão Social, CNPJ, IE, Endereço, etc.)"
+                >
+                  <Settings size={11} className="text-purple-600" />
+                  Configurar Empresa
+                </button>
+              </div>
+              <p className="text-xs font-bold text-slate-800">{currentConfig.razaoSocial}</p>
+              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente}</b> | IE: <b>{currentConfig.inscricaoEstadual}</b></p>
+              <p className="text-[10px] text-slate-500">
+                {currentConfig.logradouroEmitente 
+                  ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} - ${currentConfig.bairroEmitente || ''}, ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
+                  : 'Rodovia Mineral BR-163, Km 42 - Santarém/PA'}
+              </p>
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 text-[10px] text-slate-500">
+                <span>Regime: <strong className="text-slate-700">{currentConfig.regimeTributario === '1' ? 'Simples Nacional' : currentConfig.regimeTributario === '2' ? 'Simples Sublimite' : 'Regime Normal'}</strong></span>
+                <span>•</span>
+                <span>Série: <strong className="text-slate-700">{currentConfig.serieNFe || 1}</strong></span>
+                <span>•</span>
+                <span>Nº: <strong className="text-slate-700">{currentConfig.proxNumeroNFe || 1042}</strong></span>
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
@@ -319,6 +344,17 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         </div>
 
       </div>
+
+      {/* Modal de Configuração Rápida da Empresa Emitente */}
+      <CompanyFiscalSettingsModal
+        isOpen={showCompanyModal}
+        onClose={() => setShowCompanyModal(false)}
+        config={currentConfig}
+        companyId={order.companyId || company.id}
+        onSaveSuccess={(updated) => {
+          setCurrentConfig(updated);
+        }}
+      />
     </div>
   );
 };

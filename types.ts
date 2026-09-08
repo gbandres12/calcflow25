@@ -363,10 +363,28 @@ export interface FiscalConfig {
   apiBaseUrl?: string;
   modoEmissao?: 'api_real' | 'sandbox_local';
   environment: 'sandbox' | 'production';
+  
+  // Dados Cadastrais da Empresa Emitente
   cnpjEmitente: string;
   inscricaoEstadual: string;
+  inscricaoMunicipal?: string;
+  cnae?: string;
   razaoSocial: string;
   nomeFantasia: string;
+  telefoneEmitente?: string;
+  emailEmitente?: string;
+  
+  // Endereço do Estabelecimento Emitente
+  logradouroEmitente?: string;
+  numeroEmitente?: string;
+  complementoEmitente?: string;
+  bairroEmitente?: string;
+  cidadeEmitente?: string;
+  ufEmitente?: string;
+  cepEmitente?: string;
+  ibgeEmitente?: string;
+  
+  // Regime Tributário e Numeração
   regimeTributario: '1' | '2' | '3';
   serieNFe: string;
   proxNumeroNFe: number;
