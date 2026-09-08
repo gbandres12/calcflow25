@@ -1,10 +1,12 @@
 export const SO = {
-  navy: '#102C66',
-  green: '#00883E',
-  border: '#D9DEE5',
-  bg: '#F7F8FA',
-  text: '#1F2937',
-  muted: '#6B7280',
-  totalBg: '#EAF6EF',
+  navy: '#0B1F4A',
+  navyDeep: '#071536',
+  green: '#1E6B3A',
+  greenDark: '#164F2B',
+  border: '#C5CDD8',
+  bg: '#F4F6F8',
+  text: '#1A2332',
+  muted: '#5B6573',
+  totalBg: '#1E6B3A',
   font: "Inter, Roboto, system-ui, sans-serif"
 };
