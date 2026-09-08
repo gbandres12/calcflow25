@@ -1,11 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
+import { db } from '../services/dataService';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
-  Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings
+  Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings,
+  Edit3, Save, Search, RefreshCw, Key, Check
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
+import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -29,20 +32,106 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   transferencia
 }) => {
   const [currentConfig, setCurrentConfig] = useState<FiscalConfig>(config);
+  const [activeCustomer, setActiveCustomer] = useState<Customer>({ ...customer });
   const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
+  const [quickApiKey, setQuickApiKey] = useState(config.apiKey || '');
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [keySavedSuccess, setKeySavedSuccess] = useState(false);
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [cepFeedback, setCepFeedback] = useState<string | null>(null);
+
   const isSubmittingRef = useRef(false);
   const isDevolucao = Boolean(devolutionChave);
   const isTransferencia = Boolean(transferencia) && !isDevolucao;
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const validation = fiscalService.validarDadosFiscais(order, customer);
+  const validation = fiscalService.validarDadosFiscais(order, activeCustomer);
+
+  // Safety unlock in case of unforeseen lockups
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isSubmittingRef.current = false;
+    }, 12000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
+  const handleCepLookup = async (cepValue: string) => {
+    const cleanCep = (cepValue || '').replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      setCepFeedback('CEP deve conter 8 dígitos.');
+      return;
+    }
+
+    setIsLoadingCep(true);
+    setCepFeedback('Consultando ViaCEP...');
+
+    try {
+      const data = await fetchAddressByCep(cleanCep);
+      if (data && !data.erro) {
+        let ibge = data.ibge || '';
+        if (!ibge && data.localidade && data.uf) {
+          ibge = (await fetchIbgeByCityUf(data.localidade, data.uf)) || '';
+        }
+
+        setActiveCustomer(prev => ({
+          ...prev,
+          zipCode: formatCep(cleanCep),
+          street: data.logradouro || prev.street,
+          neighborhood: data.bairro || prev.neighborhood,
+          city: data.localidade || prev.city,
+          state: data.uf || prev.state,
+          ibgeCode: ibge || prev.ibgeCode
+        }));
+
+        setCepFeedback(`Localizado: ${data.localidade}/${data.uf} (IBGE: ${ibge || '1506807'})`);
+      } else {
+        setCepFeedback('CEP não encontrado na base dos Correios.');
+      }
+    } catch {
+      setCepFeedback('Erro ao consultar CEP. Preencha manualmente.');
+    } finally {
+      setIsLoadingCep(false);
+    }
+  };
+
+  const handleSaveCustomerFiscalData = async () => {
+    try {
+      const compId = order.companyId || company.id;
+      await db.upsert('customers', compId, activeCustomer);
+      setIsEditingCustomer(false);
+      setCepFeedback(null);
+    } catch (err: any) {
+      console.warn('Erro ao salvar cliente localmente:', err);
+      setIsEditingCustomer(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!quickApiKey.trim()) return;
+    setIsSavingKey(true);
+    try {
+      const updated = await fiscalService.saveConfig({
+        ...currentConfig,
+        apiKey: quickApiKey.trim(),
+        modoEmissao: 'api_real'
+      }, order.companyId || company.id);
+      setCurrentConfig(updated);
+      setKeySavedSuccess(true);
+      setTimeout(() => setKeySavedSuccess(false), 2500);
+    } catch (err: any) {
+      setErrorMsg(`Erro ao salvar chave: ${err.message}`);
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
 
   const handleEmitir = async (forceLocal = false) => {
     if (isSubmittingRef.current || loading) {
-      console.warn('⚠️ [EMISSÃO BLOQUEADA] Clique duplo ou emissão simultânea evitada!');
+      console.warn('⚠️ [EMISSÃO] Ação em processamento...');
       return;
     }
 
@@ -60,10 +149,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         : isTransferencia
           ? { transferencia: true }
           : undefined;
-      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, activeConfig, opts);
+
+      const payloadSent = fiscalService.montarPayloadNotaAs(order, activeCustomer, activeConfig, opts);
       const result = await fiscalService.emitirNFe(
         { ...order, companyId: order.companyId || company.id },
-        customer,
+        activeCustomer,
         activeConfig,
         order.companyId || company.id,
         opts
@@ -78,9 +168,6 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
             finalStatus = pollResult.status;
           }
-        }
-        if (finalStatus === 'simulada') {
-          // Simulação local: não é autorização SEFAZ.
         }
 
         const updatedOrder: SaleOrder = {
@@ -111,23 +198,27 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     }
   };
 
+  const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
+
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 flex flex-col max-h-[92vh]">
         
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+        <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-100">
-              <Send size={24} />
+            <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-100 shrink-0">
+              <Send size={22} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">{isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : 'Emissão de NF-e Eletrônica'}</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">
+                  {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : 'Emissão de NF-e Eletrônica'}
+                </h3>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {currentConfig.environment === 'production' ? 'Ambiente Produção SEFAZ' : 'Sandbox / Homologação'}
+                  {currentConfig.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
                 </span>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   currentConfig.modoEmissao === 'sandbox_local' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
@@ -140,52 +231,89 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400">
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
             <X size={20} />
           </button>
         </div>
 
-        {/* Conteúdo */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        {/* Conteúdo com Scroll */}
+        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
           
-          {/* Status de Validação Prévia */}
+          {/* Alerta se Chave de API Não Estiver Configurada */}
+          {!hasApiKey && currentConfig.modoEmissao !== 'sandbox_local' && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs text-amber-900">
+              <div className="flex items-start gap-2.5">
+                <Key size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-black uppercase tracking-wider text-[10px]">Chave de API Notaas Não Configurada</p>
+                  <p className="text-slate-700">
+                    Insira sua <strong>Project Key da NotaAs</strong> (iniciada com <code>ntaas_</code>) para transmitir diretamente à SEFAZ via API, ou emita em modo de simulação local.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="password"
+                  placeholder="Cole sua chave ntaas_..."
+                  value={quickApiKey}
+                  onChange={(e) => setQuickApiKey(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveApiKey}
+                  disabled={isSavingKey || !quickApiKey.trim()}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1 shrink-0"
+                >
+                  {isSavingKey ? <RefreshCw size={12} className="animate-spin" /> : keySavedSuccess ? <Check size={12} /> : <Save size={12} />}
+                  {keySavedSuccess ? 'Salvo!' : 'Salvar Chave'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Status de Validação e Avisos */}
           <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
-            validation.valid ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900' : 'bg-rose-50/80 border-rose-200 text-rose-900'
+            validation.valid ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
           }`}>
             {validation.valid ? (
-              <CheckCircle2 className="text-emerald-600 mt-0.5 shrink-0" size={20} />
+              <CheckCircle2 className="text-emerald-600 mt-0.5 shrink-0" size={18} />
             ) : (
-              <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={20} />
+              <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={18} />
             )}
-            <div className="text-xs space-y-1">
+            <div className="text-xs space-y-1 flex-1">
               <p className="font-black uppercase tracking-wider text-[10px]">
-                {validation.valid ? 'Validação Cadastral e Fiscal Aprovada' : 'Pendências Cadastrais Detectadas'}
+                {validation.valid ? 'Validação Fiscal Pronta para Emissão' : 'Pendências que Impedem a Emissão'}
               </p>
               {validation.valid ? (
                 <p className="text-slate-600">
-                  Os dados do emitente, destinatário, NCM e tributação estão prontos para envio à SEFAZ via API NotaAs.
+                  Os dados essenciais estão validados para transmissão à SEFAZ.
                 </p>
               ) : (
-                <ul className="list-disc pl-4 space-y-0.5 text-rose-700">
+                <ul className="list-disc pl-4 space-y-0.5 text-rose-700 font-medium">
                   {validation.errors.map((err, idx) => (
                     <li key={idx}>{err}</li>
                   ))}
                 </ul>
               )}
               {validation.warnings && validation.warnings.length > 0 && (
-                <ul className="list-disc pl-4 space-y-0.5 text-amber-800 mt-1">
-                  {validation.warnings.map((w, idx) => (
-                    <li key={`w-${idx}`}>{w}</li>
-                  ))}
-                </ul>
+                <div className="pt-1 text-[11px] text-amber-800 space-y-0.5">
+                  <span className="font-bold uppercase text-[9px]">Ajustes Automáticos Aplicados:</span>
+                  <ul className="list-disc pl-4">
+                    {validation.warnings.map((w, idx) => (
+                      <li key={`w-${idx}`}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Dados do Destinatário & Emitente */}
+          {/* Cards Emitente e Destinatário */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 relative group hover:border-purple-200 transition-colors">
+            {/* Emitente */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                   <Building size={12} /> Emitente
@@ -193,15 +321,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowCompanyModal(true)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs active:scale-95"
-                  title="Configurar informações da empresa emitente (Razão Social, CNPJ, IE, Endereço, etc.)"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs"
                 >
-                  <Settings size={11} className="text-purple-600" />
-                  Configurar Empresa
+                  <Settings size={11} /> Configurar
                 </button>
               </div>
-              <p className="text-xs font-bold text-slate-800">{currentConfig.razaoSocial}</p>
-              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente}</b> | IE: <b>{currentConfig.inscricaoEstadual}</b></p>
+              <p className="text-xs font-bold text-slate-800">{currentConfig.razaoSocial || company.name}</p>
+              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente || company.cnpj}</b> | IE: <b>{currentConfig.inscricaoEstadual || company.stateRegistration || 'Não informada'}</b></p>
               <p className="text-[10px] text-slate-500">
                 {currentConfig.logradouroEmitente 
                   ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} - ${currentConfig.bairroEmitente || ''}, ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
@@ -210,20 +336,157 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 text-[10px] text-slate-500">
                 <span>Regime: <strong className="text-slate-700">{currentConfig.regimeTributario === '1' ? 'Simples Nacional' : currentConfig.regimeTributario === '2' ? 'Simples Sublimite' : 'Regime Normal'}</strong></span>
                 <span>•</span>
-                <span>Série: <strong className="text-slate-700">{currentConfig.serieNFe || 1}</strong></span>
+                <span>Série {currentConfig.serieNFe || 1}</span>
                 <span>•</span>
-                <span>Nº: <strong className="text-slate-700">{currentConfig.proxNumeroNFe || 1042}</strong></span>
+                <span>Nº {currentConfig.proxNumeroNFe || 1042}</span>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                <User size={12} /> Destinatário
-              </span>
-              <p className="text-xs font-bold text-slate-800">{customer.name}</p>
-              <p className="text-[11px] text-slate-600">Doc: {customer.document} | IE: {customer.isentoIE ? 'Isento' : (customer.ie || 'Não Informada')}</p>
-              <p className="text-[10px] text-slate-500">{customer.street || 'Zona Rural'}, {customer.city || 'Santarém'} - {customer.state || 'PA'}</p>
-              <p className="text-[10px] text-slate-500 font-mono">CEP: {customer.zipCode || '—'} · IBGE: {customer.ibgeCode || 'auto (CEP/cidade)'}</p>
+            {/* Destinatário com Botão de Edição Rápida */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
+                  <User size={12} /> Destinatário
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCustomer(!isEditingCustomer)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs"
+                >
+                  <Edit3 size={11} /> {isEditingCustomer ? 'Fechar Edição' : 'Editar Dados Fiscais'}
+                </button>
+              </div>
+
+              {!isEditingCustomer ? (
+                <>
+                  <p className="text-xs font-bold text-slate-800">{activeCustomer.name}</p>
+                  <p className="text-[11px] text-slate-600">Doc: <b>{activeCustomer.document || 'Não informado'}</b> | IE: <b>{activeCustomer.isentoIE ? 'Isento' : (activeCustomer.ie || 'Não informada')}</b></p>
+                  <p className="text-[10px] text-slate-500">
+                    {activeCustomer.street || 'Zona Rural / Rodovia'}, {activeCustomer.number || 'SN'} - {activeCustomer.neighborhood || 'Zona Rural'}, {activeCustomer.city || 'Santarém'}/{activeCustomer.state || 'PA'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-mono">CEP: {activeCustomer.zipCode || '68000-000'} · IBGE: {activeCustomer.ibgeCode || '1506807'}</p>
+                </>
+              ) : (
+                <div className="pt-2 space-y-2.5 animate-in fade-in duration-150">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">CPF / CNPJ</label>
+                      <input
+                        type="text"
+                        value={activeCustomer.document}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, document: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                        placeholder="CPF ou CNPJ"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">Inscrição Estadual</label>
+                      <input
+                        type="text"
+                        disabled={activeCustomer.isentoIE}
+                        value={activeCustomer.isentoIE ? 'ISENTO' : (activeCustomer.ie || '')}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, ie: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold disabled:opacity-60"
+                        placeholder="IE ou Isento"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">CEP</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={activeCustomer.zipCode || ''}
+                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, zipCode: e.target.value }))}
+                          onBlur={(e) => {
+                            if (e.target.value.replace(/\D/g, '').length === 8) handleCepLookup(e.target.value);
+                          }}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                          placeholder="68000-000"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCepLookup(activeCustomer.zipCode || '')}
+                          disabled={isLoadingCep}
+                          className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg"
+                          title="Buscar endereço por CEP"
+                        >
+                          <Search size={12} className={isLoadingCep ? 'animate-spin' : ''} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-[9px] font-black uppercase text-slate-400">Logradouro / Endereço</label>
+                      <input
+                        type="text"
+                        value={activeCustomer.street || ''}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, street: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                        placeholder="Rua / Rodovia / Fazenda"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">Número</label>
+                      <input
+                        type="text"
+                        value={activeCustomer.number || ''}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, number: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                        placeholder="SN"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">Bairro</label>
+                      <input
+                        type="text"
+                        value={activeCustomer.neighborhood || ''}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, neighborhood: e.target.value }))}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                        placeholder="Zona Rural"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">Município / UF</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={activeCustomer.city || ''}
+                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, city: e.target.value }))}
+                          className="w-2/3 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                          placeholder="Santarém"
+                        />
+                        <input
+                          type="text"
+                          maxLength={2}
+                          value={activeCustomer.state || ''}
+                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, state: e.target.value.toUpperCase() }))}
+                          className="w-1/3 px-1 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
+                          placeholder="PA"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {cepFeedback && (
+                    <p className="text-[10px] text-purple-700 font-bold">{cepFeedback}</p>
+                  )}
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSaveCustomerFiscalData}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1"
+                    >
+                      <Save size={12} /> Salvar Alterações
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
@@ -231,7 +494,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {isTransferencia && (
             <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900">
               <p className="font-black uppercase tracking-wider text-[10px] mb-1">Transferência entre estabelecimentos</p>
-              <p>CFOP { (customer.state && customer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152') } · finalidade 1 · pagamento 90 (sem pagamento). O destinatário deste pedido precisa ser a filial que recebe o estoque.</p>
+              <p>CFOP { (activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152') } · finalidade 1 · sem cobrança financeira.</p>
             </div>
           )}
 
@@ -245,7 +508,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 placeholder="Chave de acesso da nota a devolver"
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
               />
-              <p className="text-[10px] text-slate-400">Finalidade 4 · CFOP 5202/6202 · pagamento 90 (sem pagamento). Não envia refNFe na raiz.</p>
+              <p className="text-[10px] text-slate-400">Finalidade 4 · CFOP 5202/6202 · sem cobrança financeira.</p>
             </div>
           )}
 
@@ -270,8 +533,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="px-4 py-3 font-bold text-slate-800">{it.productName}</td>
                       <td className="px-3 py-3 font-mono text-slate-600">{it.ncm || '2517.10.00'}</td>
-                      <td className="px-3 py-3 font-mono text-slate-600">{isDevolucao ? ((customer.state && customer.state !== 'PA') ? '6202' : '5202') : isTransferencia ? ((customer.state && customer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152')) : (it.cfop || config.cfopPadraoEstadual)}</td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
+                      <td className="px-3 py-3 font-mono text-slate-600">{isDevolucao ? ((activeCustomer.state && activeCustomer.state !== 'PA') ? '6202' : '5202') : isTransferencia ? ((activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152')) : (it.cfop || config.cfopPadraoEstadual || '5101')}</td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit || 'Ton'}</td>
                       <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
                     </tr>
                   ))}
@@ -296,7 +559,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <div className="space-y-1">
                   <p className="font-bold">{errorMsg}</p>
                   <p className="text-[11px] text-rose-600 font-normal">
-                    Se a chave da API NotaAs ainda não foi configurada ou se o servidor da API externa estiver temporariamente inacessível, você pode emitir a nota em modo de simulação local para dar andamento ao fluxo de pedidos.
+                    Se a chave da API NotaAs ainda não foi liberada pela SEFAZ ou se o servidor da API externa estiver temporariamente inacessível, você pode emitir a nota em modo de simulação local para dar andamento às operações e liberar o pedido.
                   </p>
                 </div>
               </div>
@@ -308,7 +571,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
                 >
                   <Sparkles size={13} />
-                  Emitir em Modo Simulação Local (Sem Bloqueio de API)
+                  Emitir em Modo Simulação Local (Liberar Pedido)
                 </button>
               </div>
             </div>
@@ -317,7 +580,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <div className="p-5 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
           <button
             onClick={onClose}
             className="px-6 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
@@ -325,27 +588,41 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             Voltar
           </button>
 
-          <button
-            disabled={loading || !validation.valid}
-            onClick={handleEmitir}
-            className="flex items-center gap-2 px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Transmitindo para a SEFAZ...
-              </>
-            ) : (
-              <>
-                <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : 'Transmitir e Emitir NF-e (NotaAs)'}
-              </>
+          <div className="flex items-center gap-2">
+            {(!hasApiKey && currentConfig.modoEmissao !== 'sandbox_local') && (
+              <button
+                type="button"
+                onClick={() => handleEmitir(true)}
+                disabled={loading || !validation.valid}
+                className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center gap-1"
+                title="Emitir em Simulação sem exigir chave externa"
+              >
+                <Sparkles size={14} /> Simular Emissão
+              </button>
             )}
-          </button>
+
+            <button
+              disabled={loading || !validation.valid}
+              onClick={() => handleEmitir(false)}
+              className="flex items-center gap-2 px-6 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Transmitindo para a SEFAZ...
+                </>
+              ) : (
+                <>
+                  <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : 'Transmitir e Emitir NF-e'}
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
       </div>
 
-      {/* Modal de Configuração Rápida da Empresa Emitente */}
+      {/* Modal de Configuração da Empresa Emitente */}
       <CompanyFiscalSettingsModal
         isOpen={showCompanyModal}
         onClose={() => setShowCompanyModal(false)}

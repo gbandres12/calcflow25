@@ -19,8 +19,8 @@ export async function proxyToFiscal(opts: {
       try {
         headers['Authorization'] = `Basic ${Buffer.from(`${cleanKey}:`).toString('base64')}`;
       } catch {}
-    } else {
-      // Alguns endpoints ou proxies aceitam Bearer como fallback
+    } else if (provider !== 'notaas') {
+      // Alguns endpoints ou proxies aceitam Bearer como fallback, mas Notaas usa estritamente x-api-key
       headers['Authorization'] = `Bearer ${cleanKey}`;
     }
   }
