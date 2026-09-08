@@ -21,16 +21,33 @@ export function getAdminSupabase(): SupabaseClient | null {
 
 export async function getFiscalConfigForCompany(companyId: string): Promise<any | null> {
   const supabase = getAdminSupabase();
-  if (!supabase || !companyId) return null;
-  const { data, error } = await supabase
+  if (!supabase) return null;
+  
+  if (companyId) {
+    const { data, error } = await supabase
+      .from('app_records')
+      .select('data')
+      .eq('table_name', 'fiscal_config')
+      .eq('company_id', companyId)
+      .limit(5);
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const row = data.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || data[0];
+      if (row?.data) return row.data;
+    }
+  }
+
+  // Fallback: busca qualquer registro válido de fiscal_config
+  const { data: fallbackData, error: fallbackError } = await supabase
     .from('app_records')
     .select('data')
     .eq('table_name', 'fiscal_config')
-    .eq('company_id', companyId)
     .limit(5);
-  if (error || !Array.isArray(data) || data.length === 0) return null;
-  const row = data.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || data[0];
-  return row?.data || null;
+  if (!fallbackError && Array.isArray(fallbackData) && fallbackData.length > 0) {
+    const row = fallbackData.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || fallbackData[0];
+    return row?.data || null;
+  }
+
+  return null;
 }
 
 type OrderRow = { id: string; company_id: string; data: any };

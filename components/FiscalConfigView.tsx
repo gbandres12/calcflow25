@@ -4,10 +4,19 @@ import { fiscalService } from '../services/fiscalService';
 import { 
   Building2, Sliders, Globe, ShieldCheck, Save, CheckCircle2, 
   AlertCircle, RefreshCw, Key, MapPin, Search, Phone, Mail, 
-  Sparkles, Layers, FileText, ArrowRight, Eye, ExternalLink, Check, FileCheck
+  Sparkles, Layers, FileText, ArrowRight, Eye, ExternalLink, Check, FileCheck,
+  Database, HardDrive, ShieldAlert, Code2, Server
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
+import { DatabaseStatusModal } from './DatabaseStatusModal';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
+import { 
+  getSupabaseConfig, 
+  testSupabaseConnection, 
+  testSupabasePersistence,
+  isSupabaseConfigured,
+  SUPABASE_SQL_SCHEMA
+} from '../services/supabaseClient';
 
 interface FiscalConfigViewProps {
   company: Company;
@@ -37,13 +46,42 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<Array<{ time: string; type: 'info' | 'success' | 'warning' | 'error'; message: string; data?: any }>>([]);
   const [isTestingApi, setIsTestingApi] = useState(false);
+  const [showDatabaseModal, setShowDatabaseModal] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<{ ok: boolean; message: string; configured: boolean } | null>(null);
 
   useEffect(() => {
     fiscalService.getConfig(companyId).then(c => {
       setConfig(c);
       checkSefazStatus(c);
+      checkSupabaseHealth();
     });
   }, [companyId]);
+
+  const checkSupabaseHealth = async () => {
+    const configured = isSupabaseConfigured();
+    if (!configured) {
+      setSupabaseStatus({
+        ok: false,
+        configured: false,
+        message: 'Variáveis VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não detectadas (Operando em Cache Local).'
+      });
+      return;
+    }
+    try {
+      const res = await testSupabaseConnection();
+      setSupabaseStatus({
+        ok: res.ok && res.tableExists,
+        configured: true,
+        message: res.message
+      });
+    } catch {
+      setSupabaseStatus({
+        ok: false,
+        configured: true,
+        message: 'Falha ao testar conexão com o banco Supabase.'
+      });
+    }
+  };
 
   const checkSefazStatus = async (overrideCfg?: FiscalConfig) => {
     setSefazStatus({ status: 'checking', mensagem: 'Consultando status da SEFAZ...', loading: true });
@@ -110,30 +148,59 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
     setDiagnosticLogs([]);
     setShowDiagnostics(true);
 
-    addLog('info', '🚀 Iniciando Investigação de Mapeamento de Schema e Teste da API Fiscal...');
-    addLog('info', `📌 Provedor Configurado: ${(config.apiProvider || 'notaas').toUpperCase()}`);
+    addLog('info', '🚀 Iniciando Diagnóstico Completo: Supabase (Banco) + SEFAZ / NotaAs (API Fiscal)...');
+    
+    // 1. Diagnóstico do Supabase
+    addLog('info', '📦 [1/2] Verificando integração com o banco Supabase...');
+    const configured = isSupabaseConfigured();
+    if (!configured) {
+      addLog('warning', '⚠️ Supabase não configurado nas variáveis de ambiente. O ERP está operando com cache local e persistência no navegador.');
+    } else {
+      addLog('info', '🔑 Variáveis do Supabase detectadas. Testando conexão com PostgreSQL...');
+      try {
+        const conn = await testSupabaseConnection();
+        if (conn.ok && conn.tableExists) {
+          addLog('success', '✅ Supabase Conectado! Tabela "app_records" ativa e acessível.');
+          const pers = await testSupabasePersistence();
+          if (pers.ok) {
+            addLog('success', `💾 Persistência em Nuvem OK (${pers.latencyMs}ms): ${pers.counts.salesOrders} pedidos, ${pers.counts.nfeOrders} notas autorizadas.`);
+          } else {
+            addLog('warning', `⚠️ Teste de persistência: ${pers.message}`);
+          }
+        } else if (conn.ok && !conn.tableExists) {
+          addLog('warning', '⚠️ Supabase conectado, mas a tabela "app_records" ainda não foi criada. Copie o script SQL e rode no SQL Editor.');
+        } else {
+          addLog('error', `❌ Falha ao conectar ao Supabase: ${conn.message}`);
+        }
+      } catch (e: any) {
+        addLog('error', `❌ Erro inesperado no teste do Supabase: ${e?.message || e}`);
+      }
+    }
+
+    // 2. Diagnóstico da API Fiscal / SEFAZ
+    addLog('info', '🏛️ [2/2] Verificando integração com o provedor fiscal NotaAs e SEFAZ...');
+    addLog('info', `📌 Provedor: ${(config.apiProvider || 'notaas').toUpperCase()} | Modo: ${config.modoEmissao === 'api_real' ? 'API REAL (SEFAZ)' : 'SIMULAÇÃO LOCAL (SANDBOX)'}`);
     addLog('info', `🌐 Ambiente SEFAZ: ${config.environment.toUpperCase()}`);
-    addLog('info', `🔗 URL Base: ${config.apiBaseUrl || 'https://platform.notaas.com.br/api/v1'}`);
 
     const apiKey = (config.apiKey || '').trim();
     if (!apiKey && config.modoEmissao === 'api_real') {
-      addLog('warning', '⚠️ Chave de API não informada nas configurações. A transmissão externa exigirá a Project Key (ntaas_...).');
+      addLog('warning', '⚠️ Project Key não informada. Para emissão real na SEFAZ, insira a chave fornecida pela NotaAs (ntaas_...).');
     } else if (apiKey) {
-      addLog('info', `🔑 Chave de API identificada: ${apiKey.substring(0, 8)}... (Comprimento: ${apiKey.length} caracteres)`);
+      addLog('info', `🔑 Chave NotaAs identificada: ${apiKey.substring(0, 8)}... (${apiKey.length} caracteres)`);
     }
 
-    addLog('info', '🔍 Consultando status da SEFAZ via API/Proxy...');
     try {
       const res = await fiscalService.consultarStatusSefaz(config);
       if (res.success) {
-        addLog('success', `SEFAZ respondeu: ${res.status.toUpperCase()} — ${res.mensagem}`, res);
+        addLog('success', `✅ SEFAZ respondeu com sucesso: ${res.status.toUpperCase()} — ${res.mensagem}`, res);
       } else {
-        addLog('error', `Falha no teste: ${res.mensagem}`, res);
+        addLog('error', `❌ Resposta da SEFAZ / API Fiscal: ${res.mensagem}`, res);
       }
     } catch (err: any) {
-      addLog('error', `Exceção ao consultar status: ${err.message}`, err);
+      addLog('error', `❌ Exceção ao consultar status da SEFAZ: ${err.message}`, err);
     } finally {
       setIsTestingApi(false);
+      checkSupabaseHealth();
     }
   };
 
@@ -832,57 +899,179 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
           </div>
         )}
 
-        {/* ABA 4: DIAGNÓSTICO & SCHEMA */}
+        {/* ABA 4: DIAGNÓSTICO & BANCO SUPABASE */}
         {activeTab === 'diagnostico' && (
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Sparkles size={18} className="text-purple-400" />
-                  Painel de Diagnóstico & Validação de Schema SEFAZ
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Valide a estrutura JSON, campos obrigatórios e conectividade com a API NotaAs antes de emitir para clientes.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleRunDiagnostic}
-                disabled={isTestingApi}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-all"
-              >
-                <RefreshCw size={14} className={isTestingApi ? 'animate-spin' : ''} />
-                <span>{isTestingApi ? 'Testando...' : 'Executar Diagnóstico Completo'}</span>
-              </button>
-            </div>
-
-            {/* Terminal de Logs */}
-            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-xs space-y-2 max-h-[350px] overflow-y-auto">
-              <div className="text-slate-500 border-b border-slate-800 pb-2 flex items-center justify-between">
-                <span>TERMINAL DE LOGS FISCAIS - CALCÁRIOFLOW</span>
-                <span>STATUS: {isTestingApi ? 'TESTANDO...' : 'PRONTO'}</span>
-              </div>
-
-              {diagnosticLogs.length === 0 ? (
-                <div className="text-slate-500 py-6 text-center">
-                  Clique em &quot;Executar Diagnóstico Completo&quot; para iniciar o teste de comunicação.
+          <div className="space-y-6">
+            
+            {/* Grid com os 2 Pilares: Banco de Dados Supabase vs Transmissão Fiscal SEFAZ */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Pilar 1: Supabase (Persistência em Nuvem) */}
+              <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Database size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        Banco de Dados Supabase (PostgreSQL)
+                      </h4>
+                      <p className="text-xs text-slate-400">Armazenamento seguro de cadastros, pedidos e notas</p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+                    supabaseStatus?.ok 
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : supabaseStatus?.configured
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {supabaseStatus?.ok ? 'Supabase Ativo' : supabaseStatus?.configured ? 'Tabela Pendente' : 'Cache Local'}
+                  </span>
                 </div>
-              ) : (
-                diagnosticLogs.map((log, index) => (
-                  <div key={index} className="flex items-start gap-2">
-                    <span className="text-slate-500 shrink-0">[{log.time}]</span>
-                    <span className={
-                      log.type === 'success' ? 'text-emerald-400' :
-                      log.type === 'error' ? 'text-red-400' :
-                      log.type === 'warning' ? 'text-amber-400' : 'text-slate-300'
-                    }>
-                      {log.message}
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {supabaseStatus?.message || 'Diagnóstico do banco em andamento...'}
+                </p>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Tabela de Registros:</span>
+                    <span className="font-mono text-slate-200">public.app_records</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Sincronização Fiscal:</span>
+                    <span className="text-emerald-400 font-semibold">Automática (Pedidos & CFOP)</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Webhook NotaAs:</span>
+                    <span className="font-mono text-slate-200">/api/webhooks/notaas</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDatabaseModal(true)}
+                    className="flex-1 py-2.5 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Database size={14} /> Abrir Diagnóstico Supabase
+                  </button>
+                </div>
+              </div>
+
+              {/* Pilar 2: Provedor Fiscal & SEFAZ */}
+              <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                      <Globe size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        Transmissão Fiscal SEFAZ (API NotaAs)
+                      </h4>
+                      <p className="text-xs text-slate-400">Mensageria tributária e autorização de NF-e</p>
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+                    config.modoEmissao === 'api_real'
+                      ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                      : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
+                  }`}>
+                    {config.modoEmissao === 'api_real' ? 'API Real (SEFAZ)' : 'Simulação (Sandbox)'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {config.modoEmissao === 'api_real'
+                    ? (config.apiKey ? 'Chave de API configurada. Transmitindo diretamente para a SEFAZ.' : 'Atenção: Modo API Real ativo, mas a Project Key (ntaas_...) não foi preenchida.')
+                    : 'Modo Simulação Local ativo: permite emitir, testar o fluxo de vendas e gerar DANFEs de demonstração sem cobranças.'}
+                </p>
+
+                <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Ambiente Fiscal:</span>
+                    <span className="font-bold text-slate-200">{config.environment.toUpperCase()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Status do Serviço SEFAZ:</span>
+                    <span className={sefazStatus?.status === 'online' ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {sefazStatus?.mensagem || 'Aguardando teste...'}
                     </span>
                   </div>
-                ))
-              )}
+                  <div className="flex justify-between text-slate-400">
+                    <span>Próximo Número NF-e:</span>
+                    <span className="font-mono text-slate-200">Nº {config.proxNumeroNFe || 1} / Série {config.serieNFe || 1}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('api')}
+                    className="flex-1 py-2.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Key size={14} /> Configurar Project Key
+                  </button>
+                </div>
+              </div>
+
             </div>
+
+            {/* Painel do Terminal de Logs e Ações */}
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Sparkles size={18} className="text-purple-400" />
+                    Terminal Unificado de Diagnóstico Fiscal & Banco
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Testa a integridade da persistência PostgreSQL no Supabase e a comunicação com o endpoint da SEFAZ.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRunDiagnostic}
+                  disabled={isTestingApi}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-md"
+                >
+                  <RefreshCw size={14} className={isTestingApi ? 'animate-spin' : ''} />
+                  <span>{isTestingApi ? 'Executando Teste...' : 'Executar Diagnóstico Completo'}</span>
+                </button>
+              </div>
+
+              {/* Terminal de Logs */}
+              <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 font-mono text-xs space-y-2 max-h-[350px] overflow-y-auto shadow-inner">
+                <div className="text-slate-500 border-b border-slate-800 pb-2 flex items-center justify-between">
+                  <span>TERMINAL FISCAL & SUPABASE — CALCÁRIOFLOW ERP</span>
+                  <span>STATUS: {isTestingApi ? 'TESTANDO...' : 'PRONTO'}</span>
+                </div>
+
+                {diagnosticLogs.length === 0 ? (
+                  <div className="text-slate-500 py-6 text-center">
+                    Clique em &quot;Executar Diagnóstico Completo&quot; para iniciar o teste de comunicação de ambos os serviços.
+                  </div>
+                ) : (
+                  diagnosticLogs.map((log, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <span className="text-slate-500 shrink-0">[{log.time}]</span>
+                      <span className={
+                        log.type === 'success' ? 'text-emerald-400' :
+                        log.type === 'error' ? 'text-red-400' :
+                        log.type === 'warning' ? 'text-amber-400' : 'text-slate-300'
+                      }>
+                        {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -914,6 +1103,15 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
           setShowCompanyModal(false);
           setSaveSuccess(true);
           setTimeout(() => setSaveSuccess(false), 3000);
+        }}
+      />
+
+      {/* Modal de Diagnóstico do Supabase & SQL Schema */}
+      <DatabaseStatusModal
+        isOpen={showDatabaseModal}
+        onClose={() => {
+          setShowDatabaseModal(false);
+          checkSupabaseHealth();
         }}
       />
     </div>

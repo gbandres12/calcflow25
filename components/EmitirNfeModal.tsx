@@ -5,9 +5,10 @@ import { db } from '../services/dataService';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
   Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings,
-  Edit3, Save, Search, RefreshCw, Key, Check
+  Edit3, Save, Search, RefreshCw, Key, Check, Database
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
+import { DatabaseStatusModal } from './DatabaseStatusModal';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 
 interface EmitirNfeModalProps {
@@ -43,6 +44,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [keySavedSuccess, setKeySavedSuccess] = useState(false);
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [cepFeedback, setCepFeedback] = useState<string | null>(null);
+  const [showDatabaseModal, setShowDatabaseModal] = useState(false);
 
   const isSubmittingRef = useRef(false);
   const isDevolucao = Boolean(devolutionChave);
@@ -553,17 +555,26 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           </div>
 
           {errorMsg && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2.5">
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2.5 animate-in fade-in">
               <div className="flex items-start gap-2.5">
                 <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-bold">{errorMsg}</p>
-                  <p className="text-[11px] text-rose-600 font-normal">
-                    Se a chave da API NotaAs ainda não foi liberada pela SEFAZ ou se o servidor da API externa estiver temporariamente inacessível, você pode emitir a nota em modo de simulação local para dar andamento às operações e liberar o pedido.
+                  <p className="text-[11px] text-rose-600 font-normal leading-relaxed">
+                    A emissão direta na SEFAZ exige a <b>Project Key (ntaas_...)</b> e o <b>Certificado A1</b> no painel da NotaAs. Se o provedor rejeitar a comunicação ou estiver em configuração, você pode <b>Simular a Emissão</b> para liberar o pedido e imprimir o DANFE de teste, ou verificar a sincronização do banco Supabase.
                   </p>
                 </div>
               </div>
-              <div className="pt-2 border-t border-rose-200/60 flex items-center justify-end">
+              <div className="pt-2 border-t border-rose-200/60 flex items-center justify-between flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDatabaseModal(true)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                >
+                  <Database size={13} className="text-emerald-600" />
+                  Verificar Banco Supabase
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleEmitir(true)}
@@ -631,6 +642,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         onSaveSuccess={(updated) => {
           setCurrentConfig(updated);
         }}
+      />
+
+      {/* Modal de Diagnóstico do Supabase */}
+      <DatabaseStatusModal
+        isOpen={showDatabaseModal}
+        onClose={() => setShowDatabaseModal(false)}
       />
     </div>
   );
