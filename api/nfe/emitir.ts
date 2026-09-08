@@ -1,5 +1,14 @@
-import { proxyToFiscal, setCors } from '../_lib/fiscalProxy';
-import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin';
+export const config = { runtime: 'nodejs', maxDuration: 30 };
+
+function setCors(res: any) {
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, x-api-key, Authorization, X-Requested-With'
+  );
+}
 
 export default async function handler(req: any, res: any) {
   setCors(res);
@@ -9,24 +18,20 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { payload, apiKey, apiBaseUrl, companyId, provider = 'notaas' } = req.body || {};
-    let key = (apiKey || process.env.NOTAAS_API_KEY || '').trim();
-    let base = (apiBaseUrl || 'https://platform.notaas.com.br/api/v1').replace(/\/$/, '');
+    const body = req.body || {};
+    const payload = body.payload;
+    const provider = String(body.provider || 'notaas').toLowerCase();
+    const key = String(body.apiKey || process.env.NOTAAS_API_KEY || '').trim();
+    const base = String(body.apiBaseUrl || 'https://platform.notaas.com.br/api/v1').replace(/\/$/, '');
 
-    if (!payload) {
-      return res.status(400).json({ error: 'Payload da NF-e não informado.' });
-    }
-
-    if ((!key || !base) && companyId) {
-      const cfg = await getFiscalConfigForCompany(companyId);
-      if (cfg) {
-        if (!key) key = (cfg.apiKey || '').trim();
-        if (cfg.apiBaseUrl) base = String(cfg.apiBaseUrl).replace(/\/$/, '');
-      }
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({error: 'Payload da NF-e não informado. O ERP precisa enviar o JSON da nota.'});
     }
 
     if (!key) {
-      return res.status(400).json({ error: 'Chave de API fiscal não configurada para esta empresa.' });
+      return res.status(400).json({
+        error: 'Chave da API NotaAs ausente. Cadastre a Project Key (ntaas_…) em Configurações > Fiscal.'
+      });
     }
 
     const endpoint =
@@ -34,17 +39,55 @@ export default async function handler(req: any, res: any) {
         ? `${base}/nfe?ref=${encodeURIComponent(payload.referenciaExterna || '')}`
         : `${base}/nfe/emitir`;
 
-    const result = await proxyToFiscal({
-      method: 'POST',
-      endpoint,
-      apiKey: key,
-      body: payload,
-      provider
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'x-api-key': key
+    };
 
-    return res.status(result.status).json(result.data);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    let data: any;
+    if (contentType.includes('application/json')) {
+      data = await response.json().catch(() => ({}));
+    } else {
+      const preview = await response.text().catch(() => '');
+      data = {
+        error: `A NotaAs não devolveu JSON (HTTP ${response.status}).`,
+        preview: preview.slice(0, 400)
+      };
+    }
+
+    if (response.status === 401) {
+      data = {
+        ...data,
+        isAuthError: true,
+        error: '[HTTP 401] Chave rejeitada pela NotaAs. Use a Project Key do painel (prefixo ntaas_).'
+      };
+    }
+
+    return res.status(response.status).json(data);
   } catch (error: any) {
+    const timeout = error?.name === 'AbortError';
     console.error('Erro no proxy NF-e emitir:', error);
-    return res.status(500).json({ error: error.message || 'Erro interno no servidor proxy.' });
+    return res.status(502).json({
+      error: timeout
+        ? 'A NotaAs não respondeu em 25s. Tente de novo ou confira o status no painel NotaAs.'
+        : error?.message || 'Falha ao conectar no emissor NotaAs.'
+    });
   }
 }
