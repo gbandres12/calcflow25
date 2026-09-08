@@ -24,7 +24,8 @@ import {
   HardHat,
   X,
   ArrowRightLeft,
-  Sliders
+  Sliders,
+  ClipboardList
 } from 'lucide-react';
 import { View, UserRole, User, UserPermissions } from '../types';
 
@@ -68,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (['inventory', 'milling'].includes(itemId)) {
       return userPermissions.inventory;
     }
-    if (['orders', 'customers', 'yard', 'transfers'].includes(itemId)) {
+    if (['orders', 'quotes', 'customers', 'yard', 'transfers'].includes(itemId)) {
       return userPermissions.orders;
     }
     return true;
@@ -87,6 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'orders', label: 'Vendas & Romaneios', icon: FileText },
+        { id: 'quotes', label: 'Orçamentos', icon: ClipboardList },
         { id: 'customers', label: 'Clientes & Produtores', icon: Users },
         { id: 'fiscal', label: 'Notas Fiscais Emitidas', icon: FileCheck, roles: [UserRole.ADMIN, UserRole.MANAGER] },
       ]
@@ -157,7 +159,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Backdrop para mobile */}
       {mobileOpen && (
         <div 
           onClick={onCloseMobile}
@@ -168,7 +169,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       <aside className={`w-64 h-screen bg-slate-900 text-slate-300 flex flex-col fixed left-0 top-0 shadow-2xl z-50 print:hidden border-r border-slate-800 transition-transform duration-300 ease-in-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
-        {/* Brand Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-600/30 text-white shrink-0">
@@ -179,7 +179,6 @@ const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">Usina & Mineração</p>
             </div>
           </div>
-          {/* Botão de Fechar no Mobile */}
           <button 
             onClick={onCloseMobile}
             className="p-1.5 text-slate-400 hover:text-white rounded-lg lg:hidden"
@@ -188,7 +187,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 p-3 space-y-4 overflow-y-auto custom-scrollbar">
           {groups.map((group, gIdx) => (
             <div key={gIdx} className="space-y-1">
@@ -210,47 +208,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ))}
         </nav>
-
-        {/* Database & Cloud Status */}
-        {onOpenDatabaseModal && (
-          <div className="px-3 pb-2">
-            <button
-              onClick={onOpenDatabaseModal}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition group"
-              title="Verificar status do Supabase e Banco de Dados"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Database size={14} className="text-emerald-400 shrink-0" />
-                <span className="text-[11px] font-semibold truncate">Supabase Cloud</span>
-              </div>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            </button>
-          </div>
-        )}
-
-        {/* User Footer Profile */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/40">
-          <div className="flex items-center justify-between gap-2 p-2 bg-slate-800/60 rounded-xl border border-slate-700/50">
-            <div className="flex items-center gap-2 overflow-hidden min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
-                <RoleIconComponent size={15} />
-              </div>
-              <div className="overflow-hidden min-w-0">
-                <p className="text-xs font-bold text-slate-200 truncate">{user.name.split(' ')[0]}</p>
-                <p className="text-[9px] text-purple-400 uppercase font-black tracking-wider truncate">{user.role}</p>
-              </div>
-            </div>
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                title="Sair do Sistema"
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-              >
-                <LogOut size={15} />
-              </button>
-            )}
-          </div>
-        </div>
       </aside>
     </>
   );
