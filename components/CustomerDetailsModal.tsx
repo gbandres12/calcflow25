@@ -34,9 +34,10 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   const customerData = useMemo(() => {
     if (!customer) return null;
 
-    const customerOrders = orders.filter(o => o.customerId === customer.id);
-    const finalizedOrders = customerOrders.filter(o => o.status === OrderStatus.FINALIZED);
-    const budgetOrders = customerOrders.filter(o => o.status === OrderStatus.BUDGET);
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    const customerOrders = safeOrders.filter(o => o && o.customerId === customer.id);
+    const finalizedOrders = customerOrders.filter(o => o && o.status === OrderStatus.FINALIZED);
+    const budgetOrders = customerOrders.filter(o => o && o.status === OrderStatus.BUDGET);
 
     let totalPurchased = 0;
     let totalPaid = 0;
@@ -45,15 +46,15 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
     let totalTonWithdrawn = 0;
 
     finalizedOrders.forEach(order => {
-      totalPurchased += order.total || 0;
+      totalPurchased += Number(order.total) || 0;
       const paymentInfo = calculateOrderPayment(order);
-      totalPaid += paymentInfo.totalPaid;
-      totalDebt += paymentInfo.remainingDebt;
+      totalPaid += Number(paymentInfo.totalPaid) || 0;
+      totalDebt += Number(paymentInfo.remainingDebt) || 0;
 
-      const orderTons = (order.items || []).reduce((s, it) => s + (it.quantity || 0), 0);
+      const orderTons = (order.items || []).reduce((s, it) => s + (Number(it?.quantity) || 0), 0);
       totalTonPurchased += orderTons;
 
-      const orderWithdrawnTons = (order.withdrawals || []).reduce((s, w) => s + (w.quantityWithdrawn || 0), 0);
+      const orderWithdrawnTons = (order.withdrawals || []).reduce((s, w) => s + (Number(w?.quantityWithdrawn) || 0), 0);
       totalTonWithdrawn += orderWithdrawnTons;
     });
 
@@ -65,6 +66,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
     const receipts: (PaymentReceipt & { orderReference?: string })[] = [];
     customerOrders.forEach(o => {
       (o.receipts || []).forEach(r => {
+        if (!r) return;
         receipts.push({
           ...r,
           orderReference: o.reference

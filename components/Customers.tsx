@@ -40,20 +40,25 @@ const Customers: React.FC<CustomersProps> = ({
   // Mapa de Débitos e Vendas por Cliente
   const customerFinancialStats = useMemo(() => {
     const statsMap: Record<string, { totalPurchased: number; totalPaid: number; totalDebt: number; orderCount: number }> = {};
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    const safeOrders = Array.isArray(orders) ? orders : [];
 
-    customers.forEach(c => {
-      statsMap[c.id] = { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
+    safeCustomers.forEach(c => {
+      if (c && c.id) {
+        statsMap[c.id] = { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
+      }
     });
 
-    orders.forEach(order => {
+    safeOrders.forEach(order => {
+      if (!order || !order.customerId) return;
       if (!statsMap[order.customerId]) {
         statsMap[order.customerId] = { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
       }
       if (order.status === OrderStatus.FINALIZED) {
         const { totalPaid, remainingDebt } = calculateOrderPayment(order);
-        statsMap[order.customerId].totalPurchased += order.total || 0;
-        statsMap[order.customerId].totalPaid += totalPaid;
-        statsMap[order.customerId].totalDebt += remainingDebt;
+        statsMap[order.customerId].totalPurchased += (Number(order.total) || 0);
+        statsMap[order.customerId].totalPaid += (Number(totalPaid) || 0);
+        statsMap[order.customerId].totalDebt += (Number(remainingDebt) || 0);
         statsMap[order.customerId].orderCount += 1;
       }
     });
@@ -68,10 +73,12 @@ const Customers: React.FC<CustomersProps> = ({
     let customersWithDebtCount = 0;
     let settledCustomersCount = 0;
 
-    customers.forEach(c => {
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    safeCustomers.forEach(c => {
+      if (!c || !c.id) return;
       const stats = customerFinancialStats[c.id] || { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
-      totalPurchased += stats.totalPurchased || c.totalSpent || 0;
-      totalDebt += stats.totalDebt || 0;
+      totalPurchased += Number(stats.totalPurchased || c.totalSpent || 0);
+      totalDebt += Number(stats.totalDebt || 0);
       if (stats.totalDebt > 0.01) {
         customersWithDebtCount += 1;
       } else if (stats.totalPurchased > 0) {
@@ -96,7 +103,7 @@ const Customers: React.FC<CustomersProps> = ({
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerForm.name || !customerForm.document) return;
+    if (!customerForm.name) return;
     if (onAddCustomer) {
       onAddCustomer(customerForm);
     } else {
@@ -107,13 +114,23 @@ const Customers: React.FC<CustomersProps> = ({
   };
 
   const filteredCustomers = useMemo(() => {
-    return customers.filter(c => {
-      const q = searchQuery.toLowerCase();
-      const matchSearch = 
-        c.name.toLowerCase().includes(q) ||
-        c.document.includes(q) ||
-        (c.email && c.email.toLowerCase().includes(q)) ||
-        (c.phone && c.phone.includes(q));
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    const q = (searchQuery || '').toLowerCase().trim();
+
+    return safeCustomers.filter(c => {
+      if (!c) return false;
+      const cName = String(c.name || '').toLowerCase();
+      const cDoc = String(c.document || '').toLowerCase();
+      const cEmail = String(c.email || '').toLowerCase();
+      const cPhone = String(c.phone || '').toLowerCase();
+      const cCity = String(c.city || '').toLowerCase();
+
+      const matchSearch = !q ||
+        cName.includes(q) ||
+        cDoc.includes(q) ||
+        cEmail.includes(q) ||
+        cPhone.includes(q) ||
+        cCity.includes(q);
 
       if (!matchSearch) return false;
 
@@ -428,7 +445,7 @@ const Customers: React.FC<CustomersProps> = ({
                     >
                       <td className="px-8 py-5">
                         <div className="font-black text-slate-800 text-sm mb-1 uppercase tracking-tight group-hover:text-purple-700 transition-colors flex items-center gap-2">
-                          {c.name}
+                          {c.name || 'Cliente Sem Razão Social'}
                           {stats.orderCount > 0 && (
                             <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
                               {stats.orderCount} pedido(s)
@@ -447,7 +464,7 @@ const Customers: React.FC<CustomersProps> = ({
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-xs text-slate-600 font-mono font-bold bg-slate-50/30">{c.document}</td>
+                      <td className="px-6 py-5 text-xs text-slate-600 font-mono font-bold bg-slate-50/30">{c.document || '—'}</td>
                       <td className="px-6 py-5 text-right font-black text-slate-900 text-sm">
                         {formatBRL(totalSpent)}
                       </td>

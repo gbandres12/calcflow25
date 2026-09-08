@@ -16,6 +16,7 @@ import FuelManagement from './components/FuelManagement';
 import UserManagement from './components/UserManagement';
 import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
+import TransferManagement from './components/TransferManagement';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -41,7 +42,8 @@ import {
   FuelPurchase,
   User,
   Category,
-  Company
+  Company,
+  TransferShipment
 } from './types';
 import { 
   INITIAL_COST_CENTERS,
@@ -94,6 +96,7 @@ const App: React.FC = () => {
   const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
   const [fuelPurchases, setFuelPurchases] = useState<FuelPurchase[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [transfers, setTransfers] = useState<TransferShipment[]>([]);
 
   // Check if current user needs onboarding upon login
   useEffect(() => {
@@ -122,7 +125,7 @@ const App: React.FC = () => {
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers
+          savedCategories, savedUsers, savedTransfers
         ] = await Promise.all([
           financeService.getTransactions(activeCompanyId),
           inventoryService.getInventory(activeCompanyId),
@@ -135,7 +138,8 @@ const App: React.FC = () => {
           db.getTable('fuel_purchases', activeCompanyId),
           db.getTable('financial_accounts', activeCompanyId),
           db.getTable('categories', activeCompanyId),
-          userService.getAll(activeCompanyId)
+          userService.getAll(activeCompanyId),
+          db.getTable('transfers', activeCompanyId)
         ]);
 
         setTransactions(savedTxs);
@@ -150,6 +154,7 @@ const App: React.FC = () => {
         setAccounts(savedAccounts);
         setCategories(savedCategories);
         setUsers(savedUsers);
+        setTransfers(savedTransfers);
 
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
@@ -255,6 +260,55 @@ const App: React.FC = () => {
   const handleUpdateStoreItem = (item: StoreItem) => {
     setStoreItems(prev => prev.map(s => s.id === item.id ? item : s));
     persistCloud('store_items', item);
+  };
+
+  // Transferências & Remessas (Santarém ➔ Fazenda Matriz)
+  const handleAddTransfer = (transferData: Omit<TransferShipment, 'id'>) => {
+    const newTransfer: TransferShipment = { ...transferData, id: newId('trf'), companyId: activeCompanyId };
+    setTransfers(prev => [newTransfer, ...prev]);
+    persistCloud('transfers', newTransfer);
+  };
+
+  const handleUpdateTransfer = (updated: TransferShipment) => {
+    const tagged = { ...updated, companyId: updated.companyId || activeCompanyId };
+    setTransfers(prev => prev.map(t => t.id === tagged.id ? tagged : t));
+    persistCloud('transfers', tagged);
+  };
+
+  const handleDeleteTransfer = (id: string) => {
+    setTransfers(prev => prev.filter(t => t.id !== id));
+    db.delete('transfers', activeCompanyId, id).catch(() => {});
+  };
+
+  const handleIntegrateTransferredItemsWithStore = (items: { name: string; category: any; quantity: number; unit: string }[]) => {
+    items.forEach(incoming => {
+      setStoreItems(prev => {
+        const existingIndex = prev.findIndex(s => s.name.trim().toLowerCase() === incoming.name.trim().toLowerCase());
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          const current = updated[existingIndex];
+          const updatedItem: StoreItem = {
+            ...current,
+            quantity: Number(current.quantity || 0) + Number(incoming.quantity || 0)
+          };
+          updated[existingIndex] = updatedItem;
+          persistCloud('store_items', updatedItem);
+          return updated;
+        } else {
+          const newItem: StoreItem = {
+            id: newId('store'),
+            name: incoming.name,
+            category: incoming.category || 'Peças',
+            quantity: Number(incoming.quantity || 0),
+            unit: incoming.unit || 'UN',
+            minStock: 2,
+            companyId: activeCompanyId
+          };
+          persistCloud('store_items', newItem);
+          return [...prev, newItem];
+        }
+      });
+    });
   };
 
   // Contas Financeiras
@@ -898,6 +952,18 @@ const App: React.FC = () => {
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
               onUpdateOrder={handleUpdateOrder}
+            />
+          )}
+          {currentView === 'transfers' && (
+            <TransferManagement 
+              transfers={transfers}
+              storeItems={storeItems}
+              company={operatingCompany}
+              currentUser={currentUser || undefined}
+              onAddTransfer={handleAddTransfer}
+              onUpdateTransfer={handleUpdateTransfer}
+              onDeleteTransfer={handleDeleteTransfer}
+              onIntegrateWithStoreItems={handleIntegrateTransferredItemsWithStore}
             />
           )}
           {currentView === 'settings' && (

@@ -22,7 +22,8 @@ import {
   Calendar,
   Shield,
   HardHat,
-  X
+  X,
+  ArrowRightLeft
 } from 'lucide-react';
 import { View, UserRole, User, UserPermissions } from '../types';
 
@@ -66,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (['inventory', 'milling'].includes(itemId)) {
       return userPermissions.inventory;
     }
-    if (['orders', 'customers', 'yard'].includes(itemId)) {
+    if (['orders', 'customers', 'yard', 'transfers'].includes(itemId)) {
       return userPermissions.orders;
     }
     return true;
@@ -102,6 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       roles: [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATIONAL_SUPERVISOR, UserRole.OPERATOR],
       items: [
         { id: 'yard', label: 'Pátio, Balança & Peças', icon: Boxes },
+        { id: 'transfers', label: 'Transferências Santarém / Matriz', icon: ArrowRightLeft },
         { id: 'fleet', label: 'Frota e Maquinário', icon: Truck },
         { id: 'fuel', label: 'Controle de Combustível', icon: Fuel },
       ]

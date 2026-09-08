@@ -384,4 +384,48 @@ export interface FiscalConfig {
   autoEmitirAoFinalizar?: boolean;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal';
+export type TransferStatus = 'EM_TRANSITO' | 'CONFERIDO_E_RECEBIDO' | 'RECEBIDO_COM_DIVERGENCIA' | 'CANCELADO';
+
+export interface TransferItem {
+  id: string;
+  productId?: string;
+  productName: string;
+  category?: 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Insumos' | 'Outros';
+  quantitySent: number;
+  quantityReceived?: number;
+  unit: string;
+  unitCost?: number;
+  totalCost?: number;
+  nfCompraNumber?: string;
+  supplier?: string;
+  conferido?: boolean;
+  divergenceNotes?: string;
+}
+
+export interface TransferShipment {
+  id: string;
+  companyId?: string;
+  code: string; // Ex: TRF-2026-001
+  originLocation: string; // Ex: "Polo de Compras Santarém"
+  destinationLocation: string; // Ex: "Fazenda Usina Matriz"
+  dateSent: string; // YYYY-MM-DD
+  sentBy: string; // Responsável pela remessa em Santarém
+  carrierOrDriver?: string; // Motorista / Transportador
+  vehiclePlate?: string; // Placa do Veículo
+  notes?: string;
+  items: TransferItem[];
+  status: TransferStatus;
+  
+  // Conferência e Recebimento na Fazenda
+  receivedDate?: string; // YYYY-MM-DD HH:mm
+  receivedBy?: string; // Nome de quem recebeu na Fazenda
+  receiverRole?: string; // Cargo/função do recebedor
+  conferenceNotes?: string; // Parecer de conferência
+  receiverSignature?: string; // Data URL da assinatura ou hash de assinatura
+  stockIntegrated?: boolean; // Se deu entrada no estoque da Matriz
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'transfers';
+

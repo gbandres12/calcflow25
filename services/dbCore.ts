@@ -12,7 +12,8 @@ import {
   INITIAL_MAINTENANCES,
   INFLOW_CATEGORIES,
   OUTFLOW_CATEGORIES,
-  DEFAULT_FISCAL_CONFIG
+  DEFAULT_FISCAL_CONFIG,
+  INITIAL_TRANSFERS
 } from '../constants';
 import { getSupabase } from './supabaseClient';
 import { firestoreDb } from './firebase';
@@ -53,7 +54,8 @@ const DEMO_TABLE_DATA: Record<string, any[]> = {
   categories: [
     ...INFLOW_CATEGORIES.map((name, i) => ({ id: `cat-in-${i + 1}`, name, type: 'INFLOW' as const })),
     ...OUTFLOW_CATEGORIES.map((name, i) => ({ id: `cat-out-${i + 1}`, name, type: 'OUTFLOW' as const }))
-  ]
+  ],
+  transfers: INITIAL_TRANSFERS
 };
 
 export const ALL_TABLES = [
@@ -69,7 +71,8 @@ export const ALL_TABLES = [
   'financial_accounts',
   'categories',
   'fiscal_config',
-  'users'
+  'users',
+  'transfers'
 ];
 
 export const resolveCompanyKey = (companyId?: string | null): string => {

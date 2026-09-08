@@ -37,7 +37,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const validation = fiscalService.validarDadosFiscais(order, customer);
 
-  const handleEmitir = async () => {
+  const handleEmitir = async (forceLocal = false) => {
     if (isSubmittingRef.current || loading) {
       console.warn('⚠️ [EMISSÃO BLOQUEADA] Clique duplo ou emissão simultânea evitada!');
       return;
@@ -47,17 +47,21 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
 
+    const activeConfig = forceLocal 
+      ? { ...config, modoEmissao: 'sandbox_local' as const } 
+      : config;
+
     try {
       const opts = isDevolucao
         ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
         : isTransferencia
           ? { transferencia: true }
           : undefined;
-      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, config, opts);
+      const payloadSent = fiscalService.montarPayloadNotaAs(order, customer, activeConfig, opts);
       const result = await fiscalService.emitirNFe(
         { ...order, companyId: order.companyId || company.id },
         customer,
-        config,
+        activeConfig,
         order.companyId || company.id,
         opts
       );
@@ -67,7 +71,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
         // Se o servidor respondeu status processando, dispara polling de acompanhamento
         if (result.nfeStatus === 'processando' && result.nfeId) {
-          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 3, 2000);
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, activeConfig, 3, 2000);
           if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
             finalStatus = pollResult.status;
           }
@@ -261,8 +265,27 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           </div>
 
           {errorMsg && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-bold flex items-center gap-2">
-              <AlertCircle size={16} /> {errorMsg}
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">{errorMsg}</p>
+                  <p className="text-[11px] text-rose-600 font-normal">
+                    Se a chave da API NotaAs ainda não foi configurada ou se o servidor da API externa estiver temporariamente inacessível, você pode emitir a nota em modo de simulação local para dar andamento ao fluxo de pedidos.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-rose-200/60 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleEmitir(true)}
+                  disabled={loading}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
+                >
+                  <Sparkles size={13} />
+                  Emitir em Modo Simulação Local (Sem Bloqueio de API)
+                </button>
+              </div>
             </div>
           )}
 

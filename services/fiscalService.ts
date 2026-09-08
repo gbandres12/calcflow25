@@ -182,11 +182,25 @@ function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | un
 }
 
 async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; isJson: boolean }> {
-  const res = await fetch(path, init);
-  const contentType = res.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const data = isJson ? await res.json().catch(() => ({})) : { error: 'Resposta não-JSON do proxy fiscal' };
-  return { ok: res.ok || res.status === 201 || res.status === 202, status: res.status, data, isJson };
+  try {
+    const res = await fetch(path, init);
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson ? await res.json().catch(() => ({})) : { error: 'Resposta não-JSON do proxy fiscal' };
+    return { ok: res.ok || res.status === 201 || res.status === 202, status: res.status, data, isJson };
+  } catch (err: any) {
+    console.warn(`⚠️ [fiscalApiFetch] Falha na requisição para ${path}:`, err?.message || err);
+    return {
+      ok: false,
+      status: 0,
+      isJson: true,
+      data: {
+        error: `Erro de comunicação com o servidor da API (${err?.message || 'Failed to fetch'}). Se o servidor bloquear requisições diretas ou estiver inacessível, use o modo Simulação Local ou verifique a Project Key nas configurações.`,
+        isNetworkError: true,
+        networkErrorDetails: err?.message
+      }
+    };
+  }
 }
 
 function onlyDigits(value?: string): string {

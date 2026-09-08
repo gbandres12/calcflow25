@@ -18,7 +18,8 @@ import {
   FuelRecord,
   FuelPurchase,
   Category,
-  FiscalConfig
+  FiscalConfig,
+  TransferShipment
 } from './types';
 
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
@@ -713,4 +714,125 @@ export const INITIAL_MAINTENANCES = [
     horimeter: 4210
   }
 ];
+
+export const INITIAL_TRANSFERS: TransferShipment[] = [
+  {
+    id: 'trf-1',
+    code: 'TRF-2026-001',
+    originLocation: 'Polo de Compras Santarém (Av. Mendonça Furtado)',
+    destinationLocation: 'Fazenda Usina Matriz (Zona Rural / Rodovia)',
+    dateSent: '2026-09-02',
+    sentBy: 'Gabriel Santarém (Compras / Expedição)',
+    carrierOrDriver: 'Manoel Silva',
+    vehiclePlate: 'QDA-4E90 (Caminhão Baú)',
+    notes: 'Suprimentos urgentes para manutenção corretiva do britador secundário e EPIs para a equipe do pátio.',
+    status: 'CONFERIDO_E_RECEBIDO',
+    receivedDate: '2026-09-03 14:30',
+    receivedBy: 'Carlos Eduardo (Almoxarife Fazenda Matriz)',
+    receiverRole: 'Encarregado de Almoxarifado',
+    conferenceNotes: 'Todos os 4 itens conferidos e testados visualmente. Tudo em perfeito estado e de acordo com as notas de Santarém.',
+    receiverSignature: 'assinatura_digital_conferente_carlos_eduardo',
+    stockIntegrated: true,
+    items: [
+      {
+        id: 'item-1-1',
+        productId: 'item-2',
+        productName: 'Rolamento 22220 E',
+        category: 'Peças',
+        quantitySent: 4,
+        quantityReceived: 4,
+        unit: 'UN',
+        unitCost: 650.00,
+        totalCost: 2600.00,
+        nfCompraNumber: 'NF 4421',
+        supplier: 'Casa dos Rolamentos Santarém',
+        conferido: true
+      },
+      {
+        id: 'item-1-2',
+        productId: 'item-3',
+        productName: 'Óleo Hidráulico 68 (Balde 20L)',
+        category: 'Lubrificantes',
+        quantitySent: 5,
+        quantityReceived: 5,
+        unit: 'UN',
+        unitCost: 480.00,
+        totalCost: 2400.00,
+        nfCompraNumber: 'NF 12093',
+        supplier: 'Distribuidora Tapajós Lubrificantes',
+        conferido: true
+      },
+      {
+        id: 'item-1-3',
+        productId: 'item-4',
+        productName: 'Luva de Vaqueta Misto',
+        category: 'EPI',
+        quantitySent: 20,
+        quantityReceived: 20,
+        unit: 'PAR',
+        unitCost: 35.00,
+        totalCost: 700.00,
+        nfCompraNumber: 'NF 8812',
+        supplier: 'Amazon EPIs Santarém',
+        conferido: true
+      }
+    ]
+  },
+  {
+    id: 'trf-2',
+    code: 'TRF-2026-002',
+    originLocation: 'Polo de Compras Santarém (Av. Mendonça Furtado)',
+    destinationLocation: 'Fazenda Usina Matriz (Zona Rural / Rodovia)',
+    dateSent: '2026-09-07',
+    sentBy: 'Gabriel Santarém (Compras / Expedição)',
+    carrierOrDriver: 'Antônio Ferreira (Expresso Tapajós)',
+    vehiclePlate: 'OBX-8819 (Picape Hilux Suprimentos)',
+    notes: 'Remessa de correias em V e graxa especial compradas para a revisão periódica dos moinhos na Fazenda.',
+    status: 'EM_TRANSITO',
+    stockIntegrated: false,
+    items: [
+      {
+        id: 'item-2-1',
+        productId: 'item-1',
+        productName: 'Correia em V B-75 Industrial',
+        category: 'Peças',
+        quantitySent: 6,
+        quantityReceived: 0,
+        unit: 'UN',
+        unitCost: 110.00,
+        totalCost: 660.00,
+        nfCompraNumber: 'NF 5510',
+        supplier: 'Casa da Borracha Santarém',
+        conferido: false
+      },
+      {
+        id: 'item-2-2',
+        productName: 'Graxa Azul para Alta Rotação (Balde 18kg)',
+        category: 'Lubrificantes',
+        quantitySent: 2,
+        quantityReceived: 0,
+        unit: 'UN',
+        unitCost: 720.00,
+        totalCost: 1440.00,
+        nfCompraNumber: 'NF 12150',
+        supplier: 'Distribuidora Tapajós Lubrificantes',
+        conferido: false
+      },
+      {
+        id: 'item-2-3',
+        productName: 'Óculos de Proteção Ampla Visão Antirrisco',
+        category: 'EPI',
+        quantitySent: 15,
+        quantityReceived: 0,
+        unit: 'UN',
+        unitCost: 28.00,
+        totalCost: 420.00,
+        nfCompraNumber: 'NF 8890',
+        supplier: 'Amazon EPIs Santarém',
+        conferido: false
+      }
+    ]
+  }
+];
+
 

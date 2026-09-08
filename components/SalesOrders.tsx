@@ -46,15 +46,31 @@ interface SalesOrdersProps {
 
 export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE';
 
-export const calculateOrderPayment = (order: SaleOrder) => {
-  const receiptsPaid = (order.receipts || []).reduce((s, r) => s + r.amount, 0);
-  const scheduledPaid = (order.payments || []).reduce((s, p) => (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO ? s + p.amount : s + (p.paidAmount || 0)), 0);
+export const calculateOrderPayment = (order?: SaleOrder | null) => {
+  if (!order) {
+    return {
+      totalPaid: 0,
+      remainingDebt: 0,
+      financialProgress: 0,
+      paymentStatus: 'PENDENTE' as PaymentStatusType
+    };
+  }
+
+  const orderTotal = Number(order.total) || 0;
+  const receiptsPaid = (order.receipts || []).reduce((s, r) => s + (Number(r?.amount) || 0), 0);
+  const scheduledPaid = (order.payments || []).reduce((s, p) => {
+    if (!p) return s;
+    return (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO)
+      ? s + (Number(p.amount) || 0)
+      : s + (Number(p.paidAmount) || 0);
+  }, 0);
+
   const totalPaid = Math.max(receiptsPaid, scheduledPaid);
-  const remainingDebt = Math.max(0, order.total - totalPaid);
-  const financialProgress = order.total > 0 ? Math.min(100, (totalPaid / order.total) * 100) : 0;
+  const remainingDebt = Math.max(0, orderTotal - totalPaid);
+  const financialProgress = orderTotal > 0 ? Math.min(100, (totalPaid / orderTotal) * 100) : 0;
 
   let paymentStatus: PaymentStatusType = 'PENDENTE';
-  if (order.total > 0 && totalPaid >= order.total - 0.01) {
+  if (orderTotal > 0 && totalPaid >= orderTotal - 0.01) {
     paymentStatus = 'PAGO';
   } else if (totalPaid > 0 && remainingDebt > 0.01) {
     paymentStatus = 'PARCIAL';
