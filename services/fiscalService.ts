@@ -170,8 +170,7 @@ export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus
     ['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending', 'queued'].includes(s)
     || httpStatus === 202
   ) return 'processando';
-  if (s === 'simulada') return 'simulada';
-  return 'processando';
+  return 'rejeitada';
 }
 
 function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | undefined, chaveAcesso?: string): NfeStatus {
@@ -195,7 +194,7 @@ async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: bo
       status: 0,
       isJson: true,
       data: {
-        error: `Erro de comunicação com o servidor da API (${err?.message || 'Failed to fetch'}). Se o servidor bloquear requisições diretas ou estiver inacessível, use o modo Simulação Local ou verifique a Project Key nas configurações.`,
+        error: `Erro de comunicação com o servidor da API Fiscal (${err?.message || 'Failed to fetch'}). Verifique a Project Key nas configurações fiscais e a conexão de rede.`,
         isNetworkError: true,
         networkErrorDetails: err?.message
       }
@@ -545,16 +544,15 @@ export const fiscalService = {
     const nfeNumero = (config.proxNumeroNFe || 1042).toString();
     const serie = config.serieNFe || '1';
     const apiKey = (config.apiKey || '').trim();
-    const isApiMode = (config.modoEmissao || 'api_real') === 'api_real';
+    const isApiMode = true; // Sempre modo de transmissão real para a SEFAZ
     const provider = config.apiProvider || 'notaas';
     const baseUrl = (config.apiBaseUrl || NOTAAS_API_BASE_URL).replace(/\/$/, '');
     const referenciaPedido = order.reference || `ORDER-${order.id}`;
 
-    console.group(`🚀 [EMISSÃO NF-e API] [ID: ${invoiceRequestId}] Iniciando Envio para API Fiscal (${provider.toUpperCase()})`);
+    console.group(`🚀 [EMISSÃO NF-e API] [ID: ${invoiceRequestId}] Enviando para SEFAZ via API Fiscal (${provider.toUpperCase()})`);
     console.info('🆔 Trace Request ID:', invoiceRequestId);
     console.info('📌 Referência do Pedido:', order.reference);
     console.info('🌐 Ambiente SEFAZ:', config.environment.toUpperCase());
-    console.info('🔌 Modo de Operação:', isApiMode ? 'API REAL (Transmissão Direta)' : 'SIMULAÇÃO LOCAL / TREINAMENTO');
     console.info('🔑 Chave de API:', apiKey ? `${apiKey.substring(0, 8)}...` : 'NÃO INFORMADA');
     console.info('📍 URL Base da API:', baseUrl);
 
@@ -566,189 +564,164 @@ export const fiscalService = {
     console.groupEnd();
     console.groupEnd();
 
-    if (isApiMode) {
-      if (!apiKey) {
-        console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
-        return {
-          success: false,
-          nfeStatus: 'rejeitada',
-          nfeErro: 'Chave de API não informada! Insira sua Project Key (iniciada com "ntaas_") nas Configurações Fiscais ou alterne o Modo de Operação para "Simulação Local".',
-          rawResponse: { invoiceRequestId, error: 'API Key missing' }
-        };
-      }
+    if (!apiKey) {
+      console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
+      return {
+        success: false,
+        nfeStatus: 'rejeitada',
+        nfeErro: 'Chave de API não informada! Insira sua Project Key (iniciada com "ntaas_") nas Configurações Fiscais para transmitir à SEFAZ.',
+        rawResponse: { invoiceRequestId, error: 'API Key missing' }
+      };
+    }
 
-      // 1. Tentar via Firebase Cloud Functions se configurado
-      if (firebaseFunctions) {
-        try {
-          console.info(`⚡ [${invoiceRequestId}] Tentando emissão via Firebase Cloud Function (emitirNfe)...`);
-          const emitirNfeFn = httpsCallable<any, any>(firebaseFunctions, 'emitirNfe');
-          const fnResult = await emitirNfeFn({
-            payload,
-            companyId: resolvedCompanyId,
-            provider,
-            apiKey,
-            apiBaseUrl: baseUrl,
-            orderId: order.id,
-          });
-
-          if (fnResult?.data?.success || (fnResult?.data?.statusHttp >= 200 && fnResult?.data?.statusHttp < 300)) {
-            const data = fnResult.data.data || {};
-            console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida via Firebase Cloud Function`);
-            console.info(`✅ [SUCESSO HTTP ${fnResult.data.statusHttp}] [${invoiceRequestId}]`, data);
-            console.groupEnd();
-
-            const nextNum = parseInt(nfeNumero, 10) + 1;
-            await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
-
-            const nfeChave = data.chaveAcesso || data.chave || data.chave_acesso || data.chaveNFe || '';
-            const nfeProtocolo = data.nProt || data.protocolo || '';
-            const danfeUrl = data.pdfUrl || data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
-            const xmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
-            const statusRetornado = resolveNfeStatus(data.status, fnResult.data.statusHttp, nfeChave);
-
-            return {
-              success: statusRetornado !== 'rejeitada',
-              nfeStatus: statusRetornado,
-              nfeId: data.invoiceId || data.id || data.uuid,
-              nfeChave: nfeChave || undefined,
-              nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
-              nfeSerie: data.serie ? String(data.serie) : serie,
-              nfeProtocolo: nfeProtocolo || undefined,
-              nfeDanfeUrl: danfeUrl || undefined,
-              nfeXmlUrl: xmlUrl || undefined,
-              nfeEmissao: data.dataEmissao,
-              naturezaOperacao: payload.naturezaOperacao,
-              nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.motivoStatus || data.message || 'Rejeitada pela SEFAZ') : undefined,
-              rawResponse: { invoiceRequestId, viaCloudFunction: true, ...data }
-            };
-          }
-        } catch (fnErr: any) {
-          console.warn(`⚠️ [${invoiceRequestId}] Cloud Function não respondeu, utilizando Proxy Backend Local:`, fnErr.message);
-        }
-      }
-
-      // 2. Emissão via Proxy Backend Server-to-Server (/api/nfe/emitir)
-      // O navegador NUNCA deve chamar APIs fiscais externas diretamente (evita CORS e protege credenciais)
+    // 1. Tentar via Firebase Cloud Functions se configurado
+    if (firebaseFunctions) {
       try {
-        console.info(`🛡️ [${invoiceRequestId}] Transmitindo NF-e via Proxy Backend Server-to-Server (/api/nfe/emitir)...`);
-        const proxied = await fiscalApiFetch('/api/nfe/emitir', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            payload,
-            apiKey,
-            apiBaseUrl: baseUrl,
-            provider,
-            companyId: resolvedCompanyId,
-            orderId: order.id
-          })
+        console.info(`⚡ [${invoiceRequestId}] Tentando emissão via Firebase Cloud Function (emitirNfe)...`);
+        const emitirNfeFn = httpsCallable<any, any>(firebaseFunctions, 'emitirNfe');
+        const fnResult = await emitirNfeFn({
+          payload,
+          companyId: resolvedCompanyId,
+          provider,
+          apiKey,
+          apiBaseUrl: baseUrl,
+          orderId: order.id,
         });
 
-        console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida via Proxy (/api/nfe/emitir)`);
-
-        if (proxied.ok && proxied.isJson) {
-          const data = proxied.data?.data || proxied.data || {};
-          console.info(`✅ [SUCESSO HTTP ${proxied.status}] [${invoiceRequestId}]`, data);
+        if (fnResult?.data?.success || (fnResult?.data?.statusHttp >= 200 && fnResult?.data?.statusHttp < 300)) {
+          const data = fnResult.data.data || {};
+          console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida via Firebase Cloud Function`);
+          console.info(`✅ [SUCESSO HTTP ${fnResult.data.statusHttp}] [${invoiceRequestId}]`, data);
           console.groupEnd();
 
           const nextNum = parseInt(nfeNumero, 10) + 1;
           await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
 
-          const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.chave_acesso || data.chaveNFe || '';
-          const statusRetornado = resolveNfeStatus(data.status, proxied.status, chaveAcesso);
-          const nfeProtocolo = data.nProt || data.protocolo || data.protocol || '';
+          const nfeChave = data.chaveAcesso || data.chave || data.chave_acesso || data.chaveNFe || '';
+          const nfeProtocolo = data.nProt || data.protocolo || '';
+          const danfeUrl = data.pdfUrl || data.danfeUrl || data.url_danfe || data.caminho_danfe || '';
+          const xmlUrl = data.xmlUrl || data.url_xml || data.caminho_xml || '';
+          const statusRetornado = resolveNfeStatus(data.status, fnResult.data.statusHttp, nfeChave);
 
           return {
             success: statusRetornado !== 'rejeitada',
             nfeStatus: statusRetornado,
             nfeId: data.invoiceId || data.id || data.uuid,
-            nfeChave: chaveAcesso || undefined,
+            nfeChave: nfeChave || undefined,
             nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
             nfeSerie: data.serie ? String(data.serie) : serie,
             nfeProtocolo: nfeProtocolo || undefined,
-            nfeDanfeUrl: data.pdfUrl || data.danfeUrl || data.urlDanfe || data.caminho_danfe,
-            nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
+            nfeDanfeUrl: danfeUrl || undefined,
+            nfeXmlUrl: xmlUrl || undefined,
             nfeEmissao: data.dataEmissao,
             naturezaOperacao: payload.naturezaOperacao,
-            nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.message || data.erro || data.motivo) : undefined,
-            rawResponse: { invoiceRequestId, viaServerProxy: true, ...data }
-          };
-        } else {
-          const errData = proxied.data || {};
-          console.error(`❌ [REJEIÇÃO/ERRO HTTP ${proxied.status}] [${invoiceRequestId}]`, errData);
-          console.groupEnd();
-
-          let errMsg = errData.xMotivo || errData.message || errData.erro || errData.error || errData.motivo || errData.mensagem;
-          if (Array.isArray(errData.erros) && errData.erros.length > 0) {
-            errMsg = errData.erros.map((e: any) => `${e.campo ? e.campo + ': ' : ''}${e.mensagem || e.msg || e}`).join(' | ');
-          }
-
-          // Verificação de conflito/duplicidade (409) para recuperação automática
-          if (proxied.status === 409 || (errMsg && (errMsg.toLowerCase().includes('duplicidade') || errMsg.toLowerCase().includes('ja emitida') || errMsg.toLowerCase().includes('já existe')))) {
-            console.info(`🔄 [IDEMPOTÊNCIA] [${invoiceRequestId}] Conflito/duplicidade detectada. Consultando por referência: ${referenciaPedido}`);
-            const consultRes = await this.consultarPorReferencia(referenciaPedido, config);
-            if (consultRes.success && consultRes.nfe) {
-              console.info(`✅ [IDEMPOTÊNCIA RECUPERADA] Nota recuperada com sucesso!`, consultRes.nfe);
-              return {
-                success: true,
-                nfeStatus: consultRes.status,
-                nfeId: consultRes.nfe.invoiceId || consultRes.nfe.id,
-                nfeChave: consultRes.nfe.chaveAcesso,
-                nfeNumero: (consultRes.nfe.nNf || consultRes.nfe.numero || nfeNumero).toString(),
-                nfeSerie: (consultRes.nfe.serie || serie).toString(),
-                nfeProtocolo: consultRes.nfe.nProt || consultRes.nfe.protocolo,
-                nfeDanfeUrl: consultRes.nfe.pdfUrl || consultRes.nfe.danfeUrl,
-                nfeXmlUrl: consultRes.nfe.xmlUrl,
-                nfeEmissao: consultRes.nfe.dataEmissao,
-                naturezaOperacao: payload.naturezaOperacao,
-                rawResponse: { invoiceRequestId, recoveredFromConflict: true, ...consultRes.nfe }
-              };
-            }
-          }
-
-          if (!errMsg) {
-            errMsg = `Falha na API (${provider.toUpperCase()}) - HTTP ${proxied.status}`;
-          }
-
-          return {
-            success: false,
-            nfeStatus: 'rejeitada',
-            nfeErro: errMsg.startsWith('[HTTP') ? errMsg : `[HTTP ${proxied.status}] ${errMsg}`,
-            rawResponse: { invoiceRequestId, ...errData }
+            nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.motivoStatus || data.message || 'Rejeitada pela SEFAZ') : undefined,
+            rawResponse: { invoiceRequestId, viaCloudFunction: true, ...data }
           };
         }
-      } catch (proxyCatchErr: any) {
-        console.error(`💥 [ERRO SERVIDOR PROXY] [${invoiceRequestId}]`, proxyCatchErr);
-        return {
-          success: false,
-          nfeStatus: 'rejeitada',
-          nfeErro: `Erro de comunicação com o serviço interno do ERP (/api/nfe/emitir): ${proxyCatchErr.message || 'Falha de conexão'}.`,
-          rawResponse: { invoiceRequestId, error: proxyCatchErr.message }
-        };
+      } catch (fnErr: any) {
+        console.warn(`⚠️ [${invoiceRequestId}] Cloud Function não respondeu, utilizando Proxy Backend Local:`, fnErr.message);
       }
     }
 
-    console.info(`🧪 [${invoiceRequestId}] Executando em Modo Simulação Local (Treinamento sem API Externa)`);
-    console.groupEnd();
+    // 2. Emissão via Proxy Backend Server-to-Server (/api/nfe/emitir)
+    try {
+      console.info(`🛡️ [${invoiceRequestId}] Transmitindo NF-e via Proxy Backend Server-to-Server (/api/nfe/emitir)...`);
+      const proxied = await fiscalApiFetch('/api/nfe/emitir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload,
+          apiKey,
+          apiBaseUrl: baseUrl,
+          provider,
+          companyId: resolvedCompanyId,
+          orderId: order.id
+        })
+      });
 
-    await new Promise(resolve => setTimeout(resolve, 600));
-    const mockChave = this.generateMockChaveAcesso(config.cnpjEmitente, '15', serie, nfeNumero);
-    const mockProtocolo = `11526000${Math.floor(1000000 + Math.random() * 9000000)}`;
-    const nextNum = parseInt(nfeNumero, 10) + 1;
-    await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
+      console.group(`📡 [EMISSÃO NF-e API] [${invoiceRequestId}] Resposta Recebida via Proxy (/api/nfe/emitir)`);
 
-    return {
-      success: true,
-      nfeStatus: 'simulada',
-      nfeId: `sim-${Date.now()}`,
-      nfeChave: `SIMULACAO-${mockChave}`,
-      nfeNumero,
-      nfeSerie: serie,
-      nfeProtocolo: `SIM-${mockProtocolo}`,
-      nfeEmissao: new Date().toISOString(),
-      naturezaOperacao: payload.naturezaOperacao,
-      rawResponse: { invoiceRequestId, mode: 'simulation', aviso: 'Simulação local. Esta nota NÃO foi autorizada pela SEFAZ.' }
-    };
+      if (proxied.ok && proxied.isJson) {
+        const data = proxied.data?.data || proxied.data || {};
+        console.info(`✅ [SUCESSO HTTP ${proxied.status}] [${invoiceRequestId}]`, data);
+        console.groupEnd();
+
+        const nextNum = parseInt(nfeNumero, 10) + 1;
+        await this.saveConfig({ ...config, proxNumeroNFe: nextNum }, resolvedCompanyId);
+
+        const chaveAcesso = data.chaveAcesso || data.chave || data.nfeKey || data.chave_acesso || data.chaveNFe || '';
+        const statusRetornado = resolveNfeStatus(data.status, proxied.status, chaveAcesso);
+        const nfeProtocolo = data.nProt || data.protocolo || data.protocol || '';
+
+        return {
+          success: statusRetornado !== 'rejeitada',
+          nfeStatus: statusRetornado,
+          nfeId: data.invoiceId || data.id || data.uuid,
+          nfeChave: chaveAcesso || undefined,
+          nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
+          nfeSerie: data.serie ? String(data.serie) : serie,
+          nfeProtocolo: nfeProtocolo || undefined,
+          nfeDanfeUrl: data.pdfUrl || data.danfeUrl || data.urlDanfe || data.caminho_danfe,
+          nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
+          nfeEmissao: data.dataEmissao,
+          naturezaOperacao: payload.naturezaOperacao,
+          nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.message || data.erro || data.motivo) : undefined,
+          rawResponse: { invoiceRequestId, viaServerProxy: true, ...data }
+        };
+      } else {
+        const errData = proxied.data || {};
+        console.error(`❌ [REJEIÇÃO/ERRO HTTP ${proxied.status}] [${invoiceRequestId}]`, errData);
+        console.groupEnd();
+
+        let errMsg = errData.xMotivo || errData.message || errData.erro || errData.error || errData.motivo || errData.mensagem;
+        if (Array.isArray(errData.erros) && errData.erros.length > 0) {
+          errMsg = errData.erros.map((e: any) => `${e.campo ? e.campo + ': ' : ''}${e.mensagem || e.msg || e}`).join(' | ');
+        }
+
+        // Verificação de conflito/duplicidade (409) para recuperação automática
+        if (proxied.status === 409 || (errMsg && (errMsg.toLowerCase().includes('duplicidade') || errMsg.toLowerCase().includes('ja emitida') || errMsg.toLowerCase().includes('já existe')))) {
+          console.info(`🔄 [IDEMPOTÊNCIA] [${invoiceRequestId}] Conflito/duplicidade detectada. Consultando por referência: ${referenciaPedido}`);
+          const consultRes = await this.consultarPorReferencia(referenciaPedido, config);
+          if (consultRes.success && consultRes.nfe) {
+            console.info(`✅ [IDEMPOTÊNCIA RECUPERADA] Nota recuperada com sucesso!`, consultRes.nfe);
+            return {
+              success: true,
+              nfeStatus: consultRes.status,
+              nfeId: consultRes.nfe.invoiceId || consultRes.nfe.id,
+              nfeChave: consultRes.nfe.chaveAcesso,
+              nfeNumero: (consultRes.nfe.nNf || consultRes.nfe.numero || nfeNumero).toString(),
+              nfeSerie: (consultRes.nfe.serie || serie).toString(),
+              nfeProtocolo: consultRes.nfe.nProt || consultRes.nfe.protocolo,
+              nfeDanfeUrl: consultRes.nfe.pdfUrl || consultRes.nfe.danfeUrl,
+              nfeXmlUrl: consultRes.nfe.xmlUrl,
+              nfeEmissao: consultRes.nfe.dataEmissao,
+              naturezaOperacao: payload.naturezaOperacao,
+              rawResponse: { invoiceRequestId, recoveredFromConflict: true, ...consultRes.nfe }
+            };
+          }
+        }
+
+        if (!errMsg) {
+          errMsg = `Falha na API (${provider.toUpperCase()}) - HTTP ${proxied.status}`;
+        }
+
+        return {
+          success: false,
+          nfeStatus: 'rejeitada',
+          nfeErro: errMsg.startsWith('[HTTP') ? errMsg : `[HTTP ${proxied.status}] ${errMsg}`,
+          rawResponse: { invoiceRequestId, ...errData }
+        };
+      }
+    } catch (proxyCatchErr: any) {
+      console.error(`💥 [ERRO SERVIDOR PROXY] [${invoiceRequestId}]`, proxyCatchErr);
+      return {
+        success: false,
+        nfeStatus: 'rejeitada',
+        nfeErro: `Erro de comunicação com o serviço interno do ERP (/api/nfe/emitir): ${proxyCatchErr.message || 'Falha de conexão'}.`,
+        rawResponse: { invoiceRequestId, error: proxyCatchErr.message }
+      };
+    }
   },
 
   /**

@@ -179,13 +179,13 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
 
     // 2. Diagnóstico da API Fiscal / SEFAZ
     addLog('info', '🏛️ [2/2] Verificando integração com o provedor fiscal NotaAs e SEFAZ...');
-    addLog('info', `📌 Provedor: ${(config.apiProvider || 'notaas').toUpperCase()} | Modo: ${config.modoEmissao === 'api_real' ? 'API REAL (SEFAZ)' : 'SIMULAÇÃO LOCAL (SANDBOX)'}`);
+    addLog('info', `📌 Provedor: ${(config.apiProvider || 'notaas').toUpperCase()} | Transmissão: API REAL (SEFAZ)`);
     addLog('info', `🌐 Ambiente SEFAZ: ${config.environment.toUpperCase()}`);
 
     const apiKey = (config.apiKey || '').trim();
-    if (!apiKey && config.modoEmissao === 'api_real') {
+    if (!apiKey) {
       addLog('warning', '⚠️ Project Key não informada. Para emissão real na SEFAZ, insira a chave fornecida pela NotaAs (ntaas_...).');
-    } else if (apiKey) {
+    } else {
       addLog('info', `🔑 Chave NotaAs identificada: ${apiKey.substring(0, 8)}... (${apiKey.length} caracteres)`);
     }
 
@@ -679,15 +679,11 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">MODO DE OPERAÇÃO DO SISTEMA</label>
-                <select
-                  value={config.modoEmissao || 'sandbox_local'}
-                  onChange={e => setConfig({ ...config, modoEmissao: e.target.value as any })}
-                  className="w-full bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500"
-                >
-                  <option value="api_real">🚀 API Real (Transmissão Direta com a SEFAZ)</option>
-                  <option value="sandbox_local">🧪 Modo Simulação / Sandbox Local (Geração Imediata de Chave e DANFE)</option>
-                </select>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">TRANSMISSÃO FISCAL</label>
+                <div className="w-full bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-emerald-400 font-semibold flex items-center gap-2">
+                  <Globe size={16} className="text-emerald-400" />
+                  <span>Transmissão Real SEFAZ (Mensageria Tributária via API)</span>
+                </div>
               </div>
 
               <div>
@@ -975,19 +971,13 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
                       <p className="text-xs text-slate-400">Mensageria tributária e autorização de NF-e</p>
                     </div>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
-                    config.modoEmissao === 'api_real'
-                      ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-                      : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30'
-                  }`}>
-                    {config.modoEmissao === 'api_real' ? 'API Real (SEFAZ)' : 'Simulação (Sandbox)'}
+                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border bg-purple-500/15 text-purple-400 border-purple-500/30">
+                    API Real (SEFAZ)
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  {config.modoEmissao === 'api_real'
-                    ? (config.apiKey ? 'Chave de API configurada. Transmitindo diretamente para a SEFAZ.' : 'Atenção: Modo API Real ativo, mas a Project Key (ntaas_...) não foi preenchida.')
-                    : 'Modo Simulação Local ativo: permite emitir, testar o fluxo de vendas e gerar DANFEs de demonstração sem cobranças.'}
+                  {config.apiKey ? 'Chave de API configurada. Transmitindo diretamente para a SEFAZ.' : 'Atenção: A Project Key (ntaas_...) precisa ser informada na aba "API & SEFAZ" para autorizar notas fiscais.'}
                 </p>
 
                 <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs space-y-1.5">

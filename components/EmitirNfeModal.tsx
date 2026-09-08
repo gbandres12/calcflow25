@@ -131,7 +131,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     }
   };
 
-  const handleEmitir = async (forceLocal = false) => {
+  const handleEmitir = async () => {
     if (isSubmittingRef.current || loading) {
       console.warn('⚠️ [EMISSÃO] Ação em processamento...');
       return;
@@ -141,10 +141,6 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
 
-    const activeConfig = forceLocal 
-      ? { ...currentConfig, modoEmissao: 'sandbox_local' as const } 
-      : currentConfig;
-
     try {
       const opts = isDevolucao
         ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
@@ -152,11 +148,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           ? { transferencia: true }
           : undefined;
 
-      const payloadSent = fiscalService.montarPayloadNotaAs(order, activeCustomer, activeConfig, opts);
+      const payloadSent = fiscalService.montarPayloadNotaAs(order, activeCustomer, currentConfig, opts);
       const result = await fiscalService.emitirNFe(
         { ...order, companyId: order.companyId || company.id },
         activeCustomer,
-        activeConfig,
+        currentConfig,
         order.companyId || company.id,
         opts
       );
@@ -166,7 +162,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
         // Se o servidor respondeu status processando, dispara polling de acompanhamento
         if (result.nfeStatus === 'processando' && result.nfeId) {
-          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, activeConfig, 3, 2000);
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, currentConfig, 3, 2000);
           if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
             finalStatus = pollResult.status;
           }
@@ -190,7 +186,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
         onSuccess(updatedOrder);
       } else {
-        setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e.');
+        setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e pela SEFAZ.');
       }
     } catch (e: any) {
       setErrorMsg(e.message || 'Erro de comunicação com o serviço fiscal.');
@@ -220,12 +216,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {currentConfig.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
+                  {currentConfig.environment === 'production' ? 'Produção SEFAZ' : 'Homologação SEFAZ'}
                 </span>
-                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  currentConfig.modoEmissao === 'sandbox_local' ? 'bg-sky-100 text-sky-800' : 'bg-purple-100 text-purple-800'
-                }`}>
-                  {currentConfig.modoEmissao === 'sandbox_local' ? 'Modo Simulação' : `API Real (${(currentConfig.apiProvider || 'notaas').toUpperCase()})`}
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                  Transmissão Real ({(currentConfig.apiProvider || 'notaas').toUpperCase()})
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
@@ -242,14 +236,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
           
           {/* Alerta se Chave de API Não Estiver Configurada */}
-          {!hasApiKey && currentConfig.modoEmissao !== 'sandbox_local' && (
+          {!hasApiKey && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs text-amber-900">
               <div className="flex items-start gap-2.5">
                 <Key size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-black uppercase tracking-wider text-[10px]">Chave de API Notaas Não Configurada</p>
+                  <p className="font-black uppercase tracking-wider text-[10px]">Chave de API NotaAs Obrigatória</p>
                   <p className="text-slate-700">
-                    Insira sua <strong>Project Key da NotaAs</strong> (iniciada com <code>ntaas_</code>) para transmitir diretamente à SEFAZ via API, ou emita em modo de simulação local.
+                    Insira sua <strong>Project Key da NotaAs</strong> (iniciada com <code>ntaas_</code>) para que o sistema possa assinar digitalmente e transmitir a nota à SEFAZ.
                   </p>
                 </div>
               </div>
@@ -259,16 +253,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   placeholder="Cole sua chave ntaas_..."
                   value={quickApiKey}
                   onChange={(e) => setQuickApiKey(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold outline-none focus:border-amber-500"
+                  className="flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleSaveApiKey}
                   disabled={isSavingKey || !quickApiKey.trim()}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1 shrink-0"
+                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition-all disabled:opacity-50"
                 >
-                  {isSavingKey ? <RefreshCw size={12} className="animate-spin" /> : keySavedSuccess ? <Check size={12} /> : <Save size={12} />}
-                  {keySavedSuccess ? 'Salvo!' : 'Salvar Chave'}
+                  {isSavingKey ? <RefreshCw size={13} className="animate-spin" /> : keySavedSuccess ? <Check size={13} /> : <Save size={13} />}
+                  <span>{keySavedSuccess ? 'Salvo!' : 'Salvar Chave'}</span>
                 </button>
               </div>
             </div>
@@ -559,9 +553,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               <div className="flex items-start gap-2.5">
                 <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold">{errorMsg}</p>
+                  <p className="font-bold text-rose-900 text-sm">A emissão da NF-e NÃO foi autorizada</p>
+                  <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-[11px] text-rose-800 font-semibold break-words">
+                    {errorMsg}
+                  </p>
                   <p className="text-[11px] text-rose-600 font-normal leading-relaxed">
-                    A emissão direta na SEFAZ exige a <b>Project Key (ntaas_...)</b> e o <b>Certificado A1</b> no painel da NotaAs. Se o provedor rejeitar a comunicação ou estiver em configuração, você pode <b>Simular a Emissão</b> para liberar o pedido e imprimir o DANFE de teste, ou verificar a sincronização do banco Supabase.
+                    O pedido <b>permanece como não emitido</b>. Corrija o motivo apontado acima (ex: Project Key, dados do cliente/NCM/CFOP ou certificado digital) e tente transmitir novamente.
                   </p>
                 </div>
               </div>
@@ -572,17 +569,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
                 >
                   <Database size={13} className="text-emerald-600" />
-                  Verificar Banco Supabase
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleEmitir(true)}
-                  disabled={loading}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
-                >
-                  <Sparkles size={13} />
-                  Emitir em Modo Simulação Local (Liberar Pedido)
+                  Verificar Status do Supabase
                 </button>
               </div>
             </div>
@@ -596,25 +583,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             onClick={onClose}
             className="px-6 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
           >
-            Voltar
+            Fechar
           </button>
 
           <div className="flex items-center gap-2">
-            {(!hasApiKey && currentConfig.modoEmissao !== 'sandbox_local') && (
-              <button
-                type="button"
-                onClick={() => handleEmitir(true)}
-                disabled={loading || !validation.valid}
-                className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center gap-1"
-                title="Emitir em Simulação sem exigir chave externa"
-              >
-                <Sparkles size={14} /> Simular Emissão
-              </button>
-            )}
-
             <button
               disabled={loading || !validation.valid}
-              onClick={() => handleEmitir(false)}
+              onClick={handleEmitir}
               className="flex items-center gap-2 px-6 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
               {loading ? (
