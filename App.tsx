@@ -175,6 +175,14 @@ const App: React.FC = () => {
     };
 
     loadAllData();
+
+    const refreshOnFocus = () => { void loadAllData(); };
+    const refreshTimer = window.setInterval(refreshOnFocus, 60_000);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
   }, [currentUser, activeCompanyId]);
 
   // Handlers para Categorias
@@ -834,6 +842,7 @@ const App: React.FC = () => {
               customers={customers} 
               orders={orders}
               accounts={accounts}
+              transfers={transfers}
               user={currentUser}
               onNavigate={setCurrentView} 
               onOpenOnboardingModal={() => setShowOnboardingModal(true)}
