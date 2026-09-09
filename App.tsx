@@ -868,6 +868,7 @@ const App: React.FC = () => {
               companyId={activeCompanyId}
               onUpdateOrder={handleUpdateOrder} 
               onNavigate={setCurrentView}
+              canConfigure={currentUser.role === 'Administrador' || (currentUser.role === 'Gerente' && Boolean(currentUser.permissions?.financial))}
             />
           )}
           {currentView === 'fiscal_config' && (
