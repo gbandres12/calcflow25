@@ -66,37 +66,13 @@ export const getSupabaseConfig = () => ({
   keyPrefix: supabaseAnonKey ? supabaseAnonKey.slice(0, 8) + '...' : ''
 });
 
-export const SUPABASE_SQL_SCHEMA = `-- ========================================================
--- SCRIPT DE BANCO DE DADOS - CALCÁRIOFLOW ERP (SUPABASE)
--- Copie e execute este script no "SQL Editor" do Supabase
--- ========================================================
-
--- 1. Cria a tabela unificada de registros e documentos
-CREATE TABLE IF NOT EXISTS public.app_records (
-  id TEXT NOT NULL,
-  table_name TEXT NOT NULL,
-  company_id TEXT NOT NULL,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  PRIMARY KEY (table_name, company_id, id)
-);
-
--- 2. Cria índices de alta velocidade para consultas por tabela e empresa
-CREATE INDEX IF NOT EXISTS idx_app_records_lookup ON public.app_records(table_name, company_id);
-CREATE INDEX IF NOT EXISTS idx_app_records_updated ON public.app_records(updated_at DESC);
-
--- 3. Habilita Row Level Security (RLS)
-ALTER TABLE public.app_records ENABLE ROW LEVEL SECURITY;
-
--- 4. Cria política para permitir leitura e escrita pública com a chave anon
-DROP POLICY IF EXISTS "Permissao publica app_records" ON public.app_records;
-CREATE POLICY "Permissao publica app_records"
-ON public.app_records
-FOR ALL
-TO anon, authenticated
-USING (true)
-WITH CHECK (true);
-`;
+export const SUPABASE_SQL_SCHEMA = `-- O schema do CalcárioFlow é versionado em supabase/migrations.
+--
+-- Não aplique políticas abertas para anon ou authenticated.
+-- A migration 003_secure_multi_tenant_access.sql cria o vínculo de cada usuário
+-- autenticado com a sua empresa e restringe a tabela app_records por empresa.
+--
+-- Para um projeto novo, aplique as migrations 001, 002 e 003 na ordem.`;
 
 /**
  * Testa a conexão com o Supabase e verifica se a tabela app_records existe
@@ -193,13 +169,33 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
   const testId = `diag-${Date.now()}`;
 
   try {
+    const { data: sessionData } = await client.auth.getSession();
+    let companyId = 'matriz-demo';
+    if (sessionData.session?.user) {
+      const { data: membership, error: membershipError } = await client
+        .from('company_memberships')
+        .select('company_id')
+        .eq('user_id', sessionData.session.user.id)
+        .maybeSingle();
+      if (membershipError || !membership?.company_id) {
+        return {
+          ok: false,
+          canWrite: false,
+          canRead: false,
+          message: 'A conta autenticada não está vinculada a uma empresa.',
+          counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
+        };
+      }
+      companyId = membership.company_id;
+    }
+
     // 1. Testar Gravação (Upsert)
     const { error: writeError } = await client
       .from('app_records')
       .upsert([{
         id: testId,
         table_name: '__diagnostic_probe__',
-        company_id: 'probe',
+        company_id: companyId,
         data: { probe: true, timestamp: new Date().toISOString() },
         updated_at: new Date().toISOString()
       }], { onConflict: 'table_name,company_id,id' });
@@ -220,6 +216,7 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
       .select('id, data')
       .eq('id', testId)
       .eq('table_name', '__diagnostic_probe__')
+      .eq('company_id', companyId)
       .maybeSingle();
 
     if (readError || !readData) {
@@ -237,7 +234,8 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
       .from('app_records')
       .delete()
       .eq('id', testId)
-      .eq('table_name', '__diagnostic_probe__');
+      .eq('table_name', '__diagnostic_probe__')
+      .eq('company_id', companyId);
 
     const latencyMs = Math.round(performance.now() - startTime);
 
@@ -250,7 +248,8 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
 
     const { data: allRecords } = await client
       .from('app_records')
-      .select('table_name, data');
+      .select('table_name, data')
+      .eq('company_id', companyId);
 
     if (Array.isArray(allRecords)) {
       total = allRecords.length;
