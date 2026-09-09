@@ -16,6 +16,7 @@ interface FiscalManagementProps {
   companyId?: string;
   onUpdateOrder: (order: SaleOrder) => void;
   onNavigate?: (view: View) => void;
+  canConfigure?: boolean;
 }
 
 export const FiscalManagement: React.FC<FiscalManagementProps> = ({
@@ -24,7 +25,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   company,
   companyId,
   onUpdateOrder,
-  onNavigate
+  onNavigate,
+  canConfigure = false
 }) => {
   const [config, setConfig] = useState<FiscalConfig | null>(null);
   const [selectedDanfeOrder, setSelectedDanfeOrder] = useState<SaleOrder | null>(null);
@@ -110,7 +112,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {onNavigate && (
+          {onNavigate && canConfigure && (
             <button
               onClick={() => onNavigate('fiscal_config')}
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-purple-50 text-slate-700 border border-slate-200 font-bold text-xs rounded-2xl"
