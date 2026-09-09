@@ -1,4 +1,4 @@
-import { getAdminSupabase } from '../_lib/supabaseAdmin.js';
+import { getAdminSupabase, getAdminSupabaseConfigError } from '../_lib/supabaseAdmin.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -19,7 +19,7 @@ async function requireCompanyAdmin(req: any, res: any) {
   const token = getBearerToken(req);
   const admin = getAdminSupabase();
   if (!admin) {
-    res.status(503).json({ error: 'SUPABASE_SERVICE_ROLE_KEY não está configurada no servidor.' });
+    res.status(503).json({ error: getAdminSupabaseConfigError() || 'Configuração do Supabase indisponível no servidor.' });
     return null;
   }
   if (!token) {
