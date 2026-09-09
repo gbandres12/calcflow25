@@ -1,4 +1,4 @@
-import { getAdminSupabase } from '../_lib/supabaseAdmin';
+import { getAdminSupabase } from '../_lib/supabaseAdmin.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
