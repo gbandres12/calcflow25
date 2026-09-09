@@ -574,56 +574,56 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       </header>
 
       {/* Cards de Métricas Comerciais */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5 print:hidden">
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 print:hidden">
+        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
           <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-black">
             <DollarSign size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Faturado</p>
-            <p className="text-xl font-black text-slate-900">{formatBRL(totalOrdersAmount)}</p>
+            <p className="text-base md:text-xl font-black text-slate-900">{formatBRL(totalOrdersAmount)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
             <CheckCircle2 size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entradas / Abatimentos</p>
-            <p className="text-xl font-black text-emerald-600">{formatBRL(totalPaidGlobal)}</p>
+            <p className="text-base md:text-xl font-black text-emerald-600">{formatBRL(totalPaidGlobal)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
           <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-black">
             <Clock size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo a Receber</p>
-            <p className="text-xl font-black text-rose-600">{formatBRL(totalOutstandingGlobal)}</p>
+            <p className="text-base md:text-xl font-black text-rose-600">{formatBRL(totalOutstandingGlobal)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
             <Package size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Volume Comercializado</p>
-            <p className="text-xl font-black text-blue-700">{totalVolumeTon.toFixed(1)} TON</p>
+            <p className="text-base md:text-xl font-black text-blue-700">{totalVolumeTon.toFixed(1)} TON</p>
           </div>
         </div>
       </div>
 
       {/* Barra de Filtros por Status de Pagamento e Busca */}
-      <div className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between print:hidden">
+      <div className="bg-white p-3 md:p-4 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-3 md:gap-4 items-center justify-between print:hidden">
         
         {/* Abas com badges de contagem */}
-        <div className="flex flex-wrap p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1">
+        <div className="flex flex-nowrap overflow-x-auto p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1 custom-scrollbar">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
               activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -632,7 +632,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PAID')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
               activeFilter === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'
             }`}
           >
@@ -645,7 +645,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PARTIAL')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
               activeFilter === 'PARTIAL' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'
             }`}
           >
@@ -658,7 +658,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PENDING')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
               activeFilter === 'PENDING' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-rose-700'
             }`}
           >
@@ -671,7 +671,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('BUDGET')}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
               activeFilter === 'BUDGET' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -900,6 +900,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   </div>
                 )}
 
+                {order.status === OrderStatus.BUDGET ? (
+                  <div className="bg-amber-50/70 p-5 rounded-3xl border border-amber-200 space-y-2">
+                    <div className="flex justify-between items-center gap-3">
+                      <span className="text-[10px] font-black text-amber-900 uppercase tracking-widest">Proposta comercial</span>
+                      <span className="text-xs font-black text-amber-900">Válido até {order.validUntil || 'não informado'}</span>
+                    </div>
+                    <p className="text-xs text-amber-900/80 font-medium">
+                      Este orçamento não reserva estoque nem gera cobrança. Converta em venda somente após a aprovação do cliente.
+                    </p>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   
                   {/* Painel 1: Financeiro (Entradas, Abatimentos e Saldo Devedor) */}
@@ -981,6 +992,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   </div>
 
                 </div>
+                )}
 
                 {/* Barra Inferior de Botões de Ação do Pedido */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
