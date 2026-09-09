@@ -5,12 +5,7 @@ let cached: SupabaseClient | null | undefined;
 export function getAdminSupabase(): SupabaseClient | null {
   if (cached !== undefined) return cached;
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-  const key = (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    ''
-  ).trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!url || !key) {
     cached = null;
     return cached;
@@ -34,6 +29,7 @@ export async function getFiscalConfigForCompany(companyId: string): Promise<any 
       const row = data.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || data[0];
       if (row?.data) return row.data;
     }
+    return null;
   }
 
   // Fallback: busca qualquer registro válido de fiscal_config

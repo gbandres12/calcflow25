@@ -17,6 +17,7 @@ import {
 import { User, UserRole } from '../types';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import { firestoreDb } from './firebase';
+import { isDemoEmail } from './authLogic';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 const SEED_DOC_ID = '__seed__';
@@ -382,6 +383,33 @@ export const db = {
 // ========================================================
 
 export const userService = {
+  async inviteUser(userData: Omit<User, 'id'> & { password: string }): Promise<User> {
+    const supabase = getSupabase();
+    if (!supabase) {
+      throw new Error('Supabase não está configurado para criar acessos.');
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      throw new Error('Entre novamente para convidar um usuário.');
+    }
+
+    const response = await fetch('/api/users/invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(userData)
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.user) {
+      throw new Error(payload?.error || 'Não foi possível criar o acesso do colaborador.');
+    }
+    return payload.user as User;
+  },
+
   /**
    * Autentica usuário via Supabase Auth (com fallback para base demo se offline)
    */
@@ -447,7 +475,7 @@ export const userService = {
         if (authError) {
           // Permite que as contas padrão de demonstração sejam acessadas mesmo sem pré-registro no Auth
           const isDemoAccount = INITIAL_USERS.some(u => u.email.toLowerCase() === cleanEmail) || cleanEmail === 'admin@calcarioflow.com.br';
-          if (isDemoAccount && (pass === '123456' || pass.length > 0)) {
+          if (isDemoAccount && pass === '123456') {
             console.info('[Supabase Auth] Usando perfil de demonstração local.');
             const demoMatch = INITIAL_USERS.find(u => u.email.toLowerCase() === cleanEmail) || INITIAL_USERS[0];
             return { ...demoMatch, companyId: 'matriz-demo', lastAccess: new Date().toISOString() };
@@ -480,8 +508,8 @@ export const userService = {
 
     const matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
 
-    if (matchedUser) {
-      if (pass === '123456' || pass.length > 0) {
+    if (matchedUser && isDemoEmail(cleanEmail)) {
+      if (pass === '123456') {
         const withCompany: User = {
           ...matchedUser,
           companyId: matchedUser.companyId || (cleanEmail.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${matchedUser.id}`),
@@ -493,7 +521,7 @@ export const userService = {
       throw new Error('Senha incorreta. Utilize 123456.');
     }
 
-    if (cleanEmail === 'admin@calcarioflow.com.br' || cleanEmail === 'admin') {
+    if ((cleanEmail === 'admin@calcarioflow.com.br' || cleanEmail === 'admin') && pass === '123456') {
       return { ...INITIAL_USERS[0], companyId: 'matriz-demo' };
     }
 
@@ -558,8 +586,7 @@ export const userService = {
           }
         }
       } catch (err: any) {
-        if (err.message && err.message.includes('já está cadastrado')) throw err;
-        console.warn('[Supabase Auth] Aviso no signUp:', err);
+        throw new Error(err?.message || 'Não foi possível criar a conta no Supabase Auth.');
       }
     }
 
@@ -582,8 +609,7 @@ export const userService = {
       plan: 'PRO'
     };
 
-    // 3. Salvar o novo usuário no diretório e na base da empresa
-    await db.upsert('users', 'matriz-demo', newUser);
+    // 3. Salvar o perfil apenas na empresa do usuário, sem diretório central público.
     await db.upsert('users', compId, newUser);
 
     // 4. Inicializar dados básicos (contas bancárias e categorias) para a nova empresa
@@ -688,10 +714,11 @@ export const userService = {
   },
 
   /**
-   * Conclui o assistente de onboarding
-   */
+  * Conclui o assistente de onboarding
+  */
   async completeOnboarding(userId: string, data?: Partial<User>): Promise<User> {
-    const users: User[] = await db.getTable('users', 'matriz-demo');
+    const companyId = resolveCompanyKey(data?.companyId);
+    const users: User[] = await db.getTable('users', companyId);
     let user = users.find((u) => u.id === userId);
 
     if (user) {
@@ -701,10 +728,7 @@ export const userService = {
         onboardingStep: 5,
         ...data
       };
-      await db.upsert('users', 'matriz-demo', user);
-      if (user.companyId) {
-        await db.upsert('users', user.companyId, user);
-      }
+      await db.upsert('users', user.companyId || companyId, user);
       return user;
     }
 
@@ -718,30 +742,41 @@ export const userService = {
       onboardingStep: 5,
       ...(data || {})
     };
-    await db.upsert('users', 'matriz-demo', newUser);
+    await db.upsert('users', newUser.companyId || companyId, newUser);
     return newUser;
   },
 
   async getAll(companyId?: string): Promise<User[]> {
-    if (companyId && companyId !== 'matriz-demo') {
-      const compUsers = await db.getTable('users', companyId);
-      if (compUsers.length > 0) return compUsers;
-    }
-    return await db.getTable('users', 'matriz-demo');
+    return await db.getTable('users', resolveCompanyKey(companyId));
   },
 
   async saveUser(user: User) {
-    await db.upsert('users', 'matriz-demo', user);
-    if (user.companyId && user.companyId !== 'matriz-demo') {
-      await db.upsert('users', user.companyId, user);
-    }
+    await db.upsert('users', resolveCompanyKey(user.companyId), user);
     return user;
   },
 
   async deleteUser(id: string, companyId?: string) {
-    await db.delete('users', 'matriz-demo', id);
-    if (companyId) {
-      await db.delete('users', companyId, id);
+    const key = resolveCompanyKey(companyId);
+    const supabase = getSupabase();
+    const { data: sessionData } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+    const accessToken = sessionData.session?.access_token;
+
+    if (!accessToken) {
+      if (isDemoCompany(key)) return db.delete('users', key, id);
+      throw new Error('Entre novamente para remover um acesso.');
+    }
+
+    const response = await fetch('/api/users/invite', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({ userId: id })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || 'Não foi possível remover o acesso.');
     }
   },
 

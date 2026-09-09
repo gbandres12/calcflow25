@@ -51,7 +51,7 @@ import {
   COMPANY_INFO
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
-import { hashPassword, toPublicUser } from './services/authLogic';
+import { toPublicUser } from './services/authLogic';
 import { newId, nextOrderReference } from './services/ids';
 
 const App: React.FC = () => {
@@ -419,18 +419,16 @@ const App: React.FC = () => {
   const handleAddUser = async (userData: Omit<User, 'id'> & { password?: string }): Promise<User> => {
     const rawPassword = (userData.password || '').trim() || '123456';
     const { password: _password, ...rest } = userData as Omit<User, 'id'> & { password?: string };
-    const newUser: User = { 
-      ...rest, 
-      id: newId('u'),
+    const newUser = await userService.inviteUser({
+      ...rest,
       email: (userData.email || '').trim().toLowerCase(),
-      passwordHash: await hashPassword(rawPassword),
+      password: rawPassword,
       status: 'Ativo',
       companyId: currentUser?.companyId || activeCompanyId,
       companyName: currentUser?.companyName || 'Sua Empresa'
-    };
+    });
     const publicUser = toPublicUser(newUser);
     setUsers(prev => [...prev, publicUser]);
-    await userService.saveUser(newUser);
     return publicUser;
   };
 
@@ -444,9 +442,15 @@ const App: React.FC = () => {
     userService.saveUser(tagged);
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     setUsers(prev => prev.filter(u => u.id !== userId));
-    userService.deleteUser(userId, activeCompanyId);
+    try {
+      await userService.deleteUser(userId, activeCompanyId);
+    } catch (error) {
+      console.warn('[USUÁRIOS] Falha ao remover acesso:', error);
+      const currentUsers = await userService.getAll(activeCompanyId).catch(() => []);
+      if (currentUsers.length) setUsers(currentUsers.map(toPublicUser));
+    }
   };
 
   // Pedidos e Vendas

@@ -6,7 +6,6 @@ import {
   ShieldCheck, DollarSign, Scale, HelpCircle, Check, Award
 } from 'lucide-react';
 import { db, userService, resolveCompanyKey } from '../services/dataService';
-import { hashPassword } from '../services/authLogic';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { newId } from '../services/ids';
 
@@ -127,18 +126,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
       // 4. Cria operador adicional se preenchido
       if (teamMember.name && teamMember.email) {
-        const newOp: User = {
-          id: newId('usr-op'),
+        await userService.inviteUser({
           name: teamMember.name,
           email: teamMember.email.toLowerCase(),
-          passwordHash: await hashPassword('123456'),
+          password: '123456',
           role: teamMember.role,
           status: 'Ativo',
           companyId,
           companyName,
-          lastAccess: new Date().toISOString()
-        };
-        await db.upsert('users', companyId, newOp);
+          lastAccess: new Date().toISOString(),
+          onboardingCompleted: true,
+          onboardingStep: 5
+        });
       }
 
       if (onProvisionData) {
