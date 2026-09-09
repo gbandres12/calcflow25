@@ -36,6 +36,7 @@ export type FuelType = 'S10' | 'S500';
 
 export interface UserPermissions {
   financial: boolean;
+  fiscal?: boolean;
   users: boolean;
   inventory: boolean;
   orders: boolean;
