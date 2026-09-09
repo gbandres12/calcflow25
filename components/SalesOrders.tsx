@@ -42,6 +42,7 @@ interface SalesOrdersProps {
   onDeleteOrder: (orderId: string) => void;
   onFinalizeOrder: (orderId: string, payments: SalePayment[]) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
+  mode?: 'orders' | 'quotes';
 }
 
 export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE';
@@ -98,9 +99,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onUpdateOrder,
   onDeleteOrder,
   onFinalizeOrder,
-  onPaymentReceived 
+  onPaymentReceived,
+  mode = 'orders'
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>('ALL');
+  const isQuotesView = mode === 'quotes';
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>(
+    isQuotesView ? 'BUDGET' : 'ALL'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [isQuickCustomerModalOpen, setIsQuickCustomerModalOpen] = useState(false);
   
@@ -139,7 +144,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [unitPrice, setUnitPrice] = useState('180');
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
-  const [isBudget, setIsBudget] = useState(false);
+  const [isBudget, setIsBudget] = useState(isQuotesView);
   const [notes, setNotes] = useState('');
 
   // Barter / Permuta em Grãos
@@ -370,12 +375,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   // Conversão Direta de Orçamento para Venda (Quote to Sale)
   const handleConvertToSale = (order: SaleOrder) => {
-    const updatedOrder: SaleOrder = {
-      ...order,
-      status: OrderStatus.FINALIZED,
-      notes: `${order.notes || ''}\n[${new Date().toLocaleDateString('pt-BR')}] Orçamento convertido em Venda Confirmada.`
-    };
-    onUpdateOrder(updatedOrder);
+    onFinalizeOrder(order.id, order.payments || []);
   };
 
   const handleCloseModal = () => {
@@ -393,12 +393,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setUnitPrice('180');
     setDiscount('0');
     setShipping('0');
+    setIsBudget(isQuotesView);
     setNotes('');
     setIsBarter(false);
     setBarterCommodityType('MILHO');
     setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
+  };
+
+  const openNewOrder = () => {
+    setEditingOrder(null);
+    resetForm();
+    setIsModalOpen(true);
   };
 
   const handleNextStep = () => {
@@ -547,15 +554,21 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Header Principal */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Pedidos de Venda & Faturamento</h2>
-          <p className="text-slate-500 text-sm font-medium">Gestão de contratos, entradas, parcelas, abatimentos e retiradas de carga</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            {isQuotesView ? 'Orçamentos Comerciais' : 'Pedidos de Venda & Faturamento'}
+          </h2>
+          <p className="text-slate-500 text-sm font-medium">
+            {isQuotesView
+              ? 'Cotações em aberto, validade e conversão rápida em venda confirmada'
+              : 'Gestão de contratos, entradas, parcelas, abatimentos e retiradas de carga'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => { setEditingOrder(null); setIsModalOpen(true); }}
+            onClick={openNewOrder}
             className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center gap-2 shadow-xl shadow-purple-200 text-sm hover:scale-[1.02]"
           >
-            <Plus size={18} /> Novo Pedido de Venda
+            <Plus size={18} /> {isQuotesView ? 'Novo Orçamento' : 'Novo Pedido de Venda'}
           </button>
         </div>
       </header>
@@ -698,10 +711,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               </p>
             </div>
             <button
-              onClick={() => { setEditingOrder(null); setIsModalOpen(true); }}
+              onClick={openNewOrder}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
             >
-              <Plus size={16} /> Emitir Primeiro Pedido
+              <Plus size={16} /> {isQuotesView ? 'Emitir Primeiro Orçamento' : 'Emitir Primeiro Pedido'}
             </button>
           </div>
         ) : (
