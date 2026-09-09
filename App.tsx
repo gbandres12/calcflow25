@@ -21,7 +21,7 @@ import TransferManagement from './components/TransferManagement';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { RefreshCw, Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Boxes, Users, Database } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -698,7 +698,7 @@ const App: React.FC = () => {
     : users.filter(u => u.companyId === currentUser?.companyId || u.companyId === activeCompanyId || u.id === currentUser?.id || u.email === currentUser?.email);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
+    <div className="cf-app-shell min-h-screen flex flex-col lg:flex-row">
       <Sidebar 
         currentView={currentView} 
         onNavigate={setCurrentView} 
@@ -710,90 +710,62 @@ const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full lg:ml-64 p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
-        <div className="max-w-7xl mx-auto print:max-w-none">
+      <main className="flex-1 w-full lg:ml-[276px] p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
+        <div className="max-w-[1440px] mx-auto print:max-w-none">
           {/* Topbar com suporte Mobile e Desktop */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 print:hidden">
-             <div className="flex items-center justify-between w-full sm:w-auto gap-2.5">
-               <div className="flex items-center gap-2">
-                 {/* Botão de Menu para Celular */}
-                 <button
-                   onClick={() => setMobileMenuOpen(true)}
-                   className="p-2 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-100 lg:hidden shadow-sm flex items-center justify-center"
-                   title="Abrir Menu Lateral"
-                 >
-                   <Menu size={18} />
-                 </button>
+          <header className="cf-topbar print:hidden">
+            <div className="flex items-center min-w-0 gap-3">
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="p-2 bg-white border border-[#DDE6DE] rounded-lg text-[#36574E] hover:bg-[#ECF1EB] lg:hidden flex items-center justify-center"
+                title="Abrir Menu Lateral"
+              >
+                <Menu size={18} />
+              </button>
+              <span className="cf-topbar-company" title={currentUser.companyName || COMPANY_INFO.name}>
+                {syncing ? 'Sincronizando dados…' : (currentUser.companyName || COMPANY_INFO.name)}
+              </span>
+            </div>
 
-                 <div className="flex items-center gap-2 bg-white px-3 sm:px-4 py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm">
-                   {syncing ? (
-                     <>
-                       <RefreshCw size={13} className="text-purple-600 animate-spin" />
-                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sincronizando...</span>
-                     </>
-                   ) : (
-                     <>
-                       <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                       <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide truncate max-w-[200px] sm:max-w-none">
-                         {currentUser.companyName || COMPANY_INFO.name}
-                       </span>
-                     </>
-                   )}
-                 </div>
-               </div>
+            <div className="cf-topbar-actions">
+              <div className="cf-topbar-pill hidden sm:inline-flex">
+                <MapPin size={14} className="text-[#0F5948]" />
+                <span>{activeCompanyId === 'matriz-demo' ? 'Unidade Matriz' : 'Unidade ativa'}</span>
+                <ChevronDown size={13} />
+              </div>
 
-               {/* Botão Sair no Mobile */}
-               <button 
-                 onClick={() => handleSetCurrentUser(null)} 
-                 className="sm:hidden px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase transition-colors"
-               >
-                 Sair
-               </button>
-             </div>
-             
-             <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+              {currentUser.onboardingCompleted === false && (
                 <button
-                  onClick={() => setShowDbModal(true)}
-                  className="flex items-center gap-1.5 bg-white hover:bg-slate-50 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm text-[10px] text-slate-600 font-bold transition"
-                  title="Verificar status do Supabase e Banco de Dados"
+                  onClick={() => setShowOnboardingModal(true)}
+                  className="cf-topbar-pill hidden md:inline-flex text-[#80611D] bg-[#FAF1D9] border-[#EAD9A8]"
                 >
-                  <Database size={12} className="text-emerald-500" />
-                  <span className="hidden sm:inline">Supabase</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <Sparkles size={13} />
+                  <span>Completar setup</span>
                 </button>
+              )}
 
-                <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm text-[10px]">
-                  <span className="font-bold text-slate-400">Base:</span>
-                  <span className={`font-black uppercase px-2 py-0.5 rounded-lg ${activeCompanyId === 'matriz-demo' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                    {activeCompanyId === 'matriz-demo' ? 'Demonstração' : 'Produção SaaS'}
-                  </span>
+              <div className="cf-topbar-divider hidden sm:block" />
+              <button className="cf-topbar-pill hidden sm:inline-flex" title="Notificações" aria-label="Notificações">
+                <Bell size={15} className="text-[#36574E]" />
+              </button>
+
+              <div className="cf-user-chip">
+                <div className="cf-user-avatar">{currentUser.name.split(' (')[0].split(' ').map((part) => part[0]).slice(0, 2).join('')}</div>
+                <div className="cf-user-meta hidden sm:block">
+                  <strong>{currentUser.name.split(' (')[0]}</strong>
+                  <span>{currentUser.role}</span>
                 </div>
-
-                {currentUser.onboardingCompleted === false && (
-                  <button
-                    onClick={() => setShowOnboardingModal(true)}
-                    className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
-                  >
-                    <Sparkles size={12} />
-                    <span className="hidden sm:inline">Completar Setup</span>
-                    <span className="sm:hidden">Setup</span>
-                  </button>
-                )}
-
-                <div className="hidden sm:flex items-center gap-3 bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-200">
-                   <div className="text-right">
-                      <p className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{currentUser.name}</p>
-                      <p className="text-[9px] font-bold text-purple-600 uppercase tracking-wider">{currentUser.role}</p>
-                   </div>
-                   <button 
-                     onClick={() => handleSetCurrentUser(null)} 
-                     className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-[10px] font-black uppercase transition-colors"
-                   >
-                     Sair
-                   </button>
-                </div>
-             </div>
-          </div>
+                <button
+                  onClick={() => handleSetCurrentUser(null)}
+                  className="p-2 text-[#36574E] hover:text-[#0F5948]"
+                  title="Sair"
+                  aria-label="Sair"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+            </div>
+          </header>
           
           {currentView === 'dashboard' && (
             <Dashboard 
@@ -999,11 +971,11 @@ const App: React.FC = () => {
       </main>
 
       {/* Barra de Navegação Inferior Rápida para Celular (PWA / Mobile) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex items-center justify-around z-40 print:hidden shadow-2xl">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#0F5948] border-t border-[#1B6B58] px-2 py-2 flex items-center justify-around z-40 print:hidden shadow-2xl">
         <button
           onClick={() => setCurrentView('dashboard')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'dashboard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            currentView === 'dashboard' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
         >
           <LayoutDashboard size={18} />
@@ -1013,7 +985,7 @@ const App: React.FC = () => {
         <button
           onClick={() => setCurrentView('orders')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'orders' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
         >
           <FileText size={18} />
@@ -1023,7 +995,7 @@ const App: React.FC = () => {
         <button
           onClick={() => setCurrentView('yard')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'yard' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            currentView === 'yard' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
         >
           <Scale size={18} />
@@ -1033,7 +1005,7 @@ const App: React.FC = () => {
         <button
           onClick={() => setCurrentView('inventory')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'inventory' ? 'text-purple-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
         >
           <Package size={18} />
@@ -1042,7 +1014,7 @@ const App: React.FC = () => {
 
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-slate-400 hover:text-slate-200"
+          className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-[#D5E3DC] hover:text-white"
         >
           <Menu size={18} />
           <span className="text-[10px] tracking-tight">Menu</span>
@@ -1068,4 +1040,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
