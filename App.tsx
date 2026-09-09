@@ -17,7 +17,7 @@ import UserManagement from './components/UserManagement';
 import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
 import { FiscalConfigView } from './components/FiscalConfigView';
-import TransferManagement from './components/TransferManagement';
+import TransfersPage from './components/TransfersPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -981,7 +981,7 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'transfers' && (
-            <TransferManagement 
+            <TransfersPage 
               transfers={transfers}
               storeItems={storeItems}
               company={operatingCompany}
