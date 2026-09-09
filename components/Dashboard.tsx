@@ -1,29 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-  ArrowRight,
-  BarChart3,
-  Bell,
-  Box,
-  ChevronDown,
-  FileText,
-  Filter,
-  Leaf,
-  MoreVertical,
-  Package,
-  Search,
-  ShoppingCart,
-  Truck
-} from 'lucide-react';
-import {
-  Customer,
-  FinancialAccount,
-  InventoryItem,
-  OrderStatus,
-  SaleOrder,
-  Transaction,
-  TransactionStatus,
-  View
+  Transaction, InventoryItem, Customer, TransactionType, View, User,
+  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, TransferStatus
 } from '../types';
+import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { OnboardingChecklist } from './OnboardingChecklist';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -31,226 +13,237 @@ interface DashboardProps {
   customers: Customer[];
   orders?: SaleOrder[];
   accounts?: FinancialAccount[];
-  user?: { name?: string } | null;
+  transfers?: TransferShipment[];
+  user?: User | null;
   onNavigate?: (view: View) => void;
   onOpenOnboardingModal?: () => void;
 }
 
-const brl = (value: number) => (Number(value) || 0).toLocaleString('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  maximumFractionDigits: 2
-});
+const brl = (n: number) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const tons = (n: number) => `${(Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const isoDaysAgo = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+};
 
-const number = (value: number, maximumFractionDigits = 0) => (Number(value) || 0).toLocaleString('pt-BR', {
-  maximumFractionDigits
-});
-
-const tons = (value: number) => number(value, 1);
+const stockOf = (inventory: InventoryItem[], keys: string[]) =>
+  inventory.find((i) => keys.some((k) => (i.id || '').toLowerCase().includes(k) || (i.name || '').toLowerCase().includes(k)));
 
 const Dashboard: React.FC<DashboardProps> = ({
-  transactions,
-  inventory,
-  customers,
-  orders = [],
-  accounts = [],
-  onNavigate
+  transactions, inventory, customers, orders = [], accounts = [], transfers = [],
+  user, onNavigate, onOpenOnboardingModal
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todas as categorias');
-
-  const stockTotal = inventory.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const stockValue = inventory.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
-  const soldVolume = orders.reduce((sum, order) => sum + (order.items || []).reduce((subtotal, item) => subtotal + Number(item.quantity || 0), 0), 0);
-  const receivedTotal = orders.reduce((sum, order) => {
-    const receiptsTotal = (order.receipts || []).reduce((subtotal, receipt) => subtotal + Number(receipt.amount || 0), 0);
-    const scheduledTotal = (order.payments || []).reduce((subtotal, payment) => {
-      const paid = payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO
-        ? payment.amount
-        : payment.paidAmount;
-      return subtotal + Number(paid || 0);
-    }, 0);
-    return sum + Math.max(receiptsTotal, scheduledTotal);
+  const today = todayISO();
+  const romaneios = useMemo(() => orders.filter((o) =>
+    o.status === OrderStatus.FINALIZED && (o.withdrawalStatus === 'aguardando' || o.withdrawalStatus === 'parcial' || !o.withdrawalStatus)
+  ).slice(0, 7), [orders]);
+  const remessas = useMemo(() =>
+    transfers.filter((t) => t.status === 'EM_TRANSITO').slice(0, 5), [transfers]);
+  const moido = stockOf(inventory, ['moido', 'moído', 'moido']);
+  const britado = stockOf(inventory, ['britado']);
+  const pendingNfe = orders.filter((o) =>
+    o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando')
+  ).slice(0, 5);
+  const rejectedNfe = orders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
+  const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);
+  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
+  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
+  const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
+  const saldoDia = saldoContas + dayTx.reduce((s, t) => {
+    const v = Number(t.paidAmount || t.amount || 0);
+    return t.type === TransactionType.SALE ? s + v : s - v;
   }, 0);
-  const issuedInvoices = orders.filter((order) => order.nfeStatus === 'autorizada').length;
-  const pendingInvoices = orders.filter((order) => !order.nfeStatus || order.nfeStatus === 'nao_emitida' || order.nfeStatus === 'processando').length;
-  const todayTransactions = transactions.filter((transaction) => transaction.date?.slice(0, 10) === new Date().toISOString().slice(0, 10));
-
-  const categories = useMemo(() => {
-    const values = inventory.map((item) => item.category).filter(Boolean) as string[];
-    return ['Todas as categorias', ...Array.from(new Set(values))];
-  }, [inventory]);
-
-  const visibleProducts = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return inventory.filter((item) => {
-      const matchesCategory = selectedCategory === 'Todas as categorias' || item.category === selectedCategory;
-      const matchesTerm = !term || [item.name, item.code, item.ncm, item.category].some((value) => String(value || '').toLowerCase().includes(term));
-      return matchesCategory && matchesTerm;
+  const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
+  const strategic = useMemo(() => {
+    const start = isoDaysAgo(29);
+    const finalized = orders.filter((o) => o.status === OrderStatus.FINALIZED && (o.date || '') >= start);
+    const soldValue = finalized.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const soldTons = finalized.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
+    const received = finalized.reduce((sum, order) => sum + (order.payments || []).reduce((paid, payment) => {
+      const amount = Number(payment.paidAmount ?? payment.amount ?? 0);
+      return paid + amount;
+    }, 0), 0);
+    const openReceivable = Math.max(0, soldValue - received);
+    const chart = Array.from({ length: 7 }, (_, index) => {
+      const date = isoDaysAgo(6 - index);
+      const daily = transactions.filter((tx) => (tx.paymentDate || tx.date || '').slice(0, 10) === date);
+      const receivedDay = daily.filter((tx) => tx.type === TransactionType.SALE)
+        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
+      const spentDay = daily.filter((tx) => tx.type !== TransactionType.SALE)
+        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
+      return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: receivedDay, saidas: spentDay };
     });
-  }, [inventory, searchTerm, selectedCategory]);
-
-  const queue = useMemo(() => orders.filter((order) =>
-    order.status === OrderStatus.FINALIZED && (!order.withdrawalStatus || order.withdrawalStatus === 'aguardando' || order.withdrawalStatus === 'parcial')
-  ).slice(0, 4), [orders]);
-
-  const customerName = (customerId?: string) => customers.find((customer) => customer.id === customerId)?.name || 'Cliente não informado';
-  const productName = (order: SaleOrder) => order.items?.[0]?.productName || 'Calcário agrícola';
-  const productQuantity = (order: SaleOrder) => (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const statusLabel = (order: SaleOrder) => order.withdrawalStatus === 'parcial' ? 'Carregando' : order.withdrawalStatus === 'aguardando' ? 'Aguardando' : 'Programado';
-  const statusClass = (order: SaleOrder) => order.withdrawalStatus === 'parcial' ? 'cf-status cf-status-green' : order.withdrawalStatus === 'aguardando' ? 'cf-status cf-status-sand' : 'cf-status cf-status-blue';
-
-  const alerts = [
-    inventory.some((item) => !item.ncm) ? { title: 'Produto sem NCM cadastrado', detail: '1 produto precisa de classificação fiscal.', time: 'Hoje', warning: true } : null,
-    stockTotal > 0 ? { title: 'Estoque comercial atualizado', detail: `${number(stockTotal, 1)} ton disponíveis para operação.`, time: 'Agora', warning: false } : null,
-    pendingInvoices > 0 ? { title: `${pendingInvoices} nota${pendingInvoices > 1 ? 's' : ''} fiscal${pendingInvoices > 1 ? 'is' : ''} pendente${pendingInvoices > 1 ? 's' : ''}`, detail: 'Revise as vendas antes do faturamento.', time: 'Hoje', warning: true } : null
-  ].filter(Boolean) as { title: string; detail: string; time: string; warning: boolean }[];
-
-  const chartValues = [62, 77, 71, 86, 79, 58, 68];
-  const chartSales = [40, 51, 45, 68, 55, 47, 52];
-  const chartLabels = ['01/Jun', '02/Jun', '03/Jun', '04/Jun', '05/Jun', '06/Jun', '07/Jun'];
+    return {
+      soldValue,
+      soldTons,
+      received,
+      openReceivable,
+      averageTicket: finalized.length ? soldValue / finalized.length : 0,
+      chart
+    };
+  }, [orders, transactions]);
 
   return (
-    <div className="cf-dashboard space-y-4">
-      <div className="cf-page-heading">
+    <div className="space-y-4">
+      {user && (
+        <OnboardingChecklist user={user} customers={customers} orders={orders} transactions={transactions} accounts={accounts} onNavigate={onNavigate} onOpenOnboardingModal={onOpenOnboardingModal} />
+      )}
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="cf-eyebrow">Visão geral da operação</p>
-          <h2>Escritório operacional</h2>
-          <p>Da rocha ao campo, vendas, estoque e fiscal em um só lugar.</p>
+          <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Escritório operacional</h2>
+          <p className="text-xs text-slate-500">Fila de carga, estoque ao vivo e alerta fiscal.</p>
         </div>
-        <span className="cf-live-badge">Dados atualizados agora</span>
-      </div>
-
-      <section className="cf-hero" aria-label="Resumo do CalcFlow">
-        <div className="cf-hero-copy">
-          <p className="cf-eyebrow">Solo mais forte, resultados reais</p>
-          <h1>Da rocha ao campo,<br />com mais controle.</h1>
-          <p>Gestão completa da produção, estoque, vendas e obrigações fiscais da sua usina de calcário, em um só lugar.</p>
-        </div>
-        <img className="cf-hero-image" src="/calcflow-quarry-hero.png" alt="Pedreira de calcário com esteira de produção" />
-        <div className="cf-hero-note">Calcário que produz<br />mais terra boa</div>
-      </section>
-
-      <section className="cf-kpi-grid" aria-label="Indicadores principais">
-        <article className="cf-kpi">
-          <div className="cf-kpi-head"><div><p className="cf-kpi-label">Produção hoje</p><p className="cf-kpi-value">{tons(stockTotal * 1.02)} <small>ton</small></p></div><span className="cf-kpi-icon"><Leaf size={21} /></span></div>
-          <p className="cf-kpi-foot"><span className="cf-positive">↑ 12%</span> <span>vs. ontem</span></p>
-        </article>
-        <article className="cf-kpi">
-          <div className="cf-kpi-head"><div><p className="cf-kpi-label">Vendas do mês</p><p className="cf-kpi-value">{tons(soldVolume)} <small>ton</small></p></div><span className="cf-kpi-icon"><Truck size={21} /></span></div>
-          <p className="cf-kpi-foot"><span className="cf-positive">↑ 8%</span> <span>vs. mês anterior</span></p>
-        </article>
-        <article className="cf-kpi">
-          <div className="cf-kpi-head"><div><p className="cf-kpi-label">Estoque comercial</p><p className="cf-kpi-value">{tons(stockTotal)} <small>ton</small></p></div><span className="cf-kpi-icon"><Box size={21} /></span></div>
-          <p className="cf-kpi-foot">{inventory.length} produto{inventory.length === 1 ? '' : 's'} <span>·</span> {brl(stockValue)}</p>
-        </article>
-        <article className="cf-kpi">
-          <div className="cf-kpi-head"><div><p className="cf-kpi-label">Notas fiscais (mês)</p><p className="cf-kpi-value">{issuedInvoices || 0} <small>emitidas</small></p></div><span className="cf-kpi-icon"><FileText size={21} /></span></div>
-          <p className="cf-kpi-foot"><span className={pendingInvoices ? 'text-amber-700 font-extrabold' : 'cf-positive'}>{pendingInvoices} pendências</span></p>
-        </article>
-      </section>
-
-      <section className="cf-dashboard-grid">
-        <article className="cf-panel">
-          <div className="cf-panel-header">
-            <h3 className="cf-panel-title"><BarChart3 size={20} /> Produção e vendas</h3>
-            <button className="cf-topbar-pill" type="button"><span>Últimos 7 dias</span><ChevronDown size={13} /></button>
+        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">Dados atualizados agora</span>
+      </header>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fila operacional</p>
+            <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{romaneios.length + remessas.length}</span>
           </div>
-          <div className="cf-chart-area">
-            <div className="cf-chart-legend"><span><i className="cf-dot" />Produção (ton)</span><span><i className="cf-dot cf-dot-sand" />Vendas (ton)</span></div>
-            <div className="cf-chart" aria-label="Gráfico de produção e vendas dos últimos sete dias">
-              {chartValues.map((height, index) => (
-                <div className="cf-chart-column" key={chartLabels[index]}>
-                  <span className="cf-bar" style={{ height: `${height}%` }} />
-                  <span className="cf-bar cf-bar-sand" style={{ height: `${chartSales[index]}%` }} />
-                  <span className="cf-chart-label">{chartLabels[index]}</span>
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Romaneios a carregar</p>
+            {romaneios.length === 0 && <p className="text-xs text-slate-400 pb-3">Nenhum romaneio na fila.</p>}
+            {romaneios.map((o) => (
+              <button key={o.id} type="button" onClick={() => onNavigate?.('orders')} className="w-full text-left py-2 border-b border-slate-50">
+                <div className="flex justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-700 truncate">{o.reference}</span>
+                  <span className="text-slate-400">{(o.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0).toFixed(1)} t</span>
                 </div>
+                <p className="text-[11px] text-slate-500 truncate">{custName(o.customerId)}</p>
+              </button>
+            ))}
+          </div>
+          <div className="px-4 pt-3 pb-3 border-t border-slate-100">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Transferências aguardando fazenda</p>
+            {remessas.length === 0 && <p className="text-xs text-slate-400">Nenhuma remessa em trânsito.</p>}
+            {remessas.map((t) => (
+              <button key={t.id} type="button" onClick={() => onNavigate?.('transfers')} className="w-full text-left py-2 border-b border-slate-50">
+                <div className="flex justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-700">{t.code}</span>
+                  <span className="text-amber-700 bg-amber-50 px-1.5 rounded">Em trânsito</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">{t.originLocation} → {t.destinationLocation}</p>
+              </button>
+            ))}
+            <button type="button" onClick={() => onNavigate?.('yard')} className="mt-2 text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver filas <ArrowRight size={12} /></button>
+          </div>
+        </section>
+        <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Estoque ao vivo</p>
+          {[moido, britado].filter(Boolean).map((item) => {
+            const qty = Number(item!.quantity || 0);
+            const min = Number(item!.minStock || 0) || 1;
+            const cap = Math.max(qty, min * 3, 1);
+            const pct = Math.min(100, Math.round((qty / cap) * 100));
+            return (
+              <div key={item!.id} className="border border-slate-100 rounded-lg p-3">
+                <p className="text-xs font-semibold text-slate-600 uppercase">{item!.name}</p>
+                <p className="text-2xl font-semibold text-slate-800">{tons(qty)}</p>
+                <p className="text-[11px] text-slate-400 mb-2">mínimo {tons(min)}</p>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full ${qty <= min ? 'bg-amber-500' : 'bg-emerald-600'}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+          {inventory.length === 0 && <p className="text-xs text-slate-400">Sem estoque carregado.</p>}
+          <button type="button" onClick={() => onNavigate?.('inventory')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver estoque <ArrowRight size={12} /></button>
+        </section>
+        <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Alertas fiscais</p>
+            <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">{pendingNfe.length + rejectedNfe.length}</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-[10px] font-semibold text-amber-700 uppercase">Pendentes de emissão</p>
+            {pendingNfe.length === 0 && <p className="text-xs text-slate-400">Nada pendente.</p>}
+            {pendingNfe.map((o) => (
+              <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between gap-2">
+                <span className="truncate font-medium text-slate-700">{o.reference} · {custName(o.customerId)}</span>
+                <span className="text-amber-700">{brl(o.total)}</span>
+              </button>
+            ))}
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-rose-700 uppercase mb-1">Rejeitadas</p>
+              {rejectedNfe.length === 0 && <p className="text-xs text-slate-400">Nenhuma rejeição.</p>}
+              {rejectedNfe.map((o) => (
+                <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between">
+                  <span className="font-medium text-slate-700">{o.reference}</span>
+                  <span className="text-rose-600">Rejeitada</span>
+                </button>
               ))}
             </div>
+            <button type="button" onClick={() => onNavigate?.('fiscal')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Abrir notas <ArrowRight size={12} /></button>
           </div>
-        </article>
-
-        <article className="cf-panel">
-          <div className="cf-panel-header">
-            <h3 className="cf-panel-title"><Truck size={20} /> Fila de carregamento</h3>
-            <button type="button" className="cf-panel-action" onClick={() => onNavigate?.('orders')}>Ver todos <ArrowRight size={14} /></button>
+        </section>
+      </div>
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2 bg-white border border-slate-200 rounded-xl p-4 min-h-[280px]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Liquidez dos últimos 7 dias</p>
+              <p className="text-xs text-slate-400">Entradas recebidas x saídas efetivamente pagas.</p>
+            </div>
+            <button type="button" onClick={() => onNavigate?.('cashflow')} className="text-[11px] font-semibold text-blue-700">Abrir fluxo</button>
           </div>
-          <div className="cf-queue">
-            <div className="cf-queue-head"><span>Veículo / cliente</span><span>Produto</span><span>Quantidade</span><span>Status</span></div>
-            {queue.length === 0 && <p className="py-6 text-xs text-[#829087]">Nenhuma carga aguardando carregamento.</p>}
-            {queue.map((order) => (
-              <button key={order.id} type="button" className="cf-queue-row w-full text-left" onClick={() => onNavigate?.('orders')}>
-                <span><strong>{order.reference}</strong><small>{customerName(order.customerId)}</small></span>
-                <span className="truncate">{productName(order)}</span>
-                <span>{tons(productQuantity(order))} ton</span>
-                <span className={statusClass(order)}>{statusLabel(order)}</span>
-              </button>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="cf-lower-grid">
-        <article className="cf-panel">
-          <div className="cf-panel-header">
-            <h3 className="cf-panel-title"><Package size={19} /> Produtos em estoque</h3>
-            <button type="button" className="cf-panel-action" onClick={() => onNavigate?.('inventory')}>Ver todos <ArrowRight size={14} /></button>
-          </div>
-          <div className="cf-table-wrap">
-            <table className="cf-table">
-              <thead><tr><th>Código / produto</th><th>Categoria</th><th>Unidade</th><th>Estoque atual</th><th>Preço venda</th><th>Valor em estoque</th><th /></tr></thead>
-              <tbody>
-                {visibleProducts.length === 0 && <tr><td colSpan={7} className="py-8 text-center">Nenhum produto encontrado.</td></tr>}
-                {visibleProducts.slice(0, 5).map((item) => (
-                  <tr key={item.id}>
-                    <td><div className="cf-product"><img className="cf-product-thumb" src="/calcflow-limestone-thumb.png" alt="" /><span><strong>{item.name}</strong><small>SKU: {item.code || item.id}</small></span></div></td>
-                    <td><span className="cf-status cf-status-blue">{item.category || 'Geral'}</span></td>
-                    <td>{item.unit || 'Ton'}</td>
-                    <td><strong className="text-[#163C35]">{tons(item.quantity)}</strong> ton</td>
-                    <td>{brl(item.unitPrice)}</td>
-                    <td><strong className="text-[#163C35]">{brl(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</strong></td>
-                    <td><button type="button" className="p-2 text-[#728078] hover:text-[#0F5948]" aria-label={`Mais ações para ${item.name}`}><MoreVertical size={16} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="cf-panel">
-          <div className="cf-panel-header">
-            <h3 className="cf-panel-title"><Bell size={19} /> Alertas e pendências <span className="cf-status cf-status-sand">{alerts.length}</span></h3>
-            <button type="button" className="cf-panel-action" onClick={() => onNavigate?.('fiscal')}>Ver todos <ArrowRight size={14} /></button>
-          </div>
-          <div className="cf-alert-list">
-            {alerts.length === 0 && <p className="py-6 text-xs text-[#829087]">Nenhuma pendência no momento.</p>}
-            {alerts.map((alert) => (
-              <button key={alert.title} type="button" className="cf-alert-row w-full text-left" onClick={() => onNavigate?.('fiscal')}>
-                <i className={`cf-alert-bullet ${alert.warning ? 'is-warning' : ''}`} />
-                <span><strong>{alert.title}</strong><span>{alert.detail}</span></span>
-                <em className="cf-alert-time">{alert.time}</em>
-              </button>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="cf-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#829087]" />
-          <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="w-full rounded-lg border border-[#DDE6DE] bg-[#FBFCF9] py-2.5 pl-9 pr-3 text-xs font-semibold text-[#36574E] outline-none focus:border-[#0F5948]" placeholder="Buscar produto por nome, código SKU, NCM ou categoria..." aria-label="Buscar produto" />
+          <ResponsiveContainer width="100%" height={210}>
+            <BarChart data={strategic.chart} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <Tooltip formatter={(value: number) => brl(value)} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="entradas" name="Entradas" fill="#059669" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="saidas" name="Saídas" fill="#e11d48" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <div className="relative sm:w-56">
-          <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#829087]" />
-          <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="w-full appearance-none rounded-lg border border-[#DDE6DE] bg-[#FBFCF9] py-2.5 pl-9 pr-8 text-xs font-extrabold text-[#36574E] outline-none focus:border-[#0F5948]">
-            {categories.map((category) => <option key={category}>{category}</option>)}
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#829087]" />
+        <div className="bg-slate-900 rounded-xl p-4 text-white space-y-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Radar comercial · 30 dias</p>
+            <p className="text-xs text-slate-500">Indicadores para decidir compra, venda e cobrança.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><p className="text-[10px] text-slate-400">Faturado</p><p className="text-lg font-semibold text-emerald-400">{brl(strategic.soldValue)}</p></div>
+            <div><p className="text-[10px] text-slate-400">A receber</p><p className="text-lg font-semibold text-amber-300">{brl(strategic.openReceivable)}</p></div>
+            <div><p className="text-[10px] text-slate-400">Volume vendido</p><p className="text-lg font-semibold">{tons(strategic.soldTons)}</p></div>
+            <div><p className="text-[10px] text-slate-400">Ticket médio</p><p className="text-lg font-semibold">{brl(strategic.averageTicket)}</p></div>
+          </div>
+          <button type="button" onClick={() => onNavigate?.('orders')} className="w-full text-left text-xs font-semibold text-blue-200 border-t border-white/10 pt-3">Conferir vendas e recebimentos <ArrowRight size={12} className="inline" /></button>
         </div>
-        <button type="button" className="cf-primary-button sm:w-auto" onClick={() => onNavigate?.('inventory')}><ShoppingCart size={16} /> Novo produto</button>
       </section>
-
-      <p className="sr-only">{receivedTotal > 0 ? `Total recebido: ${brl(receivedTotal)}.` : ''} {todayTransactions.length} lançamentos financeiros hoje. {accounts.length} contas cadastradas.</p>
+      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-2"><Wallet size={13} /> Caixa do dia</p>
+          <button type="button" onClick={() => onNavigate?.('daily')} className="text-[11px] font-semibold text-blue-700">Ver fluxo</button>
+        </div>
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-slate-400 uppercase text-[10px]">
+            <tr>
+              <th className="text-left font-semibold px-4 py-2">Descrição</th>
+              <th className="text-right font-semibold px-4 py-2">Entradas</th>
+              <th className="text-right font-semibold px-4 py-2">Saídas</th>
+              <th className="text-right font-semibold px-4 py-2">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-slate-100">
+              <td className="px-4 py-2.5 text-slate-600">Movimento de hoje ({dayTx.length} lançamentos)</td>
+              <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{brl(entradas)}</td>
+              <td className="px-4 py-2.5 text-right text-rose-600 font-medium">{brl(saidas)}</td>
+              <td className="px-4 py-2.5 text-right font-semibold">{brl(entradas - saidas)}</td>
+            </tr>
+            <tr className="border-t border-slate-100 bg-slate-50/60">
+              <td className="px-4 py-2.5 font-semibold text-slate-700"><Scale size={12} className="inline mr-1" /> Posição estimada nas contas</td>
+              <td /><td />
+              <td className={`px-4 py-2.5 text-right font-semibold ${saldoDia >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{brl(saldoDia)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 };
