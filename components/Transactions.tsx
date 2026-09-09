@@ -34,6 +34,7 @@ interface TransactionsProps {
   onAddTransaction: (transaction: Omit<Transaction, 'id' | 'companyId'>) => Promise<void> | void;
   onUpdateTransaction: (transaction: Transaction) => Promise<void> | void;
   onDeleteTransaction: (id: string) => Promise<void> | void;
+  onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
 }
 
 export const Transactions: React.FC<TransactionsProps> = ({
@@ -45,7 +46,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
   company,
   onAddTransaction,
   onUpdateTransaction,
-  onDeleteTransaction
+  onDeleteTransaction,
+  onVerifyDeletionPassword
 }) => {
   // Modais de Controle
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -137,17 +139,26 @@ export const Transactions: React.FC<TransactionsProps> = ({
     startDate !== '' || 
     endDate !== '';
 
+  const actualCashAmount = (transaction: Transaction) => {
+    if (transaction.payments && transaction.payments.length > 0) {
+      return transaction.payments
+        .filter(payment => !payment.isDiscountOrDeduction)
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    }
+    return Number(transaction.paidAmount || (transaction.status === TransactionStatus.PAGO ? transaction.amount : 0));
+  };
+
   // Cálculos Globais de Métricas
   const totalInflows = useMemo(() => {
     return transactions
       .filter(t => t.type === TransactionType.SALE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL))
-      .reduce((acc, t) => acc + (t.paidAmount || (t.status === TransactionStatus.PAGO ? t.amount : 0)), 0);
+      .reduce((acc, t) => acc + actualCashAmount(t), 0);
   }, [transactions]);
 
   const totalOutflows = useMemo(() => {
     return transactions
-      .filter(t => t.type === TransactionType.EXPENSE && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL))
-      .reduce((acc, t) => acc + (t.paidAmount || (t.status === TransactionStatus.PAGO ? t.amount : 0)), 0);
+      .filter(t => (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) && (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL))
+      .reduce((acc, t) => acc + actualCashAmount(t), 0);
   }, [transactions]);
 
   const netBalance = totalInflows - totalOutflows;
@@ -162,7 +173,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       if (activeTab === 'INFLOW' && t.type !== TransactionType.SALE) return false;
-      if (activeTab === 'OUTFLOW' && t.type !== TransactionType.EXPENSE) return false;
+      if (activeTab === 'OUTFLOW' && t.type !== TransactionType.EXPENSE && t.type !== TransactionType.PURCHASE) return false;
       if (activeTab === 'PENDING' && t.status !== TransactionStatus.PENDENTE && t.status !== TransactionStatus.PARCIAL && t.status !== TransactionStatus.ATRASADO) return false;
 
       if (startDate && t.date < startDate) return false;
@@ -729,18 +740,18 @@ export const Transactions: React.FC<TransactionsProps> = ({
         />
       )}
 
-      {/* Modal de Exclusão Segura com Senha de 4 dígitos */}
+      {/* Modal de Exclusão Segura */}
       <DeletionPasswordModal
         isOpen={isDeleteModalOpen}
         title="Excluir Lançamento Financeiro"
-        description="Esta ação removerá o lançamento do banco de dados e recalculará os saldos das contas vinculadas. Digite a senha (1234) para autorizar:"
+        description="Esta ação removerá o lançamento do banco de dados e recalculará os saldos das contas vinculadas. Digite sua senha de acesso para autorizar:"
         itemDescription={txToDelete ? `${txToDelete.description} (${formatBRL(txToDelete.amount)})` : undefined}
         onConfirm={handleConfirmDelete}
         onClose={() => {
           setIsDeleteModalOpen(false);
           setTxToDelete(null);
         }}
-        correctPassword="1234"
+        onVerifyPassword={onVerifyDeletionPassword}
       />
 
     </div>

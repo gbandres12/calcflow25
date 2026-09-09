@@ -40,6 +40,7 @@ interface SalesOrdersProps {
   onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
   onUpdateOrder: (order: SaleOrder) => void;
   onDeleteOrder: (orderId: string) => void;
+  onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
   onFinalizeOrder: (orderId: string, payments: SalePayment[]) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
   mode?: 'orders' | 'quotes';
@@ -98,6 +99,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onAddCustomer,
   onUpdateOrder,
   onDeleteOrder,
+  onVerifyDeletionPassword,
   onFinalizeOrder,
   onPaymentReceived,
   mode = 'orders'
@@ -1969,19 +1971,21 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         />
       )}
 
-      {/* Confirmação de Exclusão com Senha de 4 dígitos (1234) */}
+      {/* Confirmação de Exclusão com a senha do usuário atual */}
       {selectedOrderToDelete && (
         <DeletionPasswordModal
           isOpen={isDeleteModalOpen}
-          title="Excluir Pedido / Orçamento"
-          description={`Tem certeza que deseja excluir o documento REF: ${selectedOrderToDelete.reference}? Esta ação removerá os lançamentos financeiros vinculados.`}
-          itemDescription={`Pedido REF: ${selectedOrderToDelete.reference}`}
+          title={selectedOrderToDelete.status === OrderStatus.FINALIZED ? 'Excluir Venda' : 'Excluir Pedido / Orçamento'}
+          description={selectedOrderToDelete.status === OrderStatus.FINALIZED
+            ? `A venda REF: ${selectedOrderToDelete.reference} será excluída. Os recebimentos financeiros vinculados serão removidos e o estoque será devolvido.`
+            : `O documento REF: ${selectedOrderToDelete.reference} será excluído. Digite sua senha de acesso para confirmar.`}
+          itemDescription={`${selectedOrderToDelete.status === OrderStatus.FINALIZED ? 'Venda' : 'Documento'} REF: ${selectedOrderToDelete.reference}`}
           onConfirm={handleConfirmDeletion}
           onClose={() => {
             setIsDeleteModalOpen(false);
             setSelectedOrderToDelete(null);
           }}
-          correctPassword="1234"
+          onVerifyPassword={onVerifyDeletionPassword}
         />
       )}
 

@@ -109,6 +109,16 @@ const App: React.FC = () => {
   // ID isolado da empresa / tenant SaaS atual
   const activeCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
 
+  const verifyCurrentUserPassword = async (password: string) => {
+    if (!currentUser?.email || !password) return false;
+    try {
+      await userService.authenticate(currentUser.email, password);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const persistCloud = (tableName: string, record: any) => {
     db.upsert(tableName, activeCompanyId, record).catch((err) => {
       console.warn('[PERSISTÊNCIA] Aviso ao sincronizar com nuvem (dado salvo localmente com segurança):', tableName, err);
@@ -320,7 +330,13 @@ const App: React.FC = () => {
 
   // Transações Financeiras
   const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
-    const tx: Transaction = { ...newTx, id: newId('tx'), companyId: activeCompanyId };
+    const id = newId('tx');
+    const tx: Transaction = {
+      ...newTx,
+      id,
+      companyId: activeCompanyId,
+      payments: (newTx.payments || []).map(payment => ({ ...payment, transactionId: id }))
+    };
     setTransactions(prev => [tx, ...prev]);
     persistCloud('transactions', tx);
   };
@@ -453,7 +469,22 @@ const App: React.FC = () => {
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
     order.items.forEach(item => processStockChange(item.productId, -item.quantity));
-    (payments || []).forEach(payment => {
+    const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
+    const financialSchedule: SalePayment[] = [
+      ...(payments || []),
+      ...(balanceWithoutSchedule > 0.01 ? [{
+        id: newId('pay'),
+        amount: balanceWithoutSchedule,
+        paidAmount: 0,
+        date: order.date,
+        status: TransactionStatus.PENDENTE,
+        accountId: accounts[0]?.id || 'acc-1',
+        description: 'Saldo em aberto da venda'
+      }] : [])
+    ];
+
+    financialSchedule.forEach(payment => {
       let actualPaid = 0;
       if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
         actualPaid = payment.amount;
@@ -501,7 +532,7 @@ const App: React.FC = () => {
       });
       return updatedList;
     });
-    const finalizedOrder = { ...order, payments, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
+    const finalizedOrder = { ...order, payments: financialSchedule, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
     setOrders(prev => {
       const exists = prev.some(o => o.id === order.id);
       return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
@@ -513,27 +544,34 @@ const App: React.FC = () => {
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
     setTransactions(prev => {
       const orderTxs = prev.filter(t => t.orderId === (receipt.orderId || order.id) && t.type === TransactionType.SALE);
-      const allocated = orderTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
       const alreadyReceipt = orderTxs.some(t => t.receiptId === receipt.id);
       if (alreadyReceipt) return prev;
 
-      const openTx = orderTxs.find(t => Number(t.paidAmount || 0) < Number(t.amount || 0) - 0.01);
+      let remainingReceipt = Number(receipt.amount || 0);
+      const updatedTransactions = prev.map(transaction => {
+        if (transaction.orderId !== (receipt.orderId || order.id) || transaction.type !== TransactionType.SALE || remainingReceipt <= 0.01) {
+          return transaction;
+        }
 
-      if (allocated >= order.total - 0.01) {
-        if (!openTx) return prev;
-        const paid = Math.min(openTx.amount, Number(openTx.paidAmount || 0) + receipt.amount);
+        const outstanding = Math.max(0, Number(transaction.amount || 0) - Number(transaction.paidAmount || 0));
+        if (outstanding <= 0.01) return transaction;
+
+        const appliedAmount = Math.min(outstanding, remainingReceipt);
+        remainingReceipt -= appliedAmount;
+        const paidAmount = Number(transaction.paidAmount || 0) + appliedAmount;
         const updated: Transaction = {
-          ...openTx,
-          paidAmount: paid,
-          status: paid >= openTx.amount - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
+          ...transaction,
+          paidAmount,
+          status: paidAmount >= Number(transaction.amount || 0) - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
           receiptId: receipt.id,
-          paymentMethod: receipt.paymentMethod || openTx.paymentMethod,
+          paymentDate: receipt.date,
+          paymentMethod: receipt.paymentMethod || transaction.paymentMethod,
           payments: [
-            ...(openTx.payments || []),
+            ...(transaction.payments || []),
             {
               id: newId('pmt'),
-              transactionId: openTx.id,
-              amount: receipt.amount,
+              transactionId: transaction.id,
+              amount: appliedAmount,
               paymentDate: receipt.date,
               accountId: accId,
               paymentMethod: receipt.paymentMethod || 'PIX',
@@ -542,8 +580,10 @@ const App: React.FC = () => {
           ]
         };
         persistCloud('transactions', updated);
-        return prev.map(t => t.id === openTx.id ? updated : t);
-      }
+        return updated;
+      });
+
+      if (remainingReceipt <= 0.01) return updatedTransactions;
 
       const tx: Transaction = {
         id: newId('tx'),
@@ -554,8 +594,8 @@ const App: React.FC = () => {
         status: TransactionStatus.CONFIRMADO,
         description: `${receipt.description} - ${receipt.customerName}`,
         category: 'Venda Calcário Moído Granel',
-        amount: receipt.amount,
-        paidAmount: receipt.amount,
+        amount: remainingReceipt,
+        paidAmount: remainingReceipt,
         customerId: receipt.customerId,
         orderId: receipt.orderId || order.id,
         receiptId: receipt.id,
@@ -565,7 +605,7 @@ const App: React.FC = () => {
         payments: [{
           id: newId('pmt'),
           transactionId: '',
-          amount: receipt.amount,
+          amount: remainingReceipt,
           paymentDate: receipt.date,
           accountId: accId,
           paymentMethod: receipt.paymentMethod || 'PIX',
@@ -574,7 +614,7 @@ const App: React.FC = () => {
       };
       tx.payments![0].transactionId = tx.id;
       persistCloud('transactions', tx);
-      return [tx, ...prev];
+      return [tx, ...updatedTransactions];
     });
   };
 
@@ -583,8 +623,24 @@ const App: React.FC = () => {
   };
 
   const handleDeleteOrder = (orderId: string) => {
+    const order = orders.find(item => item.id === orderId);
+    if (!order) return;
+
+    if (order.nfeStatus === 'autorizada') {
+      window.alert('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.');
+      return;
+    }
+
+    if (order.status === OrderStatus.FINALIZED) {
+      order.items.forEach(item => processStockChange(item.productId, item.quantity));
+      const linkedTransactions = transactions.filter(transaction => transaction.orderId === orderId);
+      setTransactions(prev => prev.filter(transaction => transaction.orderId !== orderId));
+      linkedTransactions.forEach(transaction => {
+        db.delete('transactions', activeCompanyId, transaction.id).catch(() => {});
+      });
+    }
     setOrders(prev => prev.filter(o => o.id !== orderId));
-    db.delete('sales_orders', activeCompanyId, orderId);
+    db.delete('sales_orders', activeCompanyId, orderId).catch(() => {});
   };
 
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
@@ -791,6 +847,7 @@ const App: React.FC = () => {
               onAddCustomer={handleAddCustomer}
               onUpdateOrder={handleUpdateOrder} 
               onDeleteOrder={handleDeleteOrder}
+              onVerifyDeletionPassword={verifyCurrentUserPassword}
               onFinalizeOrder={(oid, p) => {
                 const order = orders.find(o => o.id === oid);
                 if (order) finalizeSale(order, p);
@@ -820,17 +877,40 @@ const App: React.FC = () => {
             <Inventory 
               inventory={inventory} 
               customers={customers} 
-              onPurchase={(q, c) => { 
+              onPurchase={(q, c, details) => {
+                const total = q * c;
+                const paidAmount = Math.min(total, Number(details.initialPayment || 0));
+                const status = paidAmount >= total - 0.01
+                  ? TransactionStatus.PAGO
+                  : paidAmount > 0
+                    ? TransactionStatus.PARCIAL
+                    : TransactionStatus.PENDENTE;
+                const date = new Date().toISOString().split('T')[0];
                 processStockChange('britado', q); 
                 handleAddTransaction({ 
                   accountId: accounts[0]?.id || 'acc-1', 
-                  date: new Date().toISOString().split('T')[0], 
+                  costCenterId: 'cc2',
+                  date,
+                  dueDate: details.dueDate,
+                  paymentDate: paidAmount > 0 ? date : undefined,
                   type: TransactionType.PURCHASE, 
-                  status: TransactionStatus.CONFIRMADO, 
+                  status,
                   description: `Compra Minério Bruto / Brita (${q}T)`, 
                   category: 'Compra de Brita / Minério Bruto', 
-                  amount: q * c, 
-                  paidAmount: q * c 
+                  amount: total,
+                  paidAmount,
+                  contactName: details.supplier,
+                  paymentMethod: details.paymentMethod,
+                  notes: details.notes,
+                  payments: paidAmount > 0 ? [{
+                    id: newId('pmt'),
+                    transactionId: '',
+                    amount: paidAmount,
+                    paymentDate: date,
+                    accountId: accounts[0]?.id || 'acc-1',
+                    paymentMethod: details.paymentMethod,
+                    notes: 'Entrada registrada na compra'
+                  }] : []
                 }); 
               }} 
               onSale={(q, p, c) => handleAddOrder({ 
@@ -865,6 +945,7 @@ const App: React.FC = () => {
               transactions={transactions} 
               onUpdateAccount={handleUpdateAccount} 
               onAddTransaction={handleAddTransaction} 
+              onVerifyPassword={verifyCurrentUserPassword}
             />
           )}
           {currentView === 'transactions' && (
@@ -878,6 +959,7 @@ const App: React.FC = () => {
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 
+              onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
           {currentView === 'customers' && (
@@ -907,6 +989,7 @@ const App: React.FC = () => {
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 
+              onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
           {currentView === 'users' && (

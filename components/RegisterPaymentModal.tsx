@@ -49,6 +49,10 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       alert('Informe um valor de pagamento maior que zero.');
       return;
     }
+    if (amountNum > currentDebt + 0.01) {
+      alert(`O valor informado é maior que o saldo em aberto de ${formatBRL(currentDebt)}.`);
+      return;
+    }
 
     const receiptId = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const selectedAccount = accounts.find(a => a.id === accountId);
@@ -159,6 +163,8 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               required
               type="number"
               step="0.01"
+              min="0.01"
+              max={currentDebt}
               value={amount}
               onChange={e => setAmount(e.target.value)}
               className="w-full p-4 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-2xl focus:border-emerald-500"

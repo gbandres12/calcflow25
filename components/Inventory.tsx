@@ -29,7 +29,13 @@ import {
 interface InventoryProps {
   inventory: InventoryItem[];
   customers: Customer[];
-  onPurchase: (qty: number, cost: number) => void;
+  onPurchase: (qty: number, cost: number, details: {
+    supplier: string;
+    initialPayment: number;
+    dueDate?: string;
+    paymentMethod: string;
+    notes?: string;
+  }) => void;
   onSale: (qty: number, price: number, customerId: string) => void;
   onAddProduct: (item: Omit<InventoryItem, 'id' | 'companyId'> & { id?: string }) => void;
   onUpdateProduct?: (item: InventoryItem) => void;
@@ -90,6 +96,11 @@ export const Inventory: React.FC<InventoryProps> = ({
   // Purchase/Sale Form States
   const [qty, setQty] = useState('');
   const [val, setVal] = useState('');
+  const [purchaseSupplier, setPurchaseSupplier] = useState('');
+  const [purchaseInitialPayment, setPurchaseInitialPayment] = useState('0');
+  const [purchaseDueDate, setPurchaseDueDate] = useState('');
+  const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('PIX');
+  const [purchaseNotes, setPurchaseNotes] = useState('');
 
   // Searchable Customer State (for sale modal)
   const [customerId, setCustomerId] = useState('');
@@ -223,13 +234,36 @@ export const Inventory: React.FC<InventoryProps> = ({
     setEditingItem(null);
     setQty('');
     setVal('');
+    setPurchaseSupplier('');
+    setPurchaseInitialPayment('0');
+    setPurchaseDueDate('');
+    setPurchasePaymentMethod('PIX');
+    setPurchaseNotes('');
     setCustomerId('');
     setCustomerSearch('');
   };
 
   const submitPurchase = (e: React.FormEvent) => {
     e.preventDefault();
-    onPurchase(parseFloat(qty), parseFloat(val));
+    const quantity = parseFloat(qty);
+    const unitCost = parseFloat(val);
+    const total = quantity * unitCost;
+    const initialPayment = parseFloat(purchaseInitialPayment || '0');
+    if (!quantity || !unitCost || quantity <= 0 || unitCost <= 0) {
+      alert('Informe uma quantidade e um custo unitário válidos.');
+      return;
+    }
+    if (initialPayment < 0 || initialPayment > total + 0.01) {
+      alert('A entrada não pode ser maior que o valor total da compra.');
+      return;
+    }
+    onPurchase(quantity, unitCost, {
+      supplier: purchaseSupplier.trim() || 'Fornecedor não informado',
+      initialPayment,
+      dueDate: purchaseDueDate || undefined,
+      paymentMethod: purchasePaymentMethod,
+      notes: purchaseNotes.trim() || undefined
+    });
     handleClose();
   };
 
@@ -970,7 +1004,42 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Custo Unitário (R$ por Ton)</label>
                 <input required type="number" step="0.01" value={val} onChange={e => setVal(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none text-2xl font-black" placeholder="0.00" />
               </div>
-              <button type="submit" className="w-full py-5 bg-slate-900 text-white text-xs font-black uppercase rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-100">Confirmar Entrada</button>
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-xs">
+                <div className="flex justify-between gap-4 font-black text-slate-700">
+                  <span>Valor total da compra</span>
+                  <span className="text-amber-700">R$ {((parseFloat(qty) || 0) * (parseFloat(val) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <p className="mt-1 text-[10px] font-medium text-slate-500">O saldo não pago ficará em aberto no Financeiro para baixas parciais.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fornecedor</label>
+                <input type="text" value={purchaseSupplier} onChange={e => setPurchaseSupplier(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm" placeholder="Ex.: Pedreira São José" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada paga agora (R$)</label>
+                  <input type="number" min="0" step="0.01" value={purchaseInitialPayment} onChange={e => setPurchaseInitialPayment(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-black text-lg" placeholder="0,00" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento do saldo</label>
+                  <input type="date" value={purchaseDueDate} onChange={e => setPurchaseDueDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma da entrada</label>
+                <select value={purchasePaymentMethod} onChange={e => setPurchasePaymentMethod(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm">
+                  <option value="PIX">PIX</option>
+                  <option value="Transferência Bancária">Transferência bancária</option>
+                  <option value="Boleto Bancário">Boleto bancário</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações</label>
+                <input type="text" value={purchaseNotes} onChange={e => setPurchaseNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-medium text-sm" placeholder="NF, romaneio ou acordo de pagamento" />
+              </div>
+              <button type="submit" className="w-full py-5 bg-slate-900 text-white text-xs font-black uppercase rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-100">Confirmar Compra e Lançar Saldo</button>
             </form>
           </div>
         </div>

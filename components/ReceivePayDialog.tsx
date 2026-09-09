@@ -51,7 +51,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (numPayAmount <= 0) return;
+    if (numPayAmount <= 0 || numPayAmount > remainingBalance + 0.01) return;
 
     setSaving(true);
     try {
@@ -187,7 +187,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
                 type="number"
                 step="0.01"
                 min="0.01"
-                max={remainingBalance * 1.5}
+                max={remainingBalance}
                 value={payAmountStr}
                 onChange={(e) => setPayAmountStr(e.target.value)}
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-amber-500 focus:bg-white font-black text-lg transition-all"

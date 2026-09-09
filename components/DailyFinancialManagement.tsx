@@ -26,7 +26,6 @@ import {
   CheckCircle2, 
   Clock, 
   FileText, 
-  ShieldAlert, 
   X, 
   Trash2, 
   Edit3, 
@@ -36,6 +35,7 @@ import {
   Check
 } from 'lucide-react';
 import { COMPANY_INFO, INFLOW_CATEGORIES, OUTFLOW_CATEGORIES, INITIAL_COST_CENTERS } from '../constants';
+import { DeletionPasswordModal } from './DeletionPasswordModal';
 
 interface DailyFinancialManagementProps {
   transactions: Transaction[];
@@ -47,6 +47,7 @@ interface DailyFinancialManagementProps {
   onUpdateTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
   onPrintReceipt?: (receipt: any) => void;
+  onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
 }
 
 export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> = ({
@@ -58,7 +59,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   onAddTransaction,
   onUpdateTransaction,
   onDeleteTransaction,
-  onPrintReceipt
+  onPrintReceipt,
+  onVerifyDeletionPassword
 }) => {
   // Format today's date YYYY-MM-DD
   const getTodayStr = () => {
@@ -77,8 +79,6 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [deleteError, setDeleteError] = useState('');
   const [viewReceiptTx, setViewReceiptTx] = useState<Transaction | null>(null);
 
   // Quick Entry Form
@@ -320,18 +320,12 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     setIsQuickEntryOpen(true);
   };
 
-  // Delete Transaction with Password 1234
+  // Exclusão protegida pela senha do usuário atual
   const confirmDelete = () => {
-    if (deletePassword !== '1234' && deletePassword !== '12345' && deletePassword !== 'admin') {
-      setDeleteError('Senha de segurança incorreta (Padrão: 1234)');
-      return;
-    }
     if (transactionToDelete) {
       onDeleteTransaction(transactionToDelete);
       setIsDeleteModalOpen(false);
       setTransactionToDelete(null);
-      setDeletePassword('');
-      setDeleteError('');
     }
   };
 
@@ -919,58 +913,18 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         </div>
       )}
 
-      {/* Modal de Exclusão com Senha 12345 */}
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[160] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95">
-            <div className="flex items-center gap-3 text-rose-600 mb-3">
-              <div className="p-2.5 bg-rose-50 rounded-xl">
-                <ShieldAlert size={22} />
-              </div>
-              <h3 className="font-black text-slate-900">Excluir Lançamento</h3>
-            </div>
-            <p className="text-xs text-slate-500 font-medium mb-4">
-              Para estornar e excluir esta movimentação financeira, digite a senha de segurança de auditoria (Padrão: <strong className="text-slate-800">1234</strong>):
-            </p>
-
-            <input 
-              type="password"
-              value={deletePassword}
-              onChange={(e) => {
-                setDeletePassword(e.target.value);
-                setDeleteError('');
-              }}
-              placeholder="Digite 1234"
-              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-bold text-sm text-center outline-none focus:border-rose-600 mb-2"
-            />
-
-            {deleteError && (
-              <p className="text-[11px] font-bold text-rose-600 mb-3">{deleteError}</p>
-            )}
-
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setTransactionToDelete(null);
-                  setDeletePassword('');
-                }}
-                className="w-1/2 py-2.5 border border-slate-300 font-bold text-xs rounded-xl text-slate-600 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="w-1/2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
-              >
-                Excluir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeletionPasswordModal
+        isOpen={isDeleteModalOpen}
+        title="Excluir Lançamento Financeiro"
+        description="Para estornar e excluir esta movimentação financeira, confirme com sua senha de acesso."
+        itemDescription={transactions.find(t => t.id === transactionToDelete)?.description}
+        onConfirm={confirmDelete}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setTransactionToDelete(null);
+        }}
+        onVerifyPassword={onVerifyDeletionPassword}
+      />
 
       {/* Modal / Visualização de Recibo */}
       {viewReceiptTx && (

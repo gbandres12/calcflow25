@@ -11,9 +11,10 @@ interface AccountsProps {
   transactions: Transaction[];
   onUpdateAccount: (updatedAccount: FinancialAccount) => void;
   onAddTransaction: (tx: Omit<Transaction, 'id' | 'companyId'>) => void;
+  onVerifyPassword?: (password: string) => boolean | Promise<boolean>;
 }
 
-const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, onUpdateAccount, onAddTransaction }) => {
+const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, onUpdateAccount, onAddTransaction, onVerifyPassword }) => {
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   const [reconcilingAccount, setReconcilingAccount] = useState<FinancialAccount | null>(null);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -23,28 +24,38 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
   const [error, setError] = useState('');
 
   const calculateBalances = (account: FinancialAccount) => {
+    const actualCashAmount = (transaction: Transaction) => {
+      if (transaction.payments && transaction.payments.length > 0) {
+        return transaction.payments
+          .filter(payment => !payment.isDiscountOrDeduction)
+          .filter(payment => (payment.accountId || transaction.accountId) === account.id)
+          .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      }
+      return Number(transaction.paidAmount || 0);
+    };
+
     const accTransactions = transactions.filter(t => 
       t.accountId === account.id && 
-      (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO)
+      (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL)
     );
 
     const totalIn = accTransactions
       .filter(t => t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + t.paidAmount, 0);
+      .reduce((sum, t) => sum + actualCashAmount(t), 0);
 
     const totalOut = accTransactions
       .filter(t => t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + t.paidAmount, 0);
+      .reduce((sum, t) => sum + actualCashAmount(t), 0);
 
     const currentBalance = account.initialBalance + totalIn - totalOut;
 
     const pendingIn = transactions
-      .filter(t => t.accountId === account.id && t.status === TransactionStatus.PENDENTE && t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type === TransactionType.SALE)
+      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
 
     const pendingOut = transactions
-      .filter(t => t.accountId === account.id && t.status === TransactionStatus.PENDENTE && t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type !== TransactionType.SALE)
+      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
 
     return { currentBalance, totalIn, totalOut, projected: currentBalance + pendingIn - pendingOut };
   };
@@ -97,8 +108,9 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
     setReconcilingAccount(null);
   };
 
-  const confirmBalanceChange = () => {
-    if (password === 'admin123') {
+  const confirmBalanceChange = async () => {
+    const isValid = onVerifyPassword ? await onVerifyPassword(password) : false;
+    if (isValid) {
       if (tempFormData) {
         onUpdateAccount(tempFormData);
         setEditingAccount(null);
@@ -107,7 +119,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
         setError('');
       }
     } else {
-      setError('Senha de supervisor incorreta.');
+      setError('Senha incorreta.');
     }
   };
 
@@ -308,7 +320,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
             </div>
             <div>
               <h3 className="text-lg font-black text-slate-800">Acesso Restrito</h3>
-              <p className="text-xs font-medium text-slate-500 mt-2">Senha de supervisor necessária (Dica: admin123)</p>
+              <p className="text-xs font-medium text-slate-500 mt-2">Confirme com sua senha de acesso para salvar a alteração.</p>
             </div>
             <input 
               autoFocus

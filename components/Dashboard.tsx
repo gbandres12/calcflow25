@@ -21,6 +21,7 @@ import {
   OrderStatus,
   SaleOrder,
   Transaction,
+  TransactionStatus,
   View
 } from '../types';
 
@@ -61,7 +62,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   const stockTotal = inventory.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const stockValue = inventory.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
   const soldVolume = orders.reduce((sum, order) => sum + (order.items || []).reduce((subtotal, item) => subtotal + Number(item.quantity || 0), 0), 0);
-  const receivedTotal = orders.reduce((sum, order) => sum + (order.payments || []).reduce((subtotal, payment) => subtotal + Number(payment.paidAmount || payment.amount || 0), 0), 0);
+  const receivedTotal = orders.reduce((sum, order) => {
+    const receiptsTotal = (order.receipts || []).reduce((subtotal, receipt) => subtotal + Number(receipt.amount || 0), 0);
+    const scheduledTotal = (order.payments || []).reduce((subtotal, payment) => {
+      const paid = payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO
+        ? payment.amount
+        : payment.paidAmount;
+      return subtotal + Number(paid || 0);
+    }, 0);
+    return sum + Math.max(receiptsTotal, scheduledTotal);
+  }, 0);
   const issuedInvoices = orders.filter((order) => order.nfeStatus === 'autorizada').length;
   const pendingInvoices = orders.filter((order) => !order.nfeStatus || order.nfeStatus === 'nao_emitida' || order.nfeStatus === 'processando').length;
   const todayTransactions = transactions.filter((transaction) => transaction.date?.slice(0, 10) === new Date().toISOString().slice(0, 10));

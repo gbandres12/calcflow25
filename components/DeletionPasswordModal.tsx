@@ -6,33 +6,45 @@ interface DeletionPasswordModalProps {
   title?: string;
   description?: string;
   itemDescription?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onClose: () => void;
   correctPassword?: string;
+  onVerifyPassword?: (password: string) => boolean | Promise<boolean>;
 }
 
 export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
   isOpen,
   title = 'Confirmação de Exclusão Segura',
-  description = 'Esta operação é irreversível. Digite a senha de segurança (1234) para autorizar a exclusão permanente:',
+  description = 'Esta operação é irreversível. Digite sua senha de acesso para autorizar a exclusão permanente:',
   itemDescription,
   onConfirm,
   onClose,
-  correctPassword = '1234'
+  correctPassword,
+  onVerifyPassword
 }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === correctPassword || password === '1234' || password === '12345' || password === 'admin') {
+    setIsVerifying(true);
+    try {
+      const isValid = onVerifyPassword
+        ? await onVerifyPassword(password)
+        : Boolean(correctPassword) && password === correctPassword;
+
+      if (isValid) {
       setError('');
       setPassword('');
-      onConfirm();
-    } else {
-      setError('Senha incorreta! Digite a senha de segurança (Padrão: 1234)');
+        await onConfirm();
+      } else {
+        setError('Senha incorreta. Tente novamente.');
+      }
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -73,13 +85,12 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-              Senha de Segurança (1234)
+              Senha de acesso
             </label>
             <div className="relative">
               <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="password"
-                maxLength={10}
                 required
                 autoFocus
                 value={password}
@@ -87,7 +98,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
                   setPassword(e.target.value);
                   setError('');
                 }}
-                placeholder="Ex: 1234"
+                placeholder="Digite sua senha"
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-center text-lg tracking-widest font-black outline-none focus:border-rose-500 focus:bg-white transition-all"
               />
             </div>
@@ -96,9 +107,6 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
                 {error}
               </p>
             )}
-            <p className="text-[10px] text-slate-400 mt-1 italic text-center">
-              Dica: a senha mestre padrão é <span className="font-mono font-bold text-slate-600">1234</span>
-            </p>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -111,9 +119,10 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
             </button>
             <button
               type="submit"
+              disabled={isVerifying}
               className="flex-1 py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-rose-100 active:scale-95"
             >
-              Confirmar Exclusão
+              {isVerifying ? 'Validando...' : 'Confirmar Exclusão'}
             </button>
           </div>
         </form>
