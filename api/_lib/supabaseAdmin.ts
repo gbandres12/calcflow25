@@ -2,10 +2,29 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let cached: SupabaseClient | null | undefined;
 
+export function getAdminSupabaseConfigError(): string | null {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const key = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    ''
+  ).trim();
+
+  if (!url) return 'Configure SUPABASE_URL ou VITE_SUPABASE_URL na Vercel.';
+  if (!key) return 'Configure SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY ou SUPABASE_SERVICE_KEY na Vercel.';
+  return null;
+}
+
 export function getAdminSupabase(): SupabaseClient | null {
   if (cached !== undefined) return cached;
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const key = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    ''
+  ).trim();
   if (!url || !key) {
     cached = null;
     return cached;
