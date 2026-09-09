@@ -1,15 +1,9 @@
-
-import React, { useEffect, useState } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell 
-} from 'recharts';
-import { Transaction, InventoryItem, Customer, TransactionType, View, User, UserRole, SaleOrder, FinancialAccount, OrderStatus } from '../types';
-import { getBusinessInsights } from '../services/geminiService';
-import { 
-  Brain, TrendingUp, TrendingDown, DollarSign, Package, AlertCircle, 
-  ZapOff, Zap, UserPlus, ShoppingCart, Factory, ChevronRight, Truck, Boxes, Scale, FileText
-} from 'lucide-react';
+import React, { useMemo } from 'react';
+import {
+  Transaction, InventoryItem, Customer, TransactionType, View, User,
+  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, TransferStatus
+} from '../types';
+import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { OnboardingChecklist } from './OnboardingChecklist';
 
 interface DashboardProps {
@@ -18,287 +12,169 @@ interface DashboardProps {
   customers: Customer[];
   orders?: SaleOrder[];
   accounts?: FinancialAccount[];
+  transfers?: TransferShipment[];
   user?: User | null;
   onNavigate?: (view: View) => void;
   onOpenOnboardingModal?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ 
-  transactions, 
-  inventory, 
-  customers, 
-  orders = [],
-  accounts = [],
-  user,
-  onNavigate,
-  onOpenOnboardingModal
+const brl = (n: number) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const tons = (n: number) => `${(Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const stockOf = (inventory: InventoryItem[], keys: string[]) =>
+  inventory.find((i) => keys.some((k) => (i.id || '').toLowerCase().includes(k) || (i.name || '').toLowerCase().includes(k)));
+
+const Dashboard: React.FC<DashboardProps> = ({
+  transactions, inventory, customers, orders = [], accounts = [], transfers = [],
+  user, onNavigate, onOpenOnboardingModal
 }) => {
-  const [insights, setInsights] = useState<string>('');
-  const [loadingInsights, setLoadingInsights] = useState(false);
-
-  const isFinancialAllowed = user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER;
-
-  useEffect(() => {
-    const fetchInsights = async () => {
-      setLoadingInsights(true);
-      try {
-        const res = await getBusinessInsights(
-          isFinancialAllowed ? transactions : [], 
-          inventory, 
-          customers
-        );
-        setInsights(typeof res === 'string' ? res : String(res));
-      } catch (e) {
-        setInsights("Recurso indisponível.");
-      }
-      setLoadingInsights(false);
-    };
-    fetchInsights();
-  }, [transactions, inventory, customers, isFinancialAllowed]);
-
-  const totalRevenue = transactions
-    .filter(t => t.type === TransactionType.SALE)
-    .reduce((acc, t) => acc + Number(t.amount), 0);
-
-  const totalExpenses = transactions
-    .filter(t => t.type === TransactionType.PURCHASE || t.type === TransactionType.EXPENSE)
-    .reduce((acc, t) => acc + Number(t.amount), 0);
-
-  const balance = totalRevenue - totalExpenses;
-
-  const totalTonnageSold = orders.reduce((acc, o) => {
-    const orderTons = (o.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    return acc + orderTons;
+  const today = todayISO();
+  const romaneios = useMemo(() => orders.filter((o) =>
+    o.status === OrderStatus.FINALIZED && (o.withdrawalStatus === 'aguardando' || o.withdrawalStatus === 'parcial' || !o.withdrawalStatus)
+  ).slice(0, 7), [orders]);
+  const remessas = useMemo(() =>
+    transfers.filter((t) => t.status === 'EM_TRANSITO').slice(0, 5), [transfers]);
+  const moido = stockOf(inventory, ['moido', 'moído', 'moido']);
+  const britado = stockOf(inventory, ['britado']);
+  const pendingNfe = orders.filter((o) =>
+    o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando')
+  ).slice(0, 5);
+  const rejectedNfe = orders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
+  const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);
+  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
+  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
+  const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
+  const saldoDia = saldoContas + dayTx.reduce((s, t) => {
+    const v = Number(t.paidAmount || t.amount || 0);
+    return t.type === TransactionType.SALE ? s + v : s - v;
   }, 0);
-  const totalOrdersCount = orders.length;
-  const pendingOrdersCount = orders.filter(o => o.status === OrderStatus.BUDGET || o.withdrawalStatus === 'aguardando' || o.withdrawalStatus === 'parcial').length;
-  const totalInventoryTons = inventory.reduce((acc, i) => acc + Number(i.quantity), 0);
-
-  const monthlyData = [
-    { name: 'Set', receita: 4000, despesa: 2400 },
-    { name: 'Out', receita: 3000, despesa: 1398 },
-    { name: 'Nov', receita: totalRevenue, despesa: totalExpenses },
-  ];
-
-  // Agrupamento operacional por produto para operadores/supervisores
-  const operationalProductData = inventory.map(item => ({
-    name: item.name.length > 14 ? item.name.slice(0, 14) + '...' : item.name,
-    toneladas: Number(item.quantity || 0),
-    minimo: Number(item.minStock || 0)
-  }));
-
-  const lowStockItems = inventory.filter(item => Number(item.quantity) <= Number(item.minStock));
-
-  const quickActions = isFinancialAllowed ? [
-    { id: 'users', label: 'Novo Usuário', icon: UserPlus, color: 'bg-purple-600', hover: 'hover:bg-purple-700' },
-    { id: 'orders', label: 'Nova Venda', icon: ShoppingCart, color: 'bg-emerald-600', hover: 'hover:bg-emerald-700' },
-    { id: 'daily', label: 'Mov. Diária', icon: DollarSign, color: 'bg-indigo-600', hover: 'hover:bg-indigo-700' },
-    { id: 'inventory', label: 'Ver Estoque', icon: Package, color: 'bg-slate-800', hover: 'hover:bg-slate-900' },
-  ] : [
-    { id: 'orders', label: 'Carregamento', icon: Truck, color: 'bg-purple-600', hover: 'hover:bg-purple-700' },
-    { id: 'yard', label: 'Pátio & Balança', icon: Boxes, color: 'bg-emerald-600', hover: 'hover:bg-emerald-700' },
-    { id: 'milling', label: 'Moagem Hoje', icon: Factory, color: 'bg-amber-500', hover: 'hover:bg-amber-600' },
-    { id: 'inventory', label: 'Ver Estoque', icon: Package, color: 'bg-slate-800', hover: 'hover:bg-slate-900' },
-  ];
+  const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
 
   return (
-    <div className="space-y-8">
-      {/* Widget de Onboarding e Primeiros Passos do SaaS */}
+    <div className="space-y-4">
       {user && (
-        <OnboardingChecklist 
-          user={user}
-          customers={customers}
-          orders={orders}
-          transactions={transactions}
-          accounts={accounts}
-          onNavigate={onNavigate}
-          onOpenOnboardingModal={onOpenOnboardingModal}
-        />
+        <OnboardingChecklist user={user} customers={customers} orders={orders} transactions={transactions} accounts={accounts} onNavigate={onNavigate} onOpenOnboardingModal={onOpenOnboardingModal} />
       )}
-
-      <header className="flex justify-between items-center">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-            {isFinancialAllowed ? 'Painel Executivo & Geral' : 'Painel Operacional & Pátio'}
-          </h2>
-          <p className="text-slate-500 text-sm font-medium">
-            {isFinancialAllowed 
-              ? 'Dados financeiros e produtivos sincronizados em tempo real'
-              : 'Visão de pesagem, carregamentos, estoque mineral e pátio em tempo real'}
-          </p>
+          <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Escritório operacional</h2>
+          <p className="text-xs text-slate-500">Fila de carga, estoque ao vivo e alerta fiscal.</p>
         </div>
-        <div className="bg-emerald-50 text-emerald-700 p-2 px-4 rounded-full border border-emerald-100 flex items-center gap-2 text-[10px] font-black uppercase">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-          Fluxo Operacional Ativo
-        </div>
+        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">Dados atualizados agora</span>
       </header>
-
-      {/* Atalhos Rápidos */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-           <Zap size={16} className="text-amber-500" />
-           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Atalhos Operacionais</h3>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-           {quickActions.map(action => (
-             <button 
-                key={action.id}
-                onClick={() => onNavigate?.(action.id as View)}
-                className={`flex items-center justify-between p-5 ${action.color} ${action.hover} text-white rounded-[2rem] transition-all shadow-lg shadow-slate-200 group overflow-hidden relative`}
-             >
-                <div className="flex flex-col items-start gap-1 z-10 text-left">
-                   <span className="text-[9px] font-black uppercase tracking-widest opacity-60">Ação Rápida</span>
-                   <span className="text-sm font-black">{action.label}</span>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fila operacional</p>
+            <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{romaneios.length + remessas.length}</span>
+          </div>
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Romaneios a carregar</p>
+            {romaneios.length === 0 && <p className="text-xs text-slate-400 pb-3">Nenhum romaneio na fila.</p>}
+            {romaneios.map((o) => (
+              <button key={o.id} type="button" onClick={() => onNavigate?.('orders')} className="w-full text-left py-2 border-b border-slate-50">
+                <div className="flex justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-700 truncate">{o.reference}</span>
+                  <span className="text-slate-400">{(o.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0).toFixed(1)} t</span>
                 </div>
-                <action.icon size={28} className="opacity-20 group-hover:scale-125 transition-transform group-hover:opacity-40" />
-                <div className="absolute -right-4 -bottom-4 bg-white/10 w-16 h-16 rounded-full group-hover:scale-150 transition-transform"></div>
-             </button>
-           ))}
-        </div>
-      </section>
-
-      {/* Cards de Métricas */}
-      {isFinancialAllowed ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-emerald-200 transition-all group">
-            <div className="flex items-center gap-3 text-emerald-600 mb-2">
-              <DollarSign size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Receita Bruta</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">R$ {totalRevenue.toLocaleString('pt-BR')}</p>
+                <p className="text-[11px] text-slate-500 truncate">{custName(o.customerId)}</p>
+              </button>
+            ))}
           </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-rose-200 transition-all group">
-            <div className="flex items-center gap-3 text-rose-600 mb-2">
-              <TrendingDown size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Total Despesas</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">R$ {totalExpenses.toLocaleString('pt-BR')}</p>
+          <div className="px-4 pt-3 pb-3 border-t border-slate-100">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Transferências aguardando fazenda</p>
+            {remessas.length === 0 && <p className="text-xs text-slate-400">Nenhuma remessa em trânsito.</p>}
+            {remessas.map((t) => (
+              <button key={t.id} type="button" onClick={() => onNavigate?.('transfers')} className="w-full text-left py-2 border-b border-slate-50">
+                <div className="flex justify-between gap-2 text-xs">
+                  <span className="font-semibold text-slate-700">{t.code}</span>
+                  <span className="text-amber-700 bg-amber-50 px-1.5 rounded">Em trânsito</span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">{t.originLocation} → {t.destinationLocation}</p>
+              </button>
+            ))}
+            <button type="button" onClick={() => onNavigate?.('yard')} className="mt-2 text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver filas <ArrowRight size={12} /></button>
           </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-amber-200 transition-all group">
-            <div className="flex items-center gap-3 text-amber-600 mb-2">
-              <TrendingUp size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Saldo Caixa</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">R$ {balance.toLocaleString('pt-BR')}</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-blue-200 transition-all group">
-            <div className="flex items-center gap-3 text-blue-600 mb-2">
-              <Package size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Estoque Total</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">
-              {totalInventoryTons.toFixed(1)} T
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-purple-200 transition-all group">
-            <div className="flex items-center gap-3 text-purple-600 mb-2">
-              <FileText size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Romaneios / Pedidos</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">{totalOrdersCount} emitidos</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-amber-200 transition-all group">
-            <div className="flex items-center gap-3 text-amber-600 mb-2">
-              <Truck size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Carregamento Ativo</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">{pendingOrdersCount} caminhões</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-emerald-200 transition-all group">
-            <div className="flex items-center gap-3 text-emerald-600 mb-2">
-              <Scale size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Volume Expedido</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">{totalTonnageSold.toFixed(1)} T</p>
-          </div>
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:border-blue-200 transition-all group">
-            <div className="flex items-center gap-3 text-blue-600 mb-2">
-              <Package size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Estoque Total</span>
-            </div>
-            <p className="text-2xl font-black text-slate-800 tracking-tighter">
-              {totalInventoryTons.toFixed(1)} T
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-8 border-l-4 border-amber-500 pl-4">
-            {isFinancialAllowed ? 'Desempenho Financeiro (Receitas x Despesas)' : 'Estoque Mineral Disponível por Produto (Toneladas)'}
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              {isFinancialAllowed ? (
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={10} fontStyle="bold" />
-                  <YAxis axisLine={false} tickLine={false} fontSize={10} fontStyle="bold" />
-                  <Tooltip 
-                    cursor={{fill: '#f8fafc'}}
-                    contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
-                  />
-                  <Bar dataKey="receita" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={40} />
-                  <Bar dataKey="despesa" fill="#1e293b" radius={[6, 6, 0, 0]} barSize={40} />
-                </BarChart>
-              ) : (
-                <BarChart data={operationalProductData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={10} fontStyle="bold" />
-                  <YAxis axisLine={false} tickLine={false} fontSize={10} fontStyle="bold" />
-                  <Tooltip 
-                    cursor={{fill: '#f8fafc'}}
-                    contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
-                  />
-                  <Bar dataKey="toneladas" fill="#9333ea" radius={[6, 6, 0, 0]} barSize={36} name="Em Estoque (T)" />
-                  <Bar dataKey="minimo" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={36} name="Mínimo Alerta (T)" />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
-          
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-amber-500/20 rounded-xl">
-               <ZapOff className="text-amber-400" size={24} />
-            </div>
-            <div>
-               <h3 className="font-black text-lg tracking-tight uppercase">IA Operacional</h3>
-               <span className="text-[8px] font-black text-amber-400 uppercase tracking-widest bg-amber-400/10 px-2 py-0.5 rounded">Assistente</span>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto text-sm leading-relaxed text-slate-400 font-medium">
-            {insights}
-            
-            {lowStockItems.length > 0 && (
-              <div className="mt-8 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex gap-3 text-rose-200">
-                <AlertCircle size={20} className="shrink-0 text-rose-500" />
-                <div className="text-[10px] uppercase font-bold">
-                  <p className="text-rose-500 mb-1">Alertas de Estoque Mineral:</p>
-                  {lowStockItems.map(i => <p key={i.id} className="opacity-80">• {i.name} CRÍTICO ({i.quantity}T)</p>)}
+        </section>
+        <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Estoque ao vivo</p>
+          {[moido, britado].filter(Boolean).map((item) => {
+            const qty = Number(item!.quantity || 0);
+            const min = Number(item!.minStock || 0) || 1;
+            const cap = Math.max(qty, min * 3, 1);
+            const pct = Math.min(100, Math.round((qty / cap) * 100));
+            return (
+              <div key={item!.id} className="border border-slate-100 rounded-lg p-3">
+                <p className="text-xs font-semibold text-slate-600 uppercase">{item!.name}</p>
+                <p className="text-2xl font-semibold text-slate-800">{tons(qty)}</p>
+                <p className="text-[11px] text-slate-400 mb-2">mínimo {tons(min)}</p>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full ${qty <= min ? 'bg-amber-500' : 'bg-emerald-600'}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
-            )}
+            );
+          })}
+          {inventory.length === 0 && <p className="text-xs text-slate-400">Sem estoque carregado.</p>}
+          <button type="button" onClick={() => onNavigate?.('inventory')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver estoque <ArrowRight size={12} /></button>
+        </section>
+        <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Alertas fiscais</p>
+            <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">{pendingNfe.length + rejectedNfe.length}</span>
           </div>
-          
-          <div className="mt-6 pt-6 border-t border-white/5 flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-black">?</div>
-             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-               {isFinancialAllowed 
-                 ? 'Ative a chave de API nas configurações para relatórios executivos avançados.'
-                 : 'Monitoramento em tempo real de expedição, pátio e estoque mineral.'}
-             </p>
+          <div className="p-4 space-y-3">
+            <p className="text-[10px] font-semibold text-amber-700 uppercase">Pendentes de emissão</p>
+            {pendingNfe.length === 0 && <p className="text-xs text-slate-400">Nada pendente.</p>}
+            {pendingNfe.map((o) => (
+              <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between gap-2">
+                <span className="truncate font-medium text-slate-700">{o.reference} · {custName(o.customerId)}</span>
+                <span className="text-amber-700">{brl(o.total)}</span>
+              </button>
+            ))}
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-[10px] font-semibold text-rose-700 uppercase mb-1">Rejeitadas</p>
+              {rejectedNfe.length === 0 && <p className="text-xs text-slate-400">Nenhuma rejeição.</p>}
+              {rejectedNfe.map((o) => (
+                <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between">
+                  <span className="font-medium text-slate-700">{o.reference}</span>
+                  <span className="text-rose-600">Rejeitada</span>
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => onNavigate?.('fiscal')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Abrir notas <ArrowRight size={12} /></button>
           </div>
-        </div>
+        </section>
       </div>
+      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-2"><Wallet size={13} /> Caixa do dia</p>
+          <button type="button" onClick={() => onNavigate?.('daily')} className="text-[11px] font-semibold text-blue-700">Ver fluxo</button>
+        </div>
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-slate-400 uppercase text-[10px]">
+            <tr>
+              <th className="text-left font-semibold px-4 py-2">Descrição</th>
+              <th className="text-right font-semibold px-4 py-2">Entradas</th>
+              <th className="text-right font-semibold px-4 py-2">Saídas</th>
+              <th className="text-right font-semibold px-4 py-2">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-slate-100">
+              <td className="px-4 py-2.5 text-slate-600">Movimento de hoje ({dayTx.length} lançamentos)</td>
+              <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{brl(entradas)}</td>
+              <td className="px-4 py-2.5 text-right text-rose-600 font-medium">{brl(saidas)}</td>
+              <td className="px-4 py-2.5 text-right font-semibold">{brl(entradas - saidas)}</td>
+            </tr>
+            <tr className="border-t border-slate-100 bg-slate-50/60">
+              <td className="px-4 py-2.5 font-semibold text-slate-700"><Scale size={12} className="inline mr-1" /> Posição estimada nas contas</td>
+              <td /><td />
+              <td className={`px-4 py-2.5 text-right font-semibold ${saldoDia >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{brl(saldoDia)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 };
