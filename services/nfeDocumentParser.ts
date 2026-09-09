@@ -88,13 +88,46 @@ export const extractPdfLatinText = (buffer: ArrayBuffer): string => {
   const tjMatch = raw.match(tj) || [];
   tjMatch.forEach((token) => {
     const inner = token.slice(1, token.lastIndexOf(')'));
-    chunks.push(inner.replace(/\\n/g, ' ').replace(/\\\)/g, ')').replace(/\\\(/g, '('));
+    chunks.push(inner
+      .replace(/\\([0-7]{1,3})/g, (_match, octal) => String.fromCharCode(parseInt(octal, 8)))
+      .replace(/\\n/g, ' ').replace(/\\\)/g, ')').replace(/\\\(/g, '('));
   });
   const arr = /\[(.*?)\]\s*TJ/gs;
   let m: RegExpExecArray | null;
   while ((m = arr.exec(raw))) {
     const parts = [...m[1].matchAll(/\((?:\\.|[^\\)])*\)/g)].map((p) => p[0].slice(1, -1));
     chunks.push(parts.join(''));
+  }
+  return chunks.join(' ').replace(/\s+/g, ' ').trim();
+};
+
+// DANFEs normalmente guardam o texto em streams Flate comprimidos. A primeira
+// versão lia apenas PDFs sem compressão, o que fazia parecer que o importador
+// estava parado. Esta leitura continua toda no navegador, sem enviar a NF.
+const extractCompressedPdfText = async (buffer: ArrayBuffer): Promise<string> => {
+  if (typeof DecompressionStream === 'undefined') return '';
+  const raw = new TextDecoder('latin1').decode(buffer);
+  const bytes = new Uint8Array(buffer);
+  const chunks: string[] = [];
+  const streamRe = /stream\r?\n/g;
+  let match: RegExpExecArray | null;
+  while ((match = streamRe.exec(raw))) {
+    const start = streamRe.lastIndex;
+    const end = raw.indexOf('endstream', start);
+    if (end < 0) break;
+    const dictionary = raw.slice(Math.max(0, match.index - 300), match.index);
+    streamRe.lastIndex = end + 'endstream'.length;
+    if (!/\/FlateDecode/.test(dictionary)) continue;
+    const compressed = bytes.slice(start, end - (raw.slice(start, end).endsWith('\r\n') ? 2 : raw.slice(start, end).endsWith('\n') ? 1 : 0));
+    try {
+      const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate'));
+      const inflated = await new Response(stream).arrayBuffer();
+      const text = extractPdfLatinText(inflated);
+      if (text) chunks.push(text);
+    } catch {
+      // Alguns PDFs usam filtros adicionais. Nesses casos mantemos a leitura
+      // direta e orientamos o usuário a usar o XML da mesma NF-e.
+    }
   }
   return chunks.join(' ').replace(/\s+/g, ' ').trim();
 };
@@ -141,6 +174,6 @@ export const parseNfeFileContent = async (file: File): Promise<ParsedNfDocument>
   if (raw.includes('<NFe') || raw.includes('<nfeProc') || raw.includes('<infNFe')) {
     return parseNfeXml(raw);
   }
-  const text = extractPdfLatinText(buffer) || raw.replace(/[^\x20-\x7EÀ-ÿ\n]/g, ' ');
+  const text = (await extractCompressedPdfText(buffer)) || extractPdfLatinText(buffer) || raw.replace(/[^\x20-\x7EÀ-ÿ\n]/g, ' ');
   return { ...parseDanfeText(text), source: 'pdf', rawPreview: text.slice(0, 500) };
 };
