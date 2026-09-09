@@ -779,7 +779,7 @@ const App: React.FC = () => {
               onOpenOnboardingModal={() => setShowOnboardingModal(true)}
             />
           )}
-          {currentView === 'orders' && (
+          {(currentView === 'orders' || currentView === 'quotes') && (
             <SalesOrders 
               orders={orders} 
               customers={customers} 
@@ -796,6 +796,7 @@ const App: React.FC = () => {
                 if (order) finalizeSale(order, p);
               }} 
               onPaymentReceived={handlePaymentReceived}
+              mode={currentView === 'quotes' ? 'quotes' : 'orders'}
             />
           )}
           {currentView === 'fiscal' && (
