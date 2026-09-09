@@ -19,6 +19,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogout, mobileOpen = false, onCloseMobile }) => {
   const userPermissions: UserPermissions = user.permissions || {
     financial: user.role === UserRole.ADMIN || user.role === UserRole.MANAGER,
+    fiscal: false,
     users: user.role === UserRole.ADMIN || user.role === UserRole.OPERATIONAL_SUPERVISOR,
     inventory: true,
     orders: true
@@ -27,7 +28,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
   const isItemAllowed = (itemId: string, itemRoles?: UserRole[]) => {
     if (user.role === UserRole.ADMIN) return true;
     if (itemRoles && !itemRoles.includes(user.role)) return false;
-    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal', 'fiscal_config'].includes(itemId)) return userPermissions.financial;
+    if (itemId === 'fiscal') return Boolean(userPermissions.fiscal || userPermissions.financial);
+    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(itemId)) return userPermissions.financial;
     if (['users'].includes(itemId)) return userPermissions.users;
     if (['inventory', 'milling'].includes(itemId)) return userPermissions.inventory;
     if (['orders', 'quotes', 'customers', 'yard', 'transfers'].includes(itemId)) return userPermissions.orders;
