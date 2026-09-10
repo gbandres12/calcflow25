@@ -86,7 +86,7 @@ export const extractPdfLatinText = (buffer: ArrayBuffer): string => {
   const chunks: string[] = [];
   const tj = /\((?:\\.|[^\\)])*\)\s*Tj/g;
   const tjMatch = raw.match(tj) || [];
-  tjMatch.forEach((token) => {
+  tjMatch.forEach((token: string) => {
     const inner = token.slice(1, token.lastIndexOf(')'));
     chunks.push(inner
       .replace(/\\([0-7]{1,3})/g, (_match, octal) => String.fromCharCode(parseInt(octal, 8)))

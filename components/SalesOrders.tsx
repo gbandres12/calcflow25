@@ -298,17 +298,25 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
+    const moidoProd = inventory.find(i => i.id === 'moido');
+    const isInter = selectedCustomer?.state && selectedCustomer.state !== 'PA';
     const itemData = {
       productId: 'moido',
-      productCode: '001',
-      productName: 'Calcário Agrícola Moído (PRNT > 85%)',
-      unit: 'TON',
+      productCode: moidoProd?.code || '001',
+      productName: moidoProd?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
+      unit: moidoProd?.unit || 'TON',
       quantity: parseFloat(quantity) || 1,
       unitPrice: parseFloat(unitPrice) || 0,
       discount: 0,
       total: subtotalValue,
-      ncm: '2517.10.00',
-      cfop: '5101'
+      ncm: moidoProd?.ncm || '2517.10.00',
+      cfop: moidoProd?.cfop || (isInter ? '6101' : '5101'),
+      cst: moidoProd?.cst || '102',
+      cClassTrib: moidoProd?.cClassTrib,
+      aliquotaIbs: moidoProd?.aliquotaIbs,
+      aliquotaCbs: moidoProd?.aliquotaCbs,
+      aliquotaIs: moidoProd?.aliquotaIs,
+      informacoesComplementares: moidoProd?.informacoesComplementares
     };
 
     // Cria recibo de entrada se houver valor de entrada

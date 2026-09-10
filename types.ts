@@ -83,6 +83,11 @@ export interface Company {
   code: string;
   address?: string;
   document?: string;
+  cnpj?: string;
+  corporateName?: string;
+  tradeName?: string;
+  ie?: string;
+  stateRegistration?: string;
   city?: string;
   state?: string;
   phone?: string;
@@ -131,7 +136,9 @@ export interface InventoryItem {
   unit?: string;
   companyId?: string;
   ncm?: string;
-  cst?: string;
+  cst?: string; // CST ICMS / CSOSN Padrão
+  cstPis?: string; // CST PIS Padrão
+  cstCofins?: string; // CST COFINS Padrão
   cfop?: string;
   origem?: string;
   aliquotaIcms?: number;
@@ -140,6 +147,17 @@ export interface InventoryItem {
   unidadeTributavel?: string;
   fatorConversao?: number;
   observacoesFiscais?: string;
+  informacoesComplementares?: string; // Informações Complementares pré-definidas para a NF-e
+
+  // Reforma Tributária (RTC - EC 132/2023)
+  cClassTrib?: string; // Código de Classificação Tributária RTC
+  cstIbsCbs?: string; // CST IBS/CBS
+  aliquotaIbs?: number; // Alíquota estimada IBS (%)
+  reducaoBcIbs?: number; // Redução de BC IBS (%)
+  aliquotaCbs?: number; // Alíquota estimada CBS (%)
+  reducaoBcCbs?: number; // Redução de BC CBS (%)
+  sujeitoIs?: boolean; // Sujeito ao Imposto Seletivo (IS)
+  aliquotaIs?: number; // Alíquota Imposto Seletivo (%)
 }
 
 export interface Machine {
@@ -304,6 +322,7 @@ export interface SaleOrder {
   date: string;
   deliveryDate?: string;
   validUntil?: string;
+  isAvulsa?: boolean;
   items: {
     productId: string;
     productCode: string;
@@ -315,6 +334,16 @@ export interface SaleOrder {
     total: number;
     ncm?: string;
     cfop?: string;
+    cst?: string;
+    csosn?: string;
+    aliquotaIcms?: number;
+    aliquotaPis?: number;
+    aliquotaCofins?: number;
+    cClassTrib?: string;
+    aliquotaIbs?: number;
+    aliquotaCbs?: number;
+    aliquotaIs?: number;
+    informacoesComplementares?: string;
   }[];
   subtotal: number;
   discount: number;
@@ -349,6 +378,7 @@ export interface SaleOrder {
   nfeEmissao?: string;
   nfeErro?: string;
   nfeNaturezaOperacao?: string;
+  nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
 }

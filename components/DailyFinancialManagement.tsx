@@ -747,8 +747,6 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                           <button
                             onClick={() => {
                               setTransactionToDelete(tx.id);
-                              setDeletePassword('');
-                              setDeleteError('');
                               setIsDeleteModalOpen(true);
                             }}
                             title="Excluir Lançamento"

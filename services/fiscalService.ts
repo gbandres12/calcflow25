@@ -423,7 +423,7 @@ export const fiscalService = {
       dest.ie = onlyDigits(customer.ie);
     }
 
-    const cstIcms = (config.cstIcmsPadrao || '40').trim();
+    const cstIcmsPadrao = (config.cstIcmsPadrao || '40').trim();
     const items: NotaAsItemPayload[] = (order.items || []).map((it, idx) => {
       const cleanNcm = onlyDigits(it.ncm);
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
@@ -431,6 +431,9 @@ export const fiscalService = {
       const safeCfop = (isDevolucao || isTransferencia) 
         ? onlyDigits(cfopPadrao) 
         : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao));
+
+      // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
+      const itemCst = (it.cst || it.csosn || cstIcmsPadrao).trim();
 
       const row: NotaAsItemPayload = {
         descricao: it.productName || 'Calcário Agrícola Corretivo',
@@ -441,13 +444,17 @@ export const fiscalService = {
         valorUnitario: it.unitPrice > 0 ? it.unitPrice : it.total,
         valorTotal: it.total,
         unidade: it.unit || 'TON',
-        cst: cstIcms,
-        aliquotaPis: config.aliquotaPis ?? 0,
-        aliquotaCofins: config.aliquotaCofins ?? 0,
+        cst: itemCst,
+        aliquotaPis: it.aliquotaPis !== undefined ? it.aliquotaPis : (config.aliquotaPis ?? 0),
+        aliquotaCofins: it.aliquotaCofins !== undefined ? it.aliquotaCofins : (config.aliquotaCofins ?? 0),
       };
-      if (cstIcms === '00' || cstIcms === '10' || cstIcms === '20') {
-        if (config.aliquotaIcmsPadrao != null) row.aliquotaIcms = config.aliquotaIcmsPadrao;
+
+      // Alíquota de ICMS se for tributada
+      if (itemCst === '00' || itemCst === '10' || itemCst === '20' || itemCst === '90') {
+        const aliq = it.aliquotaIcms !== undefined ? it.aliquotaIcms : config.aliquotaIcmsPadrao;
+        if (aliq != null) row.aliquotaIcms = aliq;
       }
+
       if (isDevolucao && opts?.devolucao?.chaveAcesso) {
         row.nfeReferenciada = {
           chaveAcesso: onlyDigits(opts.devolucao.chaveAcesso),
@@ -461,9 +468,19 @@ export const fiscalService = {
     const tipoPagamento = semPagamento
       ? '90'
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
+
+    // Recolher informações complementares pré-definidas dos produtos incluídos
+    const productComplementares = (order.items || [])
+      .map(it => it.informacoesComplementares)
+      .filter((txt): txt is string => Boolean(txt && txt.trim()));
+    const uniqueProductComplementares = Array.from(new Set(productComplementares));
+
+    // Montar observações fiscais e complementares da nota
     const infParts = [
+      order.nfeInfCpl, // Informação complementar editada/customizada da nota
       config.observacoesFiscaisPadrao,
-      `Pedido: ${order.reference}`,
+      ...uniqueProductComplementares,
+      order.reference ? (order.isAvulsa ? `Emissão Avulsa: ${order.reference}` : `Pedido: ${order.reference}`) : '',
       order.sellerName ? `Vendedor: ${order.sellerName}` : '',
       isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
       isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
@@ -475,7 +492,7 @@ export const fiscalService = {
         ? 'Devolucao de mercadoria'
         : isTransferencia
           ? 'Transferencia de producao do estabelecimento'
-          : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
+          : (order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
       dest,
       items,
       pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],

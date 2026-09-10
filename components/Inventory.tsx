@@ -63,14 +63,46 @@ const CATEGORIES = [
   'Outros'
 ];
 
-const CST_OPTIONS = [
-  { value: '102', label: '102 - Simples Nacional sem Permissão de Crédito' },
-  { value: '101', label: '101 - Simples Nacional com Permissão de Crédito' },
-  { value: '00', label: '00 - Nacional Tributada Integralmente (Regime Normal)' },
-  { value: '20', label: '20 - Com Redução de Base de Cálculo' },
-  { value: '40', label: '40 - Isenta de ICMS' },
-  { value: '51', label: '51 - Diferimento do ICMS' },
-  { value: '90', label: '90 - Outras Saídas' }
+const CST_ICMS_OPTIONS = [
+  // Simples Nacional (CSOSN)
+  { value: '102', label: '102 - Tributada pelo Simples Nacional sem permissão de crédito (Mais Comum)', group: 'Simples Nacional' },
+  { value: '101', label: '101 - Tributada pelo Simples Nacional com permissão de crédito', group: 'Simples Nacional' },
+  { value: '103', label: '103 - Isenção do ICMS no Simples Nacional para faixa de receita bruta', group: 'Simples Nacional' },
+  { value: '201', label: '201 - Tributada no Simples com permissão de crédito e cobrança ICMS-ST', group: 'Simples Nacional' },
+  { value: '202', label: '202 - Tributada no Simples sem permissão de crédito e cobrança ICMS-ST', group: 'Simples Nacional' },
+  { value: '300', label: '300 - Imune', group: 'Simples Nacional' },
+  { value: '400', label: '400 - Não tributada pelo Simples Nacional', group: 'Simples Nacional' },
+  { value: '500', label: '500 - ICMS cobrado anteriormente por substituição tributária (ST)', group: 'Simples Nacional' },
+  { value: '900', label: '900 - Outros (Simples Nacional)', group: 'Simples Nacional' },
+  
+  // Regime Normal (CST ICMS)
+  { value: '40', label: '40 - Isenta de ICMS (Convênio ICMS 100/97)', group: 'Regime Normal' },
+  { value: '41', label: '41 - Não tributada', group: 'Regime Normal' },
+  { value: '51', label: '51 - Diferimento do ICMS (Operação interna mineral/agrícola)', group: 'Regime Normal' },
+  { value: '00', label: '00 - Tributada integralmente', group: 'Regime Normal' },
+  { value: '20', label: '20 - Com Redução de Base de Cálculo', group: 'Regime Normal' },
+  { value: '10', label: '10 - Tributada com cobrança do ICMS por substituição tributária', group: 'Regime Normal' },
+  { value: '60', label: '60 - ICMS cobrado anteriormente por substituição tributária', group: 'Regime Normal' },
+  { value: '70', label: '70 - Com redução de base e cobrança ICMS-ST', group: 'Regime Normal' },
+  { value: '90', label: '90 - Outras Saídas (Regime Normal)', group: 'Regime Normal' }
+];
+
+const CST_PIS_COFINS_OPTIONS = [
+  { value: '07', label: '07 - Operação Isenta da Contribuição (Insumo Agropecuário)' },
+  { value: '08', label: '08 - Operação sem Incidência da Contribuição' },
+  { value: '06', label: '06 - Operação Tributável a Alíquota Zero' },
+  { value: '01', label: '01 - Operação Tributável com Alíquota Básica' },
+  { value: '02', label: '02 - Operação Tributável com Alíquota Diferenciada' },
+  { value: '04', label: '04 - Operação Tributável Monofásica - Alíquota Zero' },
+  { value: '49', label: '49 - Outras Operações de Saída' },
+  { value: '99', label: '99 - Outras Operações' }
+];
+
+const RTC_ENQUADRAMENTOS = [
+  { value: 'AGRO_60', label: 'Insumos Agropecuários — Redução de 60% (Art. 9º EC 132/2023)', reducaoIbs: 60, reducaoCbs: 60 },
+  { value: 'AGRO_ZERO', label: 'Calcário Agrícola e Corretivo de Solo — Alíquota Zero / Isenção', reducaoIbs: 100, reducaoCbs: 100 },
+  { value: 'REGULAR', label: 'Tributação Regular Integral (Sem Benefício RTC)', reducaoIbs: 0, reducaoCbs: 0 },
+  { value: 'IMUNE', label: 'Imunidade Tributária Constitucional', reducaoIbs: 100, reducaoCbs: 100 }
 ];
 
 export const Inventory: React.FC<InventoryProps> = ({ 
@@ -108,7 +140,7 @@ export const Inventory: React.FC<InventoryProps> = ({
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Product Form State (Commercial + Fiscal)
+  // Product Form State (Commercial + Fiscal + RTC)
   const [formData, setFormData] = useState({
     id: '',
     code: '',
@@ -121,13 +153,26 @@ export const Inventory: React.FC<InventoryProps> = ({
     unit: 'Ton',
     ncm: '2517.10.00',
     cst: '102',
+    cstPis: '07',
+    cstCofins: '07',
     cfop: '5101',
     origem: '0',
     aliquotaIcms: '0',
     aliquotaPis: '0',
     aliquotaCofins: '0',
     unidadeTributavel: 'TON',
-    observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.'
+    observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
+    informacoesComplementares: 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+    
+    // Reforma Tributária (RTC)
+    cClassTrib: 'AGRO_60',
+    cstIbsCbs: '02',
+    aliquotaIbs: '0.10',
+    reducaoBcIbs: '60',
+    aliquotaCbs: '0.90',
+    reducaoBcCbs: '60',
+    sujeitoIs: false,
+    aliquotaIs: '0'
   });
 
   const britado = inventory.find(i => i.id === 'britado');
@@ -192,13 +237,24 @@ export const Inventory: React.FC<InventoryProps> = ({
       unit: 'Ton',
       ncm: '2517.10.00',
       cst: '102',
+      cstPis: '07',
+      cstCofins: '07',
       cfop: '5101',
       origem: '0',
       aliquotaIcms: '0',
       aliquotaPis: '0',
       aliquotaCofins: '0',
       unidadeTributavel: 'TON',
-      observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.'
+      observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
+      informacoesComplementares: 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+      cClassTrib: 'AGRO_60',
+      cstIbsCbs: '02',
+      aliquotaIbs: '0.10',
+      reducaoBcIbs: '60',
+      aliquotaCbs: '0.90',
+      reducaoBcCbs: '60',
+      sujeitoIs: false,
+      aliquotaIs: '0'
     });
     setActiveModal('productForm');
   };
@@ -218,13 +274,24 @@ export const Inventory: React.FC<InventoryProps> = ({
       unit: item.unit || 'Ton',
       ncm: item.ncm || '2517.10.00',
       cst: item.cst || '102',
+      cstPis: item.cstPis || '07',
+      cstCofins: item.cstCofins || '07',
       cfop: item.cfop || '5101',
       origem: item.origem || '0',
       aliquotaIcms: item.aliquotaIcms !== undefined ? item.aliquotaIcms.toString() : '0',
       aliquotaPis: item.aliquotaPis !== undefined ? item.aliquotaPis.toString() : '0',
       aliquotaCofins: item.aliquotaCofins !== undefined ? item.aliquotaCofins.toString() : '0',
       unidadeTributavel: item.unidadeTributavel || 'TON',
-      observacoesFiscais: item.observacoesFiscais || 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.'
+      observacoesFiscais: item.observacoesFiscais || 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
+      informacoesComplementares: item.informacoesComplementares || 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+      cClassTrib: item.cClassTrib || 'AGRO_60',
+      cstIbsCbs: item.cstIbsCbs || '02',
+      aliquotaIbs: item.aliquotaIbs !== undefined ? item.aliquotaIbs.toString() : '0.10',
+      reducaoBcIbs: item.reducaoBcIbs !== undefined ? item.reducaoBcIbs.toString() : '60',
+      aliquotaCbs: item.aliquotaCbs !== undefined ? item.aliquotaCbs.toString() : '0.90',
+      reducaoBcCbs: item.reducaoBcCbs !== undefined ? item.reducaoBcCbs.toString() : '60',
+      sujeitoIs: Boolean(item.sujeitoIs),
+      aliquotaIs: item.aliquotaIs !== undefined ? item.aliquotaIs.toString() : '0'
     });
     setActiveModal('productForm');
   };
@@ -302,13 +369,24 @@ export const Inventory: React.FC<InventoryProps> = ({
       unit: formData.unit,
       ncm: formData.ncm,
       cst: formData.cst,
+      cstPis: formData.cstPis,
+      cstCofins: formData.cstCofins,
       cfop: formData.cfop,
       origem: formData.origem,
       aliquotaIcms: parseFloat(formData.aliquotaIcms || '0'),
       aliquotaPis: parseFloat(formData.aliquotaPis || '0'),
       aliquotaCofins: parseFloat(formData.aliquotaCofins || '0'),
       unidadeTributavel: formData.unidadeTributavel,
-      observacoesFiscais: formData.observacoesFiscais
+      observacoesFiscais: formData.observacoesFiscais,
+      informacoesComplementares: formData.informacoesComplementares,
+      cClassTrib: formData.cClassTrib,
+      cstIbsCbs: formData.cstIbsCbs,
+      aliquotaIbs: parseFloat(formData.aliquotaIbs || '0'),
+      reducaoBcIbs: parseFloat(formData.reducaoBcIbs || '0'),
+      aliquotaCbs: parseFloat(formData.aliquotaCbs || '0'),
+      reducaoBcCbs: parseFloat(formData.reducaoBcCbs || '0'),
+      sujeitoIs: formData.sujeitoIs,
+      aliquotaIs: parseFloat(formData.aliquotaIs || '0')
     };
 
     if (editingItem && onUpdateProduct) {
@@ -594,13 +672,28 @@ export const Inventory: React.FC<InventoryProps> = ({
                   <div className={`p-4 rounded-2xl ${item.id === 'britado' ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-purple-600'}`}>
                     <Package size={28} />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 justify-end">
                     {item.ncm && (
-                      <span className="px-2.5 py-1 bg-purple-50 text-purple-700 text-[10px] font-black rounded-lg border border-purple-100">
+                      <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-black rounded-lg border border-purple-100">
                         NCM {item.ncm}
                       </span>
                     )}
-                    <div className={`px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${getStatusColor(item)}`}>
+                    {item.cst && (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-black rounded-lg border border-blue-100" title="CST / CSOSN Padrão">
+                        CST {item.cst}
+                      </span>
+                    )}
+                    {item.cfop && (
+                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded-lg border border-emerald-100" title="CFOP Padrão">
+                        CFOP {item.cfop}
+                      </span>
+                    )}
+                    {item.cClassTrib && (
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-lg border border-indigo-100" title="Reforma Tributária (RTC)">
+                        RTC {item.cClassTrib === 'AGRO_60' ? 'Agro -60%' : item.cClassTrib === 'AGRO_ZERO' ? 'Agro 0%' : 'RTC'}
+                      </span>
+                    )}
+                    <div className={`px-2.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${getStatusColor(item)}`}>
                       {getStatusText(item)}
                     </div>
                   </div>
@@ -854,13 +947,25 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST / CSOSN *</label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST / CSOSN ICMS Padrão *</label>
+                        <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">NF-e Tag cst</span>
+                      </div>
                       <select 
                         value={formData.cst} 
                         onChange={e => setFormData({ ...formData, cst: e.target.value })} 
                         className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-purple-500"
                       >
-                        {CST_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        <optgroup label="Simples Nacional (CSOSN)">
+                          {CST_ICMS_OPTIONS.filter(c => c.group === 'Simples Nacional').map(c => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Regime Normal (CST)">
+                          {CST_ICMS_OPTIONS.filter(c => c.group === 'Regime Normal').map(c => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
                   </div>
@@ -902,6 +1007,35 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
                   </div>
 
+                  {/* CST e Alíquotas PIS / COFINS / ICMS */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST PIS Padrão</label>
+                      <select 
+                        value={formData.cstPis} 
+                        onChange={e => setFormData({ ...formData, cstPis: e.target.value })} 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-purple-500"
+                      >
+                        {CST_PIS_COFINS_OPTIONS.map(c => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST COFINS Padrão</label>
+                      <select 
+                        value={formData.cstCofins} 
+                        onChange={e => setFormData({ ...formData, cstCofins: e.target.value })} 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-purple-500"
+                      >
+                        {CST_PIS_COFINS_OPTIONS.map(c => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquota ICMS (%)</label>
@@ -910,7 +1044,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         step="0.01" 
                         value={formData.aliquotaIcms} 
                         onChange={e => setFormData({ ...formData, aliquotaIcms: e.target.value })} 
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
                         placeholder="0.0" 
                       />
                     </div>
@@ -922,7 +1056,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         step="0.01" 
                         value={formData.aliquotaPis} 
                         onChange={e => setFormData({ ...formData, aliquotaPis: e.target.value })} 
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
                         placeholder="0.0" 
                       />
                     </div>
@@ -934,20 +1068,179 @@ export const Inventory: React.FC<InventoryProps> = ({
                         step="0.01" 
                         value={formData.aliquotaCofins} 
                         onChange={e => setFormData({ ...formData, aliquotaCofins: e.target.value })} 
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
                         placeholder="0.0" 
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações Fiscais Impressas na NF-e</label>
+                  {/* Seção: Reforma Tributária (RTC - EC 132/2023) */}
+                  <div className="p-5 bg-gradient-to-br from-indigo-50/70 to-purple-50/50 rounded-3xl border border-indigo-100/80 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-100">
+                          <Sparkles size={16} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wide">Reforma Tributária (RTC — EC 132/2023)</h4>
+                          <p className="text-[10px] text-indigo-600 font-bold">Enquadramento do IBS, CBS e Imposto Seletivo</p>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-black px-2.5 py-1 bg-indigo-100 text-indigo-800 rounded-full border border-indigo-200 uppercase tracking-wider">
+                        RTC 2026/2033
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Regime / Classificação Específica</label>
+                      <select 
+                        value={formData.cClassTrib} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          const enq = RTC_ENQUADRAMENTOS.find(r => r.value === val);
+                          setFormData({
+                            ...formData,
+                            cClassTrib: val,
+                            reducaoBcIbs: enq ? enq.reducaoIbs.toString() : formData.reducaoBcIbs,
+                            reducaoBcCbs: enq ? enq.reducaoCbs.toString() : formData.reducaoBcCbs
+                          });
+                        }} 
+                        className="w-full p-3.5 bg-white border border-indigo-200 rounded-2xl font-bold text-xs outline-none focus:border-indigo-500 text-slate-800"
+                      >
+                        {RTC_ENQUADRAMENTOS.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase">Alíquota IBS (%)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.aliquotaIbs} 
+                          onChange={e => setFormData({ ...formData, aliquotaIbs: e.target.value })} 
+                          className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
+                          placeholder="0.10" 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase">Redução BC IBS (%)</label>
+                        <input 
+                          type="number" 
+                          step="1" 
+                          value={formData.reducaoBcIbs} 
+                          onChange={e => setFormData({ ...formData, reducaoBcIbs: e.target.value })} 
+                          className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
+                          placeholder="60" 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase">Alíquota CBS (%)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.aliquotaCbs} 
+                          onChange={e => setFormData({ ...formData, aliquotaCbs: e.target.value })} 
+                          className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
+                          placeholder="0.90" 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-500 uppercase">Redução BC CBS (%)</label>
+                        <input 
+                          type="number" 
+                          step="1" 
+                          value={formData.reducaoBcCbs} 
+                          onChange={e => setFormData({ ...formData, reducaoBcCbs: e.target.value })} 
+                          className="w-full p-2.5 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
+                          placeholder="60" 
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.sujeitoIs} 
+                          onChange={e => setFormData({ ...formData, sujeitoIs: e.target.checked })} 
+                          className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                        />
+                        <span className="text-[10px] font-black text-slate-700 uppercase">Sujeito ao Imposto Seletivo (IS)</span>
+                      </label>
+                      {formData.sujeitoIs && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-black text-slate-400 uppercase">Alíquota IS:</span>
+                          <input 
+                            type="number" 
+                            step="0.1" 
+                            value={formData.aliquotaIs} 
+                            onChange={e => setFormData({ ...formData, aliquotaIs: e.target.value })} 
+                            className="w-20 p-2 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
+                            placeholder="0.0" 
+                          />
+                          <span className="text-[10px] font-bold text-slate-400">%</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Informações Complementares Pré-definidas no Produto */}
+                  <div className="space-y-2 p-5 bg-slate-50 rounded-3xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
+                        Informações Complementares Pré-definidas (Tag infCpl da NF-e)
+                      </label>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                        Auto-incorporada na Nota Fiscal
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Este texto será incluído automaticamente nos dados adicionais da nota fiscal sempre que este produto for faturado:
+                    </p>
+
+                    {/* Botões de sugestão rápida */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData({
+                          ...formData,
+                          informacoesComplementares: 'Isenção de ICMS para uso agrícola conforme Convênio ICMS 100/97.'
+                        })}
+                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
+                      >
+                        + Convênio ICMS 100/97
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData({
+                          ...formData,
+                          informacoesComplementares: 'ICMS Diferido conforme art. 40 do RICMS/PA para operações internas com calcário agrícola.'
+                        })}
+                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
+                      >
+                        + Diferimento RICMS/PA
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setFormData({
+                          ...formData,
+                          informacoesComplementares: 'Produto enquadrado no regime favorecido de Insumos Agropecuários com redução de alíquota conforme Art. 9º da EC 132/2023 (Reforma Tributária).'
+                        })}
+                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                      >
+                        + Reforma Tributária (Insumo Agro)
+                      </button>
+                    </div>
+
                     <textarea 
-                      rows={2} 
-                      value={formData.observacoesFiscais} 
-                      onChange={e => setFormData({ ...formData, observacoesFiscais: e.target.value })} 
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-purple-500 resize-none" 
-                      placeholder="Informações complementares fiscais..." 
+                      rows={3} 
+                      value={formData.informacoesComplementares} 
+                      onChange={e => setFormData({ ...formData, informacoesComplementares: e.target.value })} 
+                      className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-medium text-xs outline-none focus:border-purple-500 resize-none" 
+                      placeholder="Insira as cláusulas legais, convênios ou informações adicionais deste produto..." 
                     />
                   </div>
                 </div>

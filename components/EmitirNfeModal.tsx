@@ -49,9 +49,41 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const isSubmittingRef = useRef(false);
   const isDevolucao = Boolean(devolutionChave);
   const isTransferencia = Boolean(transferencia) && !isDevolucao;
+  const isInterestadual = customer.state && customer.state !== 'PA';
+  const cfopSugerido = isDevolucao
+    ? (isInterestadual ? '6202' : '5202')
+    : isTransferencia
+      ? (isInterestadual ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152'))
+      : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
+
+  // Itens com CFOP e CST editáveis
+  const [items, setItems] = useState(order.items.map(it => ({
+    ...it,
+    cfop: it.cfop || cfopSugerido,
+    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
+  })));
+
+  const [naturezaOperacao, setNaturezaOperacao] = useState(
+    order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
+  );
+
+  // Informações Complementares pré-definidas do produto + padrão
+  const productComplementares = order.items
+    .map(it => it.informacoesComplementares)
+    .filter((txt): txt is string => Boolean(txt && txt.trim()));
+  const initialInfCpl = order.nfeInfCpl || [
+    config.observacoesFiscaisPadrao,
+    ...Array.from(new Set(productComplementares))
+  ].filter(Boolean).join(' | ');
+
+  const [infCpl, setInfCpl] = useState(initialInfCpl);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const validation = fiscalService.validarDadosFiscais(order, activeCustomer);
+  const validation = fiscalService.validarDadosFiscais({ ...order, items }, activeCustomer);
+
+  const handleUpdateItem = (index: number, field: string, value: any) => {
+    setItems(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
+  };
 
   // Safety unlock in case of unforeseen lockups
   useEffect(() => {
@@ -142,15 +174,22 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setErrorMsg(null);
 
     try {
+      const orderWithEdits: SaleOrder = {
+        ...order,
+        items,
+        nfeNaturezaOperacao: naturezaOperacao,
+        nfeInfCpl: infCpl
+      };
+
       const opts = isDevolucao
         ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
         : isTransferencia
           ? { transferencia: true }
           : undefined;
 
-      const payloadSent = fiscalService.montarPayloadNotaAs(order, activeCustomer, currentConfig, opts);
+      const payloadSent = fiscalService.montarPayloadNotaAs(orderWithEdits, activeCustomer, currentConfig, opts);
       const result = await fiscalService.emitirNFe(
-        { ...order, companyId: order.companyId || company.id },
+        { ...orderWithEdits, companyId: order.companyId || company.id },
         activeCustomer,
         currentConfig,
         order.companyId || company.id,
@@ -169,7 +208,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         }
 
         const updatedOrder: SaleOrder = {
-          ...order,
+          ...orderWithEdits,
           nfeStatus: finalStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
@@ -200,7 +239,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 flex flex-col max-h-[92vh]">
+      <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
@@ -283,7 +322,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               </p>
               {validation.valid ? (
                 <p className="text-slate-600">
-                  Os dados essenciais estão validados para transmissão à SEFAZ.
+                  Os dados do emitente, destinatário, NCM, CFOP e tributação estão prontos para envio à SEFAZ via API NotaAs.
                 </p>
               ) : (
                 <ul className="list-disc pl-4 space-y-0.5 text-rose-700 font-medium">
@@ -487,6 +526,17 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           </div>
 
+          {/* Natureza da Operação */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Natureza da Operação</label>
+            <input 
+              type="text"
+              value={naturezaOperacao}
+              onChange={e => setNaturezaOperacao(e.target.value)}
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+            />
+          </div>
+
           {isTransferencia && (
             <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900">
               <p className="font-black uppercase tracking-wider text-[10px] mb-1">Transferência entre estabelecimentos</p>
@@ -508,35 +558,88 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
           )}
 
-          {/* Itens do Pedido com NCM e CFOP */}
+          {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
           <div className="space-y-2">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-              <FileText size={12} /> Itens & Enquadramento Fiscal
-            </span>
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
+                <FileText size={12} /> Itens & Enquadramento Fiscal (CFOP e CST Editáveis)
+              </span>
+              <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                Altere o CFOP ou CST diretamente na tabela
+              </span>
+            </div>
+
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
                   <tr>
-                    <th className="px-4 py-2.5">Item</th>
-                    <th className="px-3 py-2.5">NCM</th>
-                    <th className="px-3 py-2.5">CFOP</th>
-                    <th className="px-3 py-2.5 text-center">Qtd</th>
-                    <th className="px-4 py-2.5 text-right">Total</th>
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-3 py-3 w-28">NCM</th>
+                    <th className="px-3 py-3 w-28 text-purple-700">CFOP *</th>
+                    <th className="px-3 py-3 w-24 text-blue-700">CST *</th>
+                    <th className="px-3 py-3 text-center w-24">Qtd</th>
+                    <th className="px-4 py-3 text-right w-28">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {order.items.map((it, idx) => (
+                  {items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3 font-bold text-slate-800">{it.productName}</td>
-                      <td className="px-3 py-3 font-mono text-slate-600">{it.ncm || '2517.10.00'}</td>
-                      <td className="px-3 py-3 font-mono text-slate-600">{isDevolucao ? ((activeCustomer.state && activeCustomer.state !== 'PA') ? '6202' : '5202') : isTransferencia ? ((activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152')) : (it.cfop || config.cfopPadraoEstadual || '5101')}</td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit || 'Ton'}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-slate-800">{it.productName}</p>
+                        <p className="text-[10px] text-slate-400">{it.productCode}</p>
+                      </td>
+                      <td className="px-3 py-3 font-mono text-slate-600">
+                        <input 
+                          type="text"
+                          value={it.ncm || '25171000'}
+                          onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)}
+                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <input 
+                          type="text"
+                          value={it.cfop || ''}
+                          onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)}
+                          placeholder="CFOP"
+                          className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <input 
+                          type="text"
+                          value={it.cst || ''}
+                          onChange={e => handleUpdateItem(idx, 'cst', e.target.value)}
+                          placeholder="CST"
+                          className="w-20 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
                       <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Informações Complementares Pré-definidas e Editáveis */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Informações Complementares da Nota (infCpl)
+              </label>
+              <span className="text-[9px] font-bold text-slate-400">
+                Padrão da empresa + Cláusulas pré-definidas dos produtos
+              </span>
+            </div>
+            <textarea 
+              rows={3}
+              value={infCpl}
+              onChange={e => setInfCpl(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-700 outline-none focus:border-purple-500 resize-none"
+              placeholder="Informações complementares fiscais..."
+            />
           </div>
 
           {/* Totais do Documento */}

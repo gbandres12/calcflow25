@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, Customer, Company, View } from '../types';
+import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
-  Copy, ArrowRightLeft, AlertTriangle
+  Copy, ArrowRightLeft, AlertTriangle, Plus
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
+import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
 
 interface FiscalManagementProps {
   orders: SaleOrder[];
   customers: Customer[];
   company: Company;
   companyId?: string;
+  inventory?: InventoryItem[];
+  currentUser?: User;
   onUpdateOrder: (order: SaleOrder) => void;
+  onAddOrder?: (order: any) => void;
   onNavigate?: (view: View) => void;
   canConfigure?: boolean;
 }
@@ -24,7 +28,10 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   customers,
   company,
   companyId,
+  inventory = [],
+  currentUser,
   onUpdateOrder,
+  onAddOrder,
   onNavigate,
   canConfigure = false
 }) => {
@@ -34,6 +41,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [isTransferenciaEmit, setIsTransferenciaEmit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao'>('notas_emitidas');
+  const [showAvulsaModal, setShowAvulsaModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
@@ -112,6 +120,15 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setShowAvulsaModal(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-purple-200 transition-all hover:scale-[1.02]"
+            title="Emitir NF-e Avulsa diretamente sem necessidade de pedido de venda anterior"
+          >
+            <Plus size={16} />
+            <span>+ Emitir NF-e Avulsa</span>
+          </button>
+
           {onNavigate && canConfigure && (
             <button
               onClick={() => onNavigate('fiscal_config')}
@@ -198,7 +215,16 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                     const customer = safeCustomers.find((c) => c.id === order.customerId);
                     return (
                       <tr key={order.id} className="border-t border-slate-100">
-                        <td className="px-4 py-3 font-black">{order.nfeNumero ? `Nº ${order.nfeNumero}` : '—'}</td>
+                        <td className="px-4 py-3 font-black">
+                          <div className="flex items-center gap-1.5">
+                            <span>{order.nfeNumero ? `Nº ${order.nfeNumero}` : '—'}</span>
+                            {order.isAvulsa && (
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black rounded-full uppercase">
+                                Avulsa
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">{customer?.name || 'Cliente Geral'}</td>
                         <td className="px-4 py-3">{order.nfeStatus || 'nao_emitida'}</td>
                         <td className="px-4 py-3 text-right font-black">{formatBRL(order.total)}</td>
@@ -257,6 +283,28 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         </div>
       )}
 
+      {/* Modal de Emissão Avulsa / Direta */}
+      {showAvulsaModal && (
+        <EmitirNfeAvulsaModal
+          customers={safeCustomers}
+          inventory={inventory}
+          config={config}
+          company={company}
+          currentUser={currentUser}
+          onClose={() => setShowAvulsaModal(false)}
+          onSuccess={(newOrder) => {
+            if (onAddOrder) {
+              onAddOrder(newOrder);
+            } else {
+              onUpdateOrder(newOrder);
+            }
+            setShowAvulsaModal(false);
+            setSelectedDanfeOrder(newOrder);
+          }}
+        />
+      )}
+
+      {/* Modal de Emissão Direta de Pedido Existente */}
       {orderToEmitNfe && (
         <EmitirNfeModal
           order={orderToEmitNfe}
@@ -274,6 +322,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         />
       )}
 
+      {/* Modal de Visualização de DANFE */}
       {selectedDanfeOrder && (
         <DanfeModal
           order={selectedDanfeOrder}

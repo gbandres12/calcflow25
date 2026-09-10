@@ -875,7 +875,10 @@ const App: React.FC = () => {
               customers={customers} 
               company={operatingCompany}
               companyId={activeCompanyId}
+              inventory={inventory}
+              currentUser={currentUser}
               onUpdateOrder={handleUpdateOrder} 
+              onAddOrder={handleAddOrder}
               onNavigate={setCurrentView}
               canConfigure={currentUser.role === 'Administrador' || (currentUser.role === 'Gerente' && Boolean(currentUser.permissions?.financial))}
             />
