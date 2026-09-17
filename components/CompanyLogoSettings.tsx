@@ -39,7 +39,7 @@ export const CompanyLogoSettings: React.FC<{ companyId?: string }> = ({ companyI
     try {
       const cfg: any = await fiscalService.getConfig(resolvedId);
       await fiscalService.saveConfig({ ...cfg, logoDataUrl: logo, companyId: resolvedId || cfg.companyId }, resolvedId);
-      setMsg('Logo salva. O próximo pedido impresso já usa essa imagem.');
+      setMsg('Logo salva. Pedido de venda e guia de transferência passam a usar essa imagem.');
     } catch {
       setMsg('Não foi possível gravar a logo no Supabase.');
     } finally {
@@ -53,7 +53,7 @@ export const CompanyLogoSettings: React.FC<{ companyId?: string }> = ({ companyI
         <Building2 className="text-purple-600" size={20} />
         <div>
           <h3 className="text-lg font-black text-slate-800">Logo da empresa</h3>
-          <p className="text-xs font-medium text-slate-500">Aparece no cabeçalho do Pedido de Venda impresso.</p>
+          <p className="text-xs font-medium text-slate-500">Aparece no pedido de venda e na guia de transferência entre filiais.</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-4">

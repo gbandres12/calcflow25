@@ -422,6 +422,7 @@ export interface FiscalConfig {
   aliquotaCofins?: number;
   observacoesFiscaisPadrao?: string;
   autoEmitirAoFinalizar?: boolean;
+  logoDataUrl?: string;
 }
 
 export type TransferStatus = 'EM_TRANSITO' | 'CONFERIDO_E_RECEBIDO' | 'RECEBIDO_COM_DIVERGENCIA' | 'CANCELADO';
