@@ -24,3 +24,15 @@ export const nextQuoteReference = (orders: { reference?: string }[], year = new 
   }
   return `${prefix}${(max + 1).toString().padStart(4, '0')}`;
 };
+
+export const nextTransferCode = (transfers: { code?: string }[], year = new Date().getFullYear()): string => {
+  const prefix = `TRF-${year}-`;
+  let max = 0;
+  for (const transfer of transfers) {
+    const code = transfer.code || '';
+    if (!code.startsWith(prefix)) continue;
+    const n = parseInt(code.slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}${(max + 1).toString().padStart(3, '0')}`;
+};

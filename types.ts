@@ -171,14 +171,24 @@ export interface Machine {
   companyId?: string;
 }
 
+export type StoreItemCategory = 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Insumos' | 'Outros';
+
 export interface StoreItem {
   id: string;
   name: string;
-  category: 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Outros';
+  category: StoreItemCategory;
   quantity: number;
   unit: string;
   minStock: number;
   companyId?: string;
+  /** Código do fornecedor (cProd da NF) para casar próximas compras. */
+  supplierSku?: string;
+  supplierCnpj?: string;
+  ncm?: string;
+  unitCost?: number;
+  lastNfNumber?: string;
+  lastNfeChave?: string;
+  status?: 'ativo' | 'pendente_cadastro';
 }
 
 export interface MaintenanceRecord {
@@ -430,7 +440,7 @@ export interface TransferItem {
   id: string;
   productId?: string;
   productName: string;
-  category?: 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Insumos' | 'Outros';
+  category?: StoreItemCategory;
   quantitySent: number;
   quantityReceived?: number;
   unit: string;
@@ -440,6 +450,11 @@ export interface TransferItem {
   supplier?: string;
   conferido?: boolean;
   divergenceNotes?: string;
+  cProd?: string;
+  ncm?: string;
+  cfop?: string;
+  infAdProd?: string;
+  included?: boolean;
 }
 
 export interface TransferShipment {
@@ -463,6 +478,14 @@ export interface TransferShipment {
   stockIntegrated?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  nfeChave?: string;
+  nfeNumero?: string;
+  nfeSerie?: string;
+  nfeXml?: string;
+  nfeXmlRef?: string;
+  nfeFileName?: string;
+  supplierCnpj?: string;
+  supplierName?: string;
 }
 
 export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';

@@ -22,9 +22,12 @@ import {
   ShieldCheck,
   Building2,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  FileUp
 } from 'lucide-react';
 import { TransferShipment, TransferItem, TransferStatus, StoreItem, Company, User } from '../types';
+import { NfImportModal } from './NfImportModal';
+import { nextTransferCode } from '../services/ids';
 
 interface TransferManagementProps {
   transfers: TransferShipment[];
@@ -34,7 +37,19 @@ interface TransferManagementProps {
   onAddTransfer: (transfer: Omit<TransferShipment, 'id'>) => void;
   onUpdateTransfer: (transfer: TransferShipment) => void;
   onDeleteTransfer: (transferId: string) => void;
-  onIntegrateWithStoreItems?: (items: { name: string; category: any; quantity: number; unit: string }[]) => void;
+  onIntegrateWithStoreItems?: (items: {
+    name: string;
+    category: StoreItem['category'];
+    quantity: number;
+    unit: string;
+    productId?: string;
+    cProd?: string;
+    ncm?: string;
+    supplierCnpj?: string;
+    unitCost?: number;
+    nfNumber?: string;
+    nfeChave?: string;
+  }[]) => void;
 }
 
 export const TransferManagement: React.FC<TransferManagementProps> = ({
@@ -55,6 +70,9 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
   const [editingTransfer, setEditingTransfer] = useState<TransferShipment | null>(null);
   const [conferringTransfer, setConferringTransfer] = useState<TransferShipment | null>(null);
   const [printingTransfer, setPrintingTransfer] = useState<TransferShipment | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [deleteCandidate, setDeleteCandidate] = useState<TransferShipment | null>(null);
 
   // Form de Criação / Edição de Relação
   const [formData, setFormData] = useState({
@@ -88,10 +106,9 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
   // Reset / Preenchimento ao abrir modal de criação
   const handleOpenCreateModal = () => {
-    const nextNum = (safeTransfers.length + 1).toString().padStart(3, '0');
-    const year = new Date().getFullYear();
+    setFormError('');
     setFormData({
-      code: `TRF-${year}-${nextNum}`,
+      code: nextTransferCode(safeTransfers),
       originLocation: 'Polo de Compras Santarém (Av. Mendonça Furtado)',
       destinationLocation: 'Fazenda Usina Matriz (Zona Rural / Rodovia)',
       dateSent: new Date().toISOString().split('T')[0],
@@ -183,9 +200,10 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
   const handleSaveTransfer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.code.trim() || formItems.length === 0) {
-      alert('Por favor, adicione pelo menos um produto ou suprimento à relação de envio.');
+      setFormError('Adicione pelo menos um suprimento à relação de envio.');
       return;
     }
+    setFormError('');
 
     if (editingTransfer) {
       const updated: TransferShipment = {
@@ -226,8 +244,9 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
         (it.supplier || '').toLowerCase().includes(q) ||
         (it.nfCompraNumber || '').toLowerCase().includes(q)
       );
+      const matchChave = (t.nfeChave || '').toLowerCase().includes(q);
 
-      return matchCode || matchSentBy || matchReceivedBy || matchDriver || matchPlate || matchItem;
+      return matchCode || matchSentBy || matchReceivedBy || matchDriver || matchPlate || matchItem || matchChave;
     });
   }, [safeTransfers, searchTerm, statusFilter]);
 
@@ -253,21 +272,21 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
     <div className="space-y-6 pb-16 animate-in fade-in duration-300">
       
       {/* Cabeçalho da Seção */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl border border-indigo-500/20">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#0F5948] p-6 rounded-3xl text-white shadow-xl border border-[#1B6B58]">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-400/30">
+            <div className="p-2.5 bg-white/10 text-[#F1D67A] rounded-2xl border border-white/15">
               <ArrowRightLeft size={24} />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-white flex items-center gap-2">
                 Transferências & Remessas
-                <span className="text-xs bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                <span className="text-xs bg-[#F1D67A]/20 text-[#F1D67A] border border-[#F1D67A]/30 px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider">
                   Santarém ➔ Matriz
                 </span>
               </h1>
-              <p className="text-xs sm:text-sm text-slate-300">
-                Cadastro de compras e peças em Santarém, emissão de romaneio de remessa, conferência física na Fazenda e assinatura digital.
+              <p className="text-xs sm:text-sm text-[#D5E3DC]">
+                Importar XML da compra em Santarém, revisar itens, gerar remessa em trânsito e conferir na fazenda.
               </p>
             </div>
           </div>
@@ -275,8 +294,17 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
+            type="button"
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-2 bg-[#F1D67A] hover:bg-[#e6c96a] text-[#0F5948] px-5 py-2.5 rounded-2xl font-semibold text-sm shadow-lg"
+          >
+            <FileUp size={18} />
+            <span>Importar NF de Santarém</span>
+          </button>
+          <button
+            type="button"
             onClick={handleOpenCreateModal}
-            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-5 py-2.5 rounded-2xl font-bold text-sm shadow-lg shadow-indigo-500/25 transition-all transform active:scale-95"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-2xl font-semibold text-sm border border-white/20"
           >
             <Plus size={18} />
             <span>Nova Relação de Remessa</span>
@@ -322,6 +350,31 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
           </div>
         </div>
       </div>
+
+      {safeTransfers.some(t => t.status === 'EM_TRANSITO') && (
+        <div className="bg-[#F7F8F3] border border-[#D5E3DC] rounded-2xl p-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#0F5948]">Em trânsito — conferir na fazenda</p>
+          <div className="flex flex-col gap-2">
+            {safeTransfers.filter(t => t.status === 'EM_TRANSITO').map(t => (
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-2 bg-white rounded-xl px-3 py-2 border border-[#D5E3DC]">
+                <div className="text-xs text-slate-700">
+                  <span className="font-mono font-semibold text-[#0F5948]">{t.code}</span>
+                  {t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}
+                  {` · ${(t.items || []).length} volume(s)`}
+                  {t.nfeChave ? <span className="block sm:inline sm:ml-2 font-mono text-[10px] text-slate-500">NF {t.nfeNumero || t.nfeChave}</span> : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConferringTransfer(t)}
+                  className="px-3 py-1.5 rounded-lg bg-[#0F5948] text-white text-xs font-semibold"
+                >
+                  Conferir recebimento
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Barra de Filtros e Busca */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
@@ -427,8 +480,13 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                       )}
 
                       {transfer.stockIntegrated && (
-                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] font-bold bg-[#F7F8F3] text-[#0F5948] border border-[#D5E3DC] px-2 py-0.5 rounded-md">
                           Estoque Matriz Atualizado
+                        </span>
+                      )}
+                      {transfer.nfeChave && (
+                        <span className="text-[10px] font-mono bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md">
+                          Chave {transfer.nfeChave}
                         </span>
                       )}
                     </div>
@@ -477,11 +535,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </button>
 
                     <button
-                      onClick={() => {
-                        if (confirm(`Deseja realmente excluir a relação de transferência ${transfer.code}?`)) {
-                          onDeleteTransfer(transfer.id);
-                        }
-                      }}
+                      onClick={() => setDeleteCandidate(transfer)}
                       className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition-colors"
                       title="Excluir"
                     >
@@ -658,27 +712,38 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 my-auto animate-in zoom-in-95">
             {/* Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex justify-between items-center">
+            <div className="px-6 py-4 bg-[#0F5948] text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-400/30">
+                <div className="p-2.5 bg-white/10 text-[#F1D67A] rounded-xl border border-white/15">
                   <ArrowRightLeft size={22} />
                 </div>
                 <div>
-                  <h3 className="text-base font-black tracking-tight">
+                  <h3 className="text-base font-semibold tracking-tight">
                     {editingTransfer ? 'Editar Relação de Remessa' : 'Nova Relação de Remessa (Santarém ➔ Matriz)'}
                   </h3>
-                  <p className="text-xs text-indigo-200/80">
-                    Cadastre os produtos e peças comprados em Santarém que serão transportados para a Fazenda Matriz
+                  <p className="text-xs text-[#D5E3DC]">
+                    Cadastre suprimentos comprados em Santarém ou importe o XML da NF-e.
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                {!editingTransfer && (
+                  <button
+                    type="button"
+                    onClick={() => { setIsCreateModalOpen(false); setIsImportOpen(true); }}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#F1D67A] text-[#0F5948] text-xs font-semibold"
+                  >
+                    <FileUp size={14} /> Importar NF de Santarém
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSaveTransfer} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
@@ -803,6 +868,15 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                       Você pode selecionar itens existentes do estoque ou digitar novos produtos comprados em Santarém.
                     </p>
                   </div>
+                  {!editingTransfer && (
+                    <button
+                      type="button"
+                      onClick={() => { setIsCreateModalOpen(false); setIsImportOpen(true); }}
+                      className="sm:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0F5948] text-white text-xs font-semibold"
+                    >
+                      <FileUp size={14} /> Importar NF
+                    </button>
+                  )}
                 </div>
 
                 {/* Sub-form de adição de item */}
@@ -993,6 +1067,9 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
               {/* Botões do Rodapé */}
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                {formError && (
+                  <p className="mr-auto text-xs font-medium text-rose-700">{formError}</p>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
@@ -1002,7 +1079,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-lg shadow-indigo-600/25 transition-all"
+                  className="px-6 py-2.5 rounded-xl bg-[#0F5948] hover:bg-[#1B6B58] text-white text-xs font-semibold shadow-lg shadow-[#0F5948]/20 transition-all"
                 >
                   {editingTransfer ? 'Salvar Alterações' : 'Emitir Relação e Iniciar Envio'}
                 </button>
@@ -1022,13 +1099,19 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
           onClose={() => setConferringTransfer(null)}
           onConfirm={(updatedTransfer, shouldIntegrateStock) => {
             onUpdateTransfer(updatedTransfer);
-            if (shouldIntegrateStock && onIntegrateWithStoreItems) {
-              // Converter itens conferidos para adicionar ao almoxarifado
+            if (shouldIntegrateStock && updatedTransfer.status === 'CONFERIDO_E_RECEBIDO' && onIntegrateWithStoreItems) {
               const itemsToIntegrate = updatedTransfer.items.map(it => ({
                 name: it.productName,
-                category: it.category || 'Peças',
+                category: (it.category || 'Peças') as StoreItem['category'],
                 quantity: it.quantityReceived ?? it.quantitySent,
-                unit: it.unit
+                unit: it.unit,
+                productId: it.productId,
+                cProd: it.cProd,
+                ncm: it.ncm,
+                supplierCnpj: updatedTransfer.supplierCnpj,
+                unitCost: it.unitCost,
+                nfNumber: it.nfCompraNumber || updatedTransfer.nfeNumero,
+                nfeChave: updatedTransfer.nfeChave
               }));
               onIntegrateWithStoreItems(itemsToIntegrate);
             }
@@ -1046,6 +1129,41 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
           company={company}
           onClose={() => setPrintingTransfer(null)}
         />
+      )}
+
+      <NfImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        storeItems={storeItems}
+        transfers={safeTransfers}
+        currentUser={currentUser}
+        company={company}
+        onApply={(shipment) => {
+          onAddTransfer(shipment);
+          setIsImportOpen(false);
+        }}
+      />
+
+      {deleteCandidate && (
+        <div className="fixed inset-0 z-[230] bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3 border border-slate-200">
+            <p className="text-sm font-semibold text-slate-800">Excluir {deleteCandidate.code}?</p>
+            <p className="text-xs text-slate-600">A relação de remessa será removida. Esta ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleteCandidate(null)} className="px-3 py-2 text-xs font-semibold text-slate-600">Cancelar</button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteTransfer(deleteCandidate.id);
+                  setDeleteCandidate(null);
+                }}
+                className="px-3 py-2 text-xs font-semibold bg-rose-600 text-white rounded-lg"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
@@ -1072,6 +1190,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
   const [receiverRole, setReceiverRole] = useState('Almoxarife / Encarregado de Fazenda');
   const [conferenceNotes, setConferenceNotes] = useState('Todos os produtos foram conferidos fisicamente e recebidos.');
   const [integrateStock, setIntegrateStock] = useState(true);
+  const [localError, setLocalError] = useState('');
 
   // Lista dos itens com conferência individual
   const [itemsConference, setItemsConference] = useState<TransferItem[]>(
@@ -1156,7 +1275,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!receiverName.trim()) {
-      alert('Por favor, informe o nome de quem fez a conferência na Fazenda.');
+      setLocalError('Informe o nome de quem fez a conferência na Fazenda.');
       return;
     }
 
@@ -1241,6 +1360,10 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Motorista / Placa</span>
               <span className="font-bold text-slate-800">{transfer.carrierOrDriver || '—'} {transfer.vehiclePlate ? `(${transfer.vehiclePlate})` : ''}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Chave da NF</span>
+              <span className="font-mono text-[10px] text-slate-800 break-all">{transfer.nfeChave || '—'}</span>
             </div>
           </div>
 
@@ -1445,6 +1568,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
 
           {/* Botões do Rodapé */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+            {localError && <p className="mr-auto text-xs font-medium text-rose-700">{localError}</p>}
             <button
               type="button"
               onClick={onClose}

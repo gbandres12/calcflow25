@@ -562,6 +562,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                          <option value="Lubrificantes">Lubrificantes</option>
                          <option value="EPI">EPI</option>
                          <option value="Ferramentas">Ferramentas</option>
+                         <option value="Insumos">Insumos</option>
                          <option value="Outros">Outros</option>
                       </select>
                    </div>
