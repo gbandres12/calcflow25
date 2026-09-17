@@ -59,7 +59,7 @@ export interface NotaAsItemPayload {
 }
 
 export interface NfeEmitOpts {
-  devolucao?: { chaveAcesso: string; nItem?: number };
+  devolucao?: { chaveAcesso: string; nItem?: number; itens?: Array<{ nItem: number }> };
   transferencia?: boolean;
 }
 
@@ -428,9 +428,7 @@ export const fiscalService = {
       const cleanNcm = onlyDigits(it.ncm);
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
       const cleanCfop = onlyDigits(it.cfop);
-      const safeCfop = (isDevolucao || isTransferencia) 
-        ? onlyDigits(cfopPadrao) 
-        : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao));
+      const safeCfop = cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao);
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
       const itemCst = (it.cst || it.csosn || cstIcmsPadrao).trim();
@@ -458,7 +456,7 @@ export const fiscalService = {
       if (isDevolucao && opts?.devolucao?.chaveAcesso) {
         row.nfeReferenciada = {
           chaveAcesso: onlyDigits(opts.devolucao.chaveAcesso),
-          nItem: opts.devolucao.nItem || idx + 1
+          nItem: opts.devolucao.itens?.[idx]?.nItem || opts.devolucao.nItem || it.nfeItemRef || idx + 1
         };
       }
       return row;
@@ -488,11 +486,13 @@ export const fiscalService = {
 
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
-      naturezaOperacao: isDevolucao
-        ? 'Devolucao de mercadoria'
-        : isTransferencia
-          ? 'Transferencia de producao do estabelecimento'
-          : (order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
+      naturezaOperacao:
+        (order.nfeNaturezaOperacao || '').trim() ||
+        (isDevolucao
+          ? 'Devolucao de mercadoria'
+          : isTransferencia
+            ? 'Transferencia de producao do estabelecimento'
+            : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento')),
       dest,
       items,
       pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],

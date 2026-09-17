@@ -10,6 +10,8 @@ import {
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
+import { NfeOperacao, cstNeedsIcmsAliquot, naturezaForOperacao, suggestedCfop } from './fiscal/fiscalCatalog';
+import { CfopSelect, CstIcmsSelect } from './fiscal/FiscalCodeSelects';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -20,6 +22,7 @@ interface EmitirNfeModalProps {
   onSuccess: (updatedOrder: SaleOrder) => void;
   devolutionChave?: string;
   transferencia?: boolean;
+  onCreateOrder?: (order: Omit<SaleOrder, 'id' | 'reference'>) => void;
 }
 
 export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
@@ -30,7 +33,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   onClose,
   onSuccess,
   devolutionChave,
-  transferencia
+  transferencia,
+  onCreateOrder
 }) => {
   const [currentConfig, setCurrentConfig] = useState<FiscalConfig>(config);
   const [activeCustomer, setActiveCustomer] = useState<Customer>({ ...customer });
@@ -47,24 +51,37 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
 
   const isSubmittingRef = useRef(false);
-  const isDevolucao = Boolean(devolutionChave);
-  const isTransferencia = Boolean(transferencia) && !isDevolucao;
-  const isInterestadual = customer.state && customer.state !== 'PA';
-  const cfopSugerido = isDevolucao
-    ? (isInterestadual ? '6202' : '5202')
-    : isTransferencia
-      ? (isInterestadual ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152'))
-      : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
+  const [operacao, setOperacao] = useState<NfeOperacao>(
+    devolutionChave ? 'devolucao' : transferencia ? 'transferencia' : 'venda'
+  );
+  const isDevolucao = operacao === 'devolucao';
+  const isTransferencia = operacao === 'transferencia';
+  const isInterestadual = Boolean(activeCustomer.state && activeCustomer.state !== (currentConfig.ufEmitente || 'PA'));
+  const cfopSugerido = suggestedCfop(operacao, isInterestadual, {
+    vendaIn: currentConfig.cfopPadraoEstadual,
+    vendaOut: currentConfig.cfopPadraoInterestadual,
+    transfIn: currentConfig.cfopTransferenciaEstadual,
+    transfOut: currentConfig.cfopTransferenciaInterestadual
+  });
 
-  // Itens com CFOP e CST editáveis
-  const [items, setItems] = useState(order.items.map(it => ({
+  const [items, setItems] = useState(order.items.map((it, idx) => ({
     ...it,
-    cfop: it.cfop || cfopSugerido,
-    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
+    cfop: it.cfop || suggestedCfop(
+      devolutionChave ? 'devolucao' : transferencia ? 'transferencia' : 'venda',
+      Boolean(customer.state && customer.state !== (config.ufEmitente || 'PA')),
+      {
+        vendaIn: config.cfopPadraoEstadual,
+        vendaOut: config.cfopPadraoInterestadual,
+        transfIn: config.cfopTransferenciaEstadual,
+        transfOut: config.cfopTransferenciaInterestadual
+      }
+    ),
+    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40',
+    nfeItemRef: it.nfeItemRef || idx + 1
   })));
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
-    order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
+    order.nfeNaturezaOperacao || naturezaForOperacao(operacao, config.naturezaOperacaoPadrao)
   );
 
   // Informações Complementares pré-definidas do produto + padrão
@@ -82,7 +99,35 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const validation = fiscalService.validarDadosFiscais({ ...order, items }, activeCustomer);
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
-    setItems(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
+    setItems(prev => prev.map((item, idx) => {
+      if (idx !== index) return item;
+      const next = { ...item, [field]: value };
+      if (field === 'quantity' || field === 'unitPrice') {
+        const qty = Number(field === 'quantity' ? value : next.quantity) || 0;
+        const price = Number(field === 'unitPrice' ? value : next.unitPrice) || 0;
+        next.total = Number((qty * price).toFixed(2));
+      }
+      return next;
+    }));
+  };
+
+  const applyCfopCstToAll = (field: 'cfop' | 'cst', value: string) => {
+    setItems(prev => prev.map((item) => ({ ...item, [field]: value })));
+  };
+
+  const handleChangeOperacao = (next: NfeOperacao) => {
+    setOperacao(next);
+    const nextCfop = suggestedCfop(next, isInterestadual, {
+      vendaIn: currentConfig.cfopPadraoEstadual,
+      vendaOut: currentConfig.cfopPadraoInterestadual,
+      transfIn: currentConfig.cfopTransferenciaEstadual,
+      transfOut: currentConfig.cfopTransferenciaInterestadual
+    });
+    setNaturezaOperacao(naturezaForOperacao(next, currentConfig.naturezaOperacaoPadrao));
+    setItems(prev => prev.map((item) => ({ ...item, cfop: nextCfop })));
+    if (next === 'devolucao' && !chaveDevolucao) {
+      setChaveDevolucao(order.nfeChave || '');
+    }
   };
 
   // Safety unlock in case of unforeseen lockups
@@ -174,15 +219,29 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setErrorMsg(null);
 
     try {
+      if (isDevolucao && chaveDevolucao.replace(/\D/g, '').length !== 44) {
+        setErrorMsg('Informe a chave de 44 dígitos da NF-e original para devolver.');
+        return;
+      }
+
       const orderWithEdits: SaleOrder = {
         ...order,
         items,
         nfeNaturezaOperacao: naturezaOperacao,
-        nfeInfCpl: infCpl
+        nfeInfCpl: infCpl,
+        nfeTipo: operacao,
+        nfeReferenciadaChave: isDevolucao ? chaveDevolucao.replace(/\D/g, '') : order.nfeReferenciadaChave,
+        subtotal: items.reduce((s, it) => s + (Number(it.total) || 0), 0),
+        total: items.reduce((s, it) => s + (Number(it.total) || 0), 0) + (isDevolucao || isTransferencia ? 0 : (order.shipping || 0)) - (order.discount || 0)
       };
 
       const opts = isDevolucao
-        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        ? {
+            devolucao: {
+              chaveAcesso: chaveDevolucao,
+              itens: items.map((it) => ({ nItem: Number(it.nfeItemRef) || 1 }))
+            }
+          }
         : isTransferencia
           ? { transferencia: true }
           : undefined;
@@ -207,8 +266,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           }
         }
 
-        const updatedOrder: SaleOrder = {
-          ...orderWithEdits,
+        const nfeFields = {
           nfeStatus: finalStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
@@ -218,12 +276,28 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           nfeDanfeUrl: result.nfeDanfeUrl,
           nfeXmlUrl: result.nfeXmlUrl,
           nfeEmissao: result.nfeEmissao,
-          nfeNaturezaOperacao: result.naturezaOperacao,
+          nfeNaturezaOperacao: result.naturezaOperacao || naturezaOperacao,
           nfePayload: payloadSent,
-          nfeRawResponse: result.rawResponse
+          nfeRawResponse: result.rawResponse,
+          nfeTipo: operacao as SaleOrder['nfeTipo'],
+          nfeReferenciadaChave: isDevolucao ? chaveDevolucao.replace(/\D/g, '') : undefined
         };
 
-        onSuccess(updatedOrder);
+        if (isDevolucao && onCreateOrder) {
+          const { id: _id, reference: _ref, ...rest } = orderWithEdits;
+          onCreateOrder({
+            ...rest,
+            ...nfeFields,
+            status: order.status,
+            payments: [],
+            paidAmount: 0,
+            remainingAmount: 0,
+            notes: `Devolução da NF-e ${chaveDevolucao.replace(/\D/g, '')} (pedido ${order.reference})`
+          });
+          onClose();
+        } else {
+          onSuccess({ ...orderWithEdits, ...nfeFields });
+        }
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e pela SEFAZ.');
       }
@@ -526,96 +600,163 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           </div>
 
-          {/* Natureza da Operação */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Natureza da Operação</label>
-            <input 
-              type="text"
-              value={naturezaOperacao}
-              onChange={e => setNaturezaOperacao(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
-            />
+          {/* Tipo de operação + Natureza */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Tipo de operação</label>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  ['venda', 'Venda'],
+                  ['devolucao', 'Devolução'],
+                  ['transferencia', 'Transferência']
+                ] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleChangeOperacao(key)}
+                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide border ${
+                      operacao === key ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="md:col-span-2 space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Natureza da Operação</label>
+              <input 
+                type="text"
+                value={naturezaOperacao}
+                onChange={e => setNaturezaOperacao(e.target.value)}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
+              />
+            </div>
           </div>
 
           {isTransferencia && (
             <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900">
               <p className="font-black uppercase tracking-wider text-[10px] mb-1">Transferência entre estabelecimentos</p>
-              <p>CFOP { (activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152') } · finalidade 1 · sem cobrança financeira.</p>
+              <p>CFOP sugerido {cfopSugerido} · finalidade 1 · sem cobrança financeira. Você pode alterar o CFOP/CST em cada item.</p>
             </div>
           )}
 
           {isDevolucao && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Chave da NF-e original (44 dígitos)</label>
+            <div className="space-y-1.5 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+              <label className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Chave da NF-e original (44 dígitos)</label>
               <input
                 type="text"
                 value={chaveDevolucao}
                 onChange={(e) => setChaveDevolucao(e.target.value)}
                 placeholder="Chave de acesso da nota a devolver"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                className="w-full px-4 py-3 bg-white border border-amber-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-amber-500"
               />
-              <p className="text-[10px] text-slate-400">Finalidade 4 · CFOP 5202/6202 · sem cobrança financeira.</p>
+              <p className="text-[10px] text-amber-800">Finalidade 4 · CFOP sugerido {cfopSugerido} · informe o nº do item original (nItem) por linha. A nota de devolução é gravada à parte, sem apagar a NF-e original.</p>
             </div>
           )}
 
           {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                <FileText size={12} /> Itens & Enquadramento Fiscal (CFOP e CST Editáveis)
+                <FileText size={12} /> Itens, CFOP, CST e alíquota
               </span>
-              <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                Altere o CFOP ou CST diretamente na tabela
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => applyCfopCstToAll('cfop', cfopSugerido)}
+                  className="text-[9px] font-black uppercase px-2 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200"
+                >
+                  CFOP {cfopSugerido} em todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyCfopCstToAll('cst', currentConfig.cstIcmsPadrao || '40')}
+                  className="text-[9px] font-black uppercase px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200"
+                >
+                  CST padrão em todos
+                </button>
+              </div>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs">
+            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
+              <table className="w-full text-left text-xs min-w-[720px]">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
                   <tr>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-3 py-3 w-28">NCM</th>
-                    <th className="px-3 py-3 w-28 text-purple-700">CFOP *</th>
-                    <th className="px-3 py-3 w-24 text-blue-700">CST *</th>
-                    <th className="px-3 py-3 text-center w-24">Qtd</th>
-                    <th className="px-4 py-3 text-right w-28">Total</th>
+                    <th className="px-3 py-3">Item</th>
+                    <th className="px-2 py-3 w-24">NCM</th>
+                    <th className="px-2 py-3 w-44 text-purple-700">CFOP *</th>
+                    <th className="px-2 py-3 w-44 text-blue-700">CST / CSOSN *</th>
+                    <th className="px-2 py-3 w-20">ICMS %</th>
+                    {isDevolucao && <th className="px-2 py-3 w-16">nItem</th>}
+                    <th className="px-2 py-3 text-center w-24">Qtd</th>
+                    <th className="px-3 py-3 text-right w-24">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <p className="font-bold text-slate-800">{it.productName}</p>
                         <p className="text-[10px] text-slate-400">{it.productCode}</p>
                       </td>
-                      <td className="px-3 py-3 font-mono text-slate-600">
+                      <td className="px-2 py-3 font-mono text-slate-600">
                         <input 
                           type="text"
                           value={it.ncm || '25171000'}
                           onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)}
-                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500"
+                          className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500"
                         />
                       </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
+                      <td className="px-2 py-3">
+                        <CfopSelect
                           value={it.cfop || ''}
-                          onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)}
-                          placeholder="CFOP"
-                          className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-500"
+                          operacao={operacao}
+                          onChange={(v) => handleUpdateItem(idx, 'cfop', v)}
                         />
                       </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
+                      <td className="px-2 py-3">
+                        <CstIcmsSelect
                           value={it.cst || ''}
-                          onChange={e => handleUpdateItem(idx, 'cst', e.target.value)}
-                          placeholder="CST"
-                          className="w-20 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
+                          onChange={(v) => handleUpdateItem(idx, 'cst', v)}
                         />
                       </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
+                      <td className="px-2 py-3">
+                        <input
+                          type="number"
+                          step="0.01"
+                          disabled={!cstNeedsIcmsAliquot(it.cst)}
+                          value={it.aliquotaIcms ?? ''}
+                          onChange={(e) => handleUpdateItem(idx, 'aliquotaIcms', e.target.value === '' ? undefined : Number(e.target.value))}
+                          className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold disabled:opacity-40"
+                          placeholder={cstNeedsIcmsAliquot(it.cst) ? '0' : '—'}
+                        />
+                      </td>
+                      {isDevolucao && (
+                        <td className="px-2 py-3">
+                          <input
+                            type="number"
+                            min={1}
+                            value={it.nfeItemRef || idx + 1}
+                            onChange={(e) => handleUpdateItem(idx, 'nfeItemRef', Number(e.target.value) || idx + 1)}
+                            className="w-full px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-xs font-mono font-black text-center"
+                          />
+                        </td>
+                      )}
+                      <td className="px-2 py-3 text-center font-bold text-slate-700">
+                        {isDevolucao ? (
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={it.quantity}
+                            onChange={(e) => handleUpdateItem(idx, 'quantity', Number(e.target.value))}
+                            className="w-20 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
+                          />
+                        ) : (
+                          <span>{it.quantity} {it.unit}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -646,9 +787,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total da Nota Fiscal (NF-e)</span>
-              <p className="text-xs text-slate-400">Produtos: {formatBRL(order.subtotal)} | Frete: {formatBRL(order.shipping || 0)}</p>
+              <p className="text-xs text-slate-400">
+                Produtos: {formatBRL(items.reduce((s, it) => s + (Number(it.total) || 0), 0))}
+                {isDevolucao || isTransferencia ? ' · sem pagamento' : ` | Frete: ${formatBRL(order.shipping || 0)}`}
+              </p>
             </div>
-            <p className="text-xl font-black text-emerald-400">{formatBRL(order.total)}</p>
+            <p className="text-xl font-black text-emerald-400">
+              {formatBRL(
+                items.reduce((s, it) => s + (Number(it.total) || 0), 0) +
+                (isDevolucao || isTransferencia ? 0 : (order.shipping || 0)) -
+                (order.discount || 0)
+              )}
+            </p>
           </div>
 
           {errorMsg && (
@@ -691,7 +841,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              disabled={loading || !validation.valid}
+              disabled={loading || !validation.valid || (isDevolucao && chaveDevolucao.replace(/\D/g, '').length !== 44)}
               onClick={handleEmitir}
               className="flex items-center gap-2 px-6 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >

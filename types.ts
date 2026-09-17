@@ -336,6 +336,9 @@ export interface SaleOrder {
     cfop?: string;
     cst?: string;
     csosn?: string;
+    cstPis?: string;
+    cstCofins?: string;
+    nfeItemRef?: number;
     aliquotaIcms?: number;
     aliquotaPis?: number;
     aliquotaCofins?: number;
@@ -381,6 +384,8 @@ export interface SaleOrder {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  nfeTipo?: 'venda' | 'devolucao' | 'transferencia';
+  nfeReferenciadaChave?: string;
 }
 
 export interface FiscalConfig {

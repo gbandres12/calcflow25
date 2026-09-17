@@ -6,6 +6,7 @@ import {
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
   CreditCard, Info, HelpCircle
 } from 'lucide-react';
+import { CfopSelect, CstIcmsSelect } from './fiscal/FiscalCodeSelects';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -659,24 +660,18 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     {/* CFOP Editável */}
                     <div className="space-y-1">
                       <label className="text-[9px] font-black uppercase text-purple-700">CFOP *</label>
-                      <input 
-                        type="text" 
-                        value={it.cfop} 
-                        onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)} 
-                        placeholder="5101"
-                        className="w-full p-2 bg-purple-50 border border-purple-300 rounded-xl text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-600"
+                      <CfopSelect
+                        value={it.cfop}
+                        onChange={(v) => handleUpdateItem(idx, 'cfop', v)}
                       />
                     </div>
 
                     {/* CST Editável */}
                     <div className="space-y-1">
                       <label className="text-[9px] font-black uppercase text-blue-700">CST / CSOSN *</label>
-                      <input 
-                        type="text" 
-                        value={it.cst} 
-                        onChange={e => handleUpdateItem(idx, 'cst', e.target.value)} 
-                        placeholder="102"
-                        className="w-full p-2 bg-blue-50 border border-blue-300 rounded-xl text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-600"
+                      <CstIcmsSelect
+                        value={it.cst}
+                        onChange={(v) => handleUpdateItem(idx, 'cst', v)}
                       />
                     </div>
                   </div>

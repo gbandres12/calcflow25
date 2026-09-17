@@ -473,6 +473,11 @@ const App: React.FC = () => {
     };
     setOrders(prev => [...prev, newOrder]);
     persistCloud('sales_orders', newOrder);
+    if (newOrder.nfeTipo === 'devolucao') {
+      newOrder.items.forEach((item) => processStockChange(item.productId, item.quantity));
+      return;
+    }
+    if (newOrder.nfeTipo === 'transferencia') return;
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));

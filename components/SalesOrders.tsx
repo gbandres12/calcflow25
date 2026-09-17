@@ -16,10 +16,11 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft, Ban
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { DanfeModal } from './DanfeModal';
+import { CancelarNfeModal } from './fiscal/CancelarNfeModal';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
@@ -36,7 +37,7 @@ interface SalesOrdersProps {
   accounts: FinancialAccount[];
   company: Company;
   companyId?: string;
-  onAddOrder: (order: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => void;
+  onAddOrder: (order: Omit<SaleOrder, 'id' | 'reference'>) => void;
   onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
   onUpdateOrder: (order: SaleOrder) => void;
   onDeleteOrder: (orderId: string) => void;
@@ -129,6 +130,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [devolutionChave, setDevolutionChave] = useState<string | undefined>(undefined);
   const [emitTransferencia, setEmitTransferencia] = useState(false);
   const [orderToViewDanfe, setOrderToViewDanfe] = useState<SaleOrder | null>(null);
+  const [orderToCancelNfe, setOrderToCancelNfe] = useState<SaleOrder | null>(null);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
 
   useEffect(() => {
@@ -840,6 +842,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             title="Emitir NF-e de devolução"
                           >
                             <Undo2 size={12} /> Devolver
+                          </button>
+                          <button
+                            onClick={() => setOrderToCancelNfe(order)}
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                            title="Cancelar NF-e na SEFAZ"
+                          >
+                            <Ban size={12} /> Cancelar
                           </button>
                         </div>
                       ) : (
@@ -1949,6 +1958,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           company={company}
           devolutionChave={devolutionChave}
           transferencia={emitTransferencia}
+          onCreateOrder={onAddOrder}
           onClose={() => {
             setOrderToEmitNfe(null);
             setDevolutionChave(undefined);
@@ -1975,6 +1985,18 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           onOrderUpdated={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
             setOrderToViewDanfe(updatedOrder);
+          }}
+        />
+      )}
+
+      {orderToCancelNfe && (
+        <CancelarNfeModal
+          order={orderToCancelNfe}
+          config={fiscalConfig}
+          onClose={() => setOrderToCancelNfe(null)}
+          onCancelled={(updated) => {
+            onUpdateOrder(updated);
+            setOrderToCancelNfe(null);
           }}
         />
       )}
