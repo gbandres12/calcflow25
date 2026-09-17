@@ -436,7 +436,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
             </p>
             <button
               onClick={handleOpenCreateModal}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md mt-2"
+              className="inline-flex items-center gap-2 bg-[#0F5948] hover:bg-[#1B6B58] text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-md mt-2"
             >
               <Plus size={16} />
               Criar Primeira Remessa
