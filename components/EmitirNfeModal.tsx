@@ -64,10 +64,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     transfOut: currentConfig.cfopTransferenciaInterestadual
   });
 
-  const [items, setItems] = useState(order.items.map((it, idx) => ({
-    ...it,
-    cfop: it.cfop || suggestedCfop(
-      devolutionChave ? 'devolucao' : transferencia ? 'transferencia' : 'venda',
+  const [items, setItems] = useState(order.items.map((it, idx) => {
+    const initialOp: NfeOperacao = devolutionChave ? 'devolucao' : transferencia ? 'transferencia' : 'venda';
+    const initialCfop = suggestedCfop(
+      initialOp,
       Boolean(customer.state && customer.state !== (config.ufEmitente || 'PA')),
       {
         vendaIn: config.cfopPadraoEstadual,
@@ -75,10 +75,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         transfIn: config.cfopTransferenciaEstadual,
         transfOut: config.cfopTransferenciaInterestadual
       }
-    ),
-    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40',
-    nfeItemRef: it.nfeItemRef || idx + 1
-  })));
+    );
+    return {
+      ...it,
+      cfop: initialOp === 'venda' ? (it.cfop || initialCfop) : initialCfop,
+      cst: it.cst || it.csosn || config.cstIcmsPadrao || '40',
+      nfeItemRef: it.nfeItemRef || idx + 1
+    };
+  }));
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
     order.nfeNaturezaOperacao || naturezaForOperacao(operacao, config.naturezaOperacaoPadrao)
