@@ -68,8 +68,37 @@ export interface NotaAsPagamento {
   valor: number;
 }
 
+export interface NotaAsTransportadora {
+  documento?: string;
+  nome?: string;
+  ie?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  rntrc?: string;
+}
+
+export interface NotaAsVeiculo {
+  placa?: string;
+  uf?: string;
+  rntrc?: string;
+}
+
+export interface NotaAsVolume {
+  quantidade?: number;
+  especie?: string;
+  marca?: string;
+  pesoLiquido?: number;
+  pesoBruto?: number;
+}
+
 export interface NotaAsTransporte {
   modalidadeFrete: number;
+  transportadora?: NotaAsTransportadora;
+  veiculo?: NotaAsVeiculo;
+  volumes?: NotaAsVolume[];
+  pesoLiquido?: number;
+  pesoBruto?: number;
 }
 
 /**
@@ -355,6 +384,19 @@ export const fiscalService = {
       }
     });
 
+    // Validação leve do frete (nunca bloqueia, só orienta)
+    const freteMod = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteVal = Number(order.frete?.valor ?? order.shipping ?? 0) || 0;
+    if (![0, 1, 2, 3, 4, 9].includes(freteMod)) {
+      errors.push('Modalidade de frete inválida. Use 9 (sem frete), 0 (CIF), 1 (FOB), 2, 3 ou 4.');
+    }
+    if (freteMod === 9 && freteVal > 0) {
+      warnings.push('Valor de frete informado com modalidade "Sem frete (9)": o valor será desconsiderado na NF-e.');
+    }
+    if (freteMod !== 9 && freteVal > 0 && freteMod === 1) {
+      warnings.push('Frete FOB: o valor do frete é por conta do destinatário — confira se deve compor o total da nota.');
+    }
+
     return {
       valid: errors.length === 0,
       errors,
@@ -475,11 +517,66 @@ export const fiscalService = {
       .filter((txt): txt is string => Boolean(txt && txt.trim()));
     const uniqueProductComplementares = Array.from(new Set(productComplementares));
 
+    // ---- Frete / transporte (modFrete SEFAZ: 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2 terceiros · 3/4 próprio) ----
+    const freteModalidadeRaw = order.frete?.modalidade ?? (order.shipping && !semPagamento ? 0 : 9);
+    const freteModalidade = Number(freteModalidadeRaw) as 0 | 1 | 2 | 3 | 4 | 9;
+    const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
+    const freteValor = Math.max(0, Number(freteValorRaw) || 0);
+    const hasFreteCobrado = freteValor > 0 && !semPagamento && freteModalidade !== 9;
+
+    const transporte: NotaAsTransporte = { modalidadeFrete: semPagamento ? 9 : freteModalidade };
+    const transp = order.frete?.transportadora;
+    if (transp && (transp.documento || transp.nome || transp.rntrc)) {
+      transporte.transportadora = {
+        ...(transp.documento ? { documento: onlyDigits(transp.documento) } : {}),
+        ...(transp.nome?.trim() ? { nome: transp.nome.trim() } : {}),
+        ...(transp.ie?.trim() ? { ie: onlyDigits(transp.ie) } : {}),
+        ...(transp.endereco?.trim() ? { endereco: transp.endereco.trim() } : {}),
+        ...(transp.cidade?.trim() ? { cidade: transp.cidade.trim() } : {}),
+        ...(transp.uf?.trim() ? { uf: transp.uf.trim().toUpperCase() } : {}),
+        ...(transp.rntrc?.trim() ? { rntrc: transp.rntrc.trim() } : {}),
+      };
+    }
+    const veic = order.frete?.veiculo;
+    if (veic && (veic.placa || veic.rntrc)) {
+      transporte.veiculo = {
+        ...(veic.placa?.trim() ? { placa: veic.placa.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') } : {}),
+        ...(veic.uf?.trim() ? { uf: veic.uf.trim().toUpperCase() } : {}),
+        ...(veic.rntrc?.trim() ? { rntrc: veic.rntrc.trim() } : {}),
+      };
+    }
+    const vol = order.frete?.volumes;
+    if (vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0 || vol.especie?.trim())) {
+      transporte.volumes = [{
+        ...(vol.quantidade ? { quantidade: Number(vol.quantidade) } : {}),
+        ...(vol.especie?.trim() ? { especie: vol.especie.trim().toUpperCase() } : {}),
+        ...(vol.marca?.trim() ? { marca: vol.marca.trim() } : {}),
+        ...(vol.pesoLiquido ? { pesoLiquido: Number(vol.pesoLiquido) } : {}),
+        ...(vol.pesoBruto ? { pesoBruto: Number(vol.pesoBruto) } : {}),
+      }];
+      if (vol.pesoLiquido) transporte.pesoLiquido = Number(vol.pesoLiquido);
+      if (vol.pesoBruto) transporte.pesoBruto = Number(vol.pesoBruto);
+    }
+
+    // Montar observações fiscais e complementares da nota
+    const freteInfParts: string[] = [];
+    if (!semPagamento && freteModalidade !== 9) {
+      const modLabel = freteModalidade === 0 ? 'CIF' : freteModalidade === 1 ? 'FOB' : `modFrete ${freteModalidade}`;
+      freteInfParts.push(
+        hasFreteCobrado
+          ? `Frete ${modLabel} R$ ${freteValor.toFixed(2)} incluso no total da nota`
+          : `Frete ${modLabel} sem valor cobrado na nota`
+      );
+      if (transp?.nome?.trim()) freteInfParts.push(`Transportadora: ${transp.nome.trim()}`);
+      if (veic?.placa?.trim()) freteInfParts.push(`Placa: ${veic.placa.trim().toUpperCase()}`);
+    }
+
     // Montar observações fiscais e complementares da nota
     const infParts = [
       order.nfeInfCpl, // Informação complementar editada/customizada da nota
       config.observacoesFiscaisPadrao,
       ...uniqueProductComplementares,
+      ...freteInfParts,
       order.reference ? (order.isAvulsa ? `Emissão Avulsa: ${order.reference}` : `Pedido: ${order.reference}`) : '',
       order.sellerName ? `Vendedor: ${order.sellerName}` : '',
       isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
@@ -496,7 +593,7 @@ export const fiscalService = {
       dest,
       items,
       pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],
-      transporte: { modalidadeFrete: order.shipping && !semPagamento ? 0 : 9 },
+      transporte,
       tipoOperacao: 1,
       finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
@@ -505,7 +602,7 @@ export const fiscalService = {
       referenciaExterna: order.reference || `ORDER-${order.id}`
     };
 
-    if (order.shipping && !semPagamento) payload.valorFrete = order.shipping;
+    if (hasFreteCobrado) payload.valorFrete = freteValor;
     return payload;
   },
 
@@ -1068,6 +1165,17 @@ export const fiscalService = {
    */
   gerarXml(order: SaleOrder, customer: Customer, config: FiscalConfig): string {
     const chave = order.nfeChave || this.generateMockChaveAcesso(config.cnpjEmitente, '15', order.nfeSerie || '1', order.nfeNumero || '1041');
+    const freteModXml = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteValXml = freteModXml === 9 ? 0 : (Number(order.frete?.valor ?? order.shipping) || 0);
+    const transpDoc = (order.frete?.transportadora?.documento || '').replace(/\D/g, '');
+    const transpNome = order.frete?.transportadora?.nome || '';
+    const transpBloco = transpDoc || transpNome
+      ? `<transporta><CNPJ>${transpDoc}</CNPJ><xNome>${transpNome}</xNome></transporta>`
+      : '';
+    const vol = order.frete?.volumes;
+    const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)
+      ? `<vol><qVol>${vol.quantidade || 1}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`
+      : '';
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe>
@@ -1150,11 +1258,16 @@ export const fiscalService = {
           <vBC>0.00</vBC>
           <vICMS>0.00</vICMS>
           <vProd>${order.subtotal.toFixed(2)}</vProd>
-          <vFrete>${(order.shipping || 0).toFixed(2)}</vFrete>
+          <vFrete>${freteValXml.toFixed(2)}</vFrete>
           <vDesc>${(order.discount || 0).toFixed(2)}</vDesc>
           <vNF>${order.total.toFixed(2)}</vNF>
         </ICMSTot>
       </total>
+      <transp>
+        <modFrete>${freteModXml}</modFrete>
+        ${transpBloco}
+        ${volBloco}
+      </transp>
     </infNFe>
   </NFe>
   <protNFe versao="4.00">

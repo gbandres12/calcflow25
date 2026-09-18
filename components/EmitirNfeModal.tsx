@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { SaleOrder, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { db } from '../services/dataService';
+import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
   Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings,
@@ -67,6 +68,29 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
 
+  // Frete / transporte (modFrete SEFAZ): sem frete (9) · CIF remetente (0) · FOB destinatário (1) · 2/3/4
+  const [frete, setFrete] = useState<FreteInfo>(() => {
+    if (order.frete) return { ...order.frete };
+    const shippingVal = Number(order.shipping) || 0;
+    return {
+      modalidade: shippingVal > 0 ? 0 : 9,
+      valor: shippingVal > 0 ? shippingVal : 0,
+    };
+  });
+
+  const freteValorEfetivo = useMemo(() => {
+    const mod = Number(frete.modalidade ?? 9);
+    if (isDevolucao || isTransferencia || mod === 9) return 0;
+    return Math.max(0, Number(frete.valor) || 0);
+  }, [frete, isDevolucao, isTransferencia]);
+
+  const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
+
+  const totalComFrete = useMemo(() => {
+    const subtotal = items.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
+    return subtotal - (Number(order.discount) || 0) + freteValorEfetivo;
+  }, [items, order.discount, freteValorEfetivo]);
+
   // Informações Complementares pré-definidas do produto + padrão
   const productComplementares = order.items
     .map(it => it.informacoesComplementares)
@@ -79,7 +103,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [infCpl, setInfCpl] = useState(initialInfCpl);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const validation = fiscalService.validarDadosFiscais({ ...order, items }, activeCustomer);
+  const validation = fiscalService.validarDadosFiscais(
+    { ...order, items, shipping: freteValorEfetivo, total: totalComFrete, frete },
+    activeCustomer
+  );
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
     setItems(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
@@ -177,6 +204,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       const orderWithEdits: SaleOrder = {
         ...order,
         items,
+        shipping: freteValorEfetivo,
+        total: totalComFrete,
+        frete: {
+          ...frete,
+          modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
+          valor: freteValorEfetivo,
+        },
         nfeNaturezaOperacao: naturezaOperacao,
         nfeInfCpl: infCpl
       };
@@ -558,6 +592,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
           )}
 
+          {/* Frete / Transporte — sem frete, CIF, FOB */}
+          {!isDevolucao && !isTransferencia ? (
+            <FreteNfeSection value={frete} onChange={setFrete} totalQuantidade={totalQuantidade} />
+          ) : (
+            <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-500 flex items-center gap-2">
+              <Truck size={16} className="text-slate-400 shrink-0" />
+              <span>Devolução e transferência saem <b>sem frete (modFrete 9)</b>, conforme regra SEFAZ.</span>
+            </div>
+          )}
+
           {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -645,10 +689,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {/* Totais do Documento */}
           <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
             <div className="space-y-0.5">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total da Nota Fiscal (NF-e)</span>
-              <p className="text-xs text-slate-400">Produtos: {formatBRL(order.subtotal)} | Frete: {formatBRL(order.shipping || 0)}</p>
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Total da Nota Fiscal (NF-e) · Frete {FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.sigla || 'Sem frete'}
+              </span>
+              <p className="text-xs text-slate-400">
+                Produtos: {formatBRL(items.reduce((a, it) => a + (Number(it.total) || 0), 0))} | Frete: {formatBRL(freteValorEfetivo)}{(order.discount || 0) ? ` | Desc: ${formatBRL(order.discount)}` : ''}
+              </p>
             </div>
-            <p className="text-xl font-black text-emerald-400">{formatBRL(order.total)}</p>
+            <p className="text-xl font-black text-emerald-400">{formatBRL(totalComFrete)}</p>
           </div>
 
           {errorMsg && (

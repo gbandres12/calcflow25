@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus } from '../types';
+import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo } from '../types';
 import { fiscalService } from '../services/fiscalService';
+import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
@@ -72,8 +73,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   // Parâmetros da NF-e
   const [naturezaOperacao, setNaturezaOperacao] = useState(config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento');
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'Boleto' | 'Dinheiro' | 'Transferência' | 'Sem Pagamento'>('PIX');
-  const [freteModalidade, setFreteModalidade] = useState<number>(9); // 9 = sem frete
-  const [freteValor, setFreteValor] = useState<string>('0');
+  // Frete / transporte (modFrete SEFAZ): 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2/3/4
+  const [frete, setFrete] = useState<FreteInfo>({ modalidade: 9, valor: 0 });
   const [infCplCustom, setInfCplCustom] = useState<string>('');
 
   // Itens da Nota
@@ -234,10 +235,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     }));
   };
 
-  // Totais
+  // Totais — frete soma no total apenas quando modalidade ≠ 9 (sem frete)
   const subtotal = useMemo(() => items.reduce((acc, it) => acc + it.total, 0), [items]);
-  const shippingVal = parseFloat(freteValor) || 0;
+  const freteModalidadeNum = Number(frete.modalidade ?? 9);
+  const shippingVal = freteModalidadeNum === 9 ? 0 : (Math.max(0, Number(frete.valor) || 0));
   const total = subtotal + shippingVal;
+  const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
 
   // Informações complementares reunidas
   const productComplementares = useMemo(() => {
@@ -284,6 +287,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     discount: 0,
     shipping: shippingVal,
     total,
+    frete: { ...frete, modalidade: freteModalidadeNum as FreteInfo['modalidade'], valor: shippingVal },
     status: OrderStatus.FINALIZED,
     paymentMethod: paymentMethod === 'Sem Pagamento' ? 'Outros' : paymentMethod,
     payments: [{
@@ -296,7 +300,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     }],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [activeCustomer, currentUser, items, subtotal, shippingVal, total, paymentMethod, naturezaOperacao, resolvedInfCpl]);
+  }), [activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
 
   const validation = fiscalService.validarDadosFiscais(syntheticOrder, activeCustomer);
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -708,48 +712,20 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Forma de Pagamento</label>
-                  <select 
-                    value={paymentMethod} 
-                    onChange={e => setPaymentMethod(e.target.value as any)} 
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                  >
-                    <option value="PIX">PIX</option>
-                    <option value="Boleto">Boleto Bancário</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Transferência">Transferência Bancária</option>
-                    <option value="Sem Pagamento">90 - Sem Pagamento</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Modalidade Frete</label>
-                  <select 
-                    value={freteModalidade} 
-                    onChange={e => setFreteModalidade(parseInt(e.target.value, 10))} 
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                  >
-                    <option value={9}>9 - Sem Ocorrência de Frete</option>
-                    <option value={0}>0 - Contratação pelo Remetente (CIF)</option>
-                    <option value={1}>1 - Contratação pelo Destinatário (FOB)</option>
-                  </select>
-                </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400">Forma de Pagamento</label>
+                <select 
+                  value={paymentMethod} 
+                  onChange={e => setPaymentMethod(e.target.value as any)} 
+                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                >
+                  <option value="PIX">PIX</option>
+                  <option value="Boleto">Boleto Bancário</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Transferência">Transferência Bancária</option>
+                  <option value="Sem Pagamento">90 - Sem Pagamento</option>
+                </select>
               </div>
-
-              {freteModalidade !== 9 && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Valor do Frete (R$)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    value={freteValor} 
-                    onChange={e => setFreteValor(e.target.value)} 
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="space-y-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
@@ -771,6 +747,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
             </div>
 
           </div>
+
+          {/* Seção 5: Frete & Transporte — sem frete, CIF, FOB */}
+          <FreteNfeSection value={frete} onChange={setFrete} totalQuantidade={totalQuantidade} />
 
           {/* Totais do Documento */}
           <div className="p-5 bg-slate-900 text-white rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">

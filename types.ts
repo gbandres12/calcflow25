@@ -314,6 +314,55 @@ export interface Transaction {
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
 
+/** Modalidade de frete padrão SEFAZ (grupo transp / modFrete) */
+export type FreteModalidade = 0 | 1 | 2 | 3 | 4 | 9;
+
+export interface FreteTransportadora {
+  documento?: string; // CNPJ ou CPF (só dígitos)
+  nome?: string; // Razão social / nome do transportador
+  ie?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  rntrc?: string; // Registro ANTT
+}
+
+export interface FreteVeiculo {
+  placa?: string;
+  uf?: string;
+  rntrc?: string;
+}
+
+export interface FreteVolume {
+  quantidade?: number; // qVol
+  especie?: string; // ex: GRANEL, SACAS, CAIXAS
+  marca?: string;
+  pesoLiquido?: number; // pesoL (kg)
+  pesoBruto?: number; // pesoB (kg)
+}
+
+export interface FreteInfo {
+  modalidade?: FreteModalidade | number;
+  valor?: number; // vFrete — compõe o total da NF-e
+  transportadora?: FreteTransportadora;
+  veiculo?: FreteVeiculo;
+  volumes?: FreteVolume;
+}
+
+export const FRETE_MODALIDADES: { value: FreteModalidade; sigla: string; label: string; descricao: string }[] = [
+  { value: 9, sigla: 'Sem frete', label: '9 — Sem ocorrência de frete', descricao: 'Nenhum valor de transporte na nota.' },
+  { value: 0, sigla: 'CIF', label: '0 — CIF · Frete por conta do remetente', descricao: 'Emitente paga o frete. Valor soma no total da NF-e.' },
+  { value: 1, sigla: 'FOB', label: '1 — FOB · Frete por conta do destinatário', descricao: 'Destinatário paga o frete fora da nota ou a cobrar.' },
+  { value: 2, sigla: 'Terceiros', label: '2 — Frete por conta de terceiros', descricao: 'Transportadora contratada por terceiro.' },
+  { value: 3, sigla: 'Próprio remetente', label: '3 — Transporte próprio do remetente', descricao: 'Frota própria do emitente, sem cobrança de frete.' },
+  { value: 4, sigla: 'Próprio destinatário', label: '4 — Transporte próprio do destinatário', descricao: 'Cliente retira com frota própria (FOB próprio).' },
+];
+
+export function freteModalidadeLabel(mod?: number): string {
+  const found = FRETE_MODALIDADES.find(m => m.value === mod);
+  return found ? found.label : `${mod ?? 9} — Modalidade de frete`;
+}
+
 export interface SaleOrder {
   id: string;
   reference: string;
@@ -349,6 +398,8 @@ export interface SaleOrder {
   discount: number;
   shipping: number;
   total: number;
+  /** Dados de frete/transporte da NF-e (modFrete SEFAZ: 9/0 CIF/1 FOB/2/3/4). `shipping` é mantido sincronizado com `frete.valor`. */
+  frete?: FreteInfo;
   paidAmount?: number;
   remainingAmount?: number;
   paymentStatus?: 'pago' | 'parcial' | 'pendente';
