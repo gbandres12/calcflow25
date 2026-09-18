@@ -1,64 +1,11 @@
-import { getAdminSupabase, getAdminSupabaseConfigError } from '../_lib/supabaseAdmin.js';
+import { requireMember } from '../_lib/telegramAuth.js';
 import { createPairingCode, listLinks, revokeLink } from '../_lib/telegramStore.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
-const ADMIN_ROLE = 'Administrador';
-
 function setCors(res: any) {
   res.setHeader('Access-Control-Allow-Methods', 'DELETE,GET,OPTIONS,POST');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-}
-
-function getBearerToken(req: any): string | null {
-  const header = String(req.headers?.authorization || '');
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] || null;
-}
-
-/**
- * Qualquer membro da empresa pode vincular o próprio Telegram; só o
- * administrador enxerga e revoga os chats dos outros.
- */
-async function requireMember(req: any, res: any) {
-  const admin = getAdminSupabase();
-  if (!admin) {
-    res.status(503).json({ error: getAdminSupabaseConfigError() || 'Configuração do Supabase indisponível no servidor.' });
-    return null;
-  }
-
-  const token = getBearerToken(req);
-  if (!token) {
-    res.status(401).json({ error: 'Sessão de acesso ausente.' });
-    return null;
-  }
-
-  const { data: authData, error: authError } = await admin.auth.getUser(token);
-  if (authError || !authData.user) {
-    res.status(401).json({ error: 'Sessão inválida ou expirada.' });
-    return null;
-  }
-
-  const { data: membership, error: membershipError } = await admin
-    .from('company_memberships')
-    .select('company_id, role')
-    .eq('user_id', authData.user.id)
-    .maybeSingle();
-
-  if (membershipError || !membership) {
-    res.status(403).json({ error: 'Usuário sem empresa vinculada.' });
-    return null;
-  }
-
-  return {
-    admin,
-    userId: authData.user.id,
-    companyId: membership.company_id as string,
-    role: (membership.role as string) || 'Operador',
-    isAdmin: membership.role === ADMIN_ROLE,
-    email: authData.user.email || '',
-    name: (authData.user.user_metadata as any)?.name || authData.user.email || 'Usuário'
-  };
 }
 
 export default async function handler(req: any, res: any) {

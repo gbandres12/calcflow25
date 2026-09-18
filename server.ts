@@ -11,6 +11,7 @@ import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
 import telegramPair from "./api/telegram/pair";
 import telegramWebhook from "./api/telegram/webhook";
+import telegramConferir from "./api/telegram/conferir";
 
 async function startServer() {
   const app = express();
@@ -34,6 +35,7 @@ async function startServer() {
   app.delete("/api/telegram/pair", (req, res) => telegramPair(req, res));
   app.get("/api/telegram/webhook", (req, res) => telegramWebhook(req, res));
   app.post("/api/telegram/webhook", (req, res) => telegramWebhook(req, res));
+  app.get("/api/telegram/conferir", (req, res) => telegramConferir(req, res));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "Calcário Flow ERP" });

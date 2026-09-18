@@ -30,6 +30,27 @@ Opcional: `NOTAAS_API_KEY`, `NOTAAS_WEBHOOK_SECRET`.
 
 Não coloque service_role no frontend.
 
+## Agente financeiro no Telegram
+
+Assessor que atende pelo Telegram em texto, áudio ou foto: consulta caixa, recebíveis, estoque e vendas, registra abatimentos e recebimentos e cria orçamentos. Toda gravação passa por um botão de confirmação no chat, e NF-e continua sendo emitida só pelo app.
+
+O bot **não altera o núcleo financeiro**: ele grava o recibo no pedido e o pagamento na parcela escolhida, e o `receiptId` impede o app de lançar de novo. Venda criada pelo chat nasce como Orçamento, que não baixa estoque nem gera financeiro até ser confirmada no ERP.
+
+### Configuração
+
+1. Rode a migration `008_telegram_agent.sql` no SQL Editor do Supabase.
+2. Defina na Vercel: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_USERNAME`, `GEMINI_API_KEY` e `SUPABASE_SERVICE_ROLE_KEY`.
+3. Registre o webhook: `npx tsx scripts/telegram-set-webhook.ts https://calcflow25.vercel.app`
+4. No ERP, em **Usuários e Acessos**, use o card "Conectar Telegram" e mande `/vincular CODIGO` para o bot.
+
+`TELEGRAM_AGENT_WRITES` começa desligado: o bot sobe só como consulta. Coloque `true` quando quiser liberar os lançamentos.
+
+### Comandos sem IA
+
+Se o Gemini estiver fora do ar ou sem cota, estes comandos continuam funcionando, porque não passam por modelo nenhum: `/saldo`, `/receber`, `/baixar`, `/abater`, `/vendas`, `/estoque`, `/resumo`, `/conferir`.
+
+O `/conferir` (e o botão "Conferir agora" no card) compara, por pedido, a soma dos recibos com a soma das baixas e aponta divergência.
+
 ## TestSprite (MCP)
 
 Validação de PRD e geração de testes via [TestSprite MCP](https://docs.testsprite.com/mcp/getting-started/installation). Pacote pinado: `@testsprite/testsprite-mcp@0.0.45`. Node.js >= 22.

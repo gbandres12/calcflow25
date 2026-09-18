@@ -18,9 +18,15 @@ const normalizeRow = (row: any): any | null => {
   return { ...payload, id: String(payload.id || row.id) };
 };
 
+/**
+ * Mesma normalização do resolveCompanyKey do dataService. Repetida aqui de
+ * propósito: importar o dataService no servidor traria localStorage e os
+ * constants com componentes React junto.
+ */
 function requireCompanyId(companyId: string): string {
   const clean = String(companyId || '').trim();
   if (!clean) throw new Error('companyId obrigatório para ler ou gravar no app_records.');
+  if (clean === 'main' || clean === 'demo') return 'matriz-demo';
   return clean;
 }
 

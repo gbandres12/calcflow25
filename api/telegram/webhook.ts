@@ -17,8 +17,7 @@ import {
   writeAudit
 } from '../_lib/telegramStore.js';
 import { HELP_TEXT, isCommand, runCommand } from '../../services/agent/commands.js';
-import { runAgent } from '../../services/agent/runAgent.js';
-import { AgentAttachment } from '../../services/agent/runAgent.js';
+import { AgentAttachment, runAgent } from '../../services/agent/runAgent.js';
 import { AgentContext, commitAction } from '../../services/agent/tools.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 60 };
@@ -305,6 +304,16 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ ok: true });
   } catch (error: any) {
     console.error('[TELEGRAM] Erro no webhook:', error);
+
+    // O update_id já foi marcado como processado, então o Telegram não reenvia:
+    // sem este aviso o usuário ficaria esperando uma resposta que não vem.
+    const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+    if (chatId) {
+      await sendMessage(String(chatId), 'Deu problema aqui no servidor e não consegui concluir. Tente de novo.').catch(
+        () => undefined
+      );
+    }
+
     // 200 de propósito: erro nosso não deve virar reentrega infinita do Telegram.
     return res.status(200).json({ ok: false, error: error?.message || 'erro interno' });
   }

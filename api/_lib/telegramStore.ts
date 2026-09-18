@@ -92,12 +92,15 @@ export async function consumePairingCode(code: string, chatId: string): Promise<
   const clean = String(code || '').trim().toUpperCase();
   if (!clean) return null;
 
+  // Marca o código como usado antes de criar o vínculo: se dois chats tentarem
+  // o mesmo código ao mesmo tempo, só um passa desta linha.
   const { data, error } = await supabase
     .from('telegram_pairing_codes')
-    .select('*')
+    .update({ used_at: new Date().toISOString(), used_by_chat_id: String(chatId) })
     .eq('code', clean)
     .is('used_at', null)
     .gt('expires_at', new Date().toISOString())
+    .select('*')
     .maybeSingle();
 
   if (error || !data) return null;
@@ -117,12 +120,14 @@ export async function consumePairingCode(code: string, chatId: string): Promise<
     { onConflict: 'chat_id' }
   );
 
-  if (linkError) throw new Error(`Falha ao vincular o chat: ${linkError.message}`);
-
-  await supabase
-    .from('telegram_pairing_codes')
-    .update({ used_at: new Date().toISOString(), used_by_chat_id: String(chatId) })
-    .eq('code', clean);
+  if (linkError) {
+    // Devolve o código para o usuário poder tentar de novo.
+    await supabase
+      .from('telegram_pairing_codes')
+      .update({ used_at: null, used_by_chat_id: null })
+      .eq('code', clean);
+    throw new Error(`Falha ao vincular o chat: ${linkError.message}`);
+  }
 
   return mapLink({ ...data, chat_id: chatId });
 }

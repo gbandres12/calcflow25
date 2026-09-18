@@ -17,6 +17,22 @@ interface PairingCode {
   botUsername?: string | null;
 }
 
+interface ReconciliationIssue {
+  reference: string;
+  receiptsTotal: number;
+  paymentsTotal: number;
+  difference: number;
+}
+
+interface Reconciliation {
+  pedidosConferidos: number;
+  lancamentosPeloTelegram: number;
+  divergencias: ReconciliationIssue[];
+}
+
+const formatBRL = (value: number) =>
+  Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 async function authorizedFetch(input: string, init: RequestInit = {}) {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase não configurado.');
@@ -46,6 +62,8 @@ export const TelegramAccessCard: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [audit, setAudit] = useState<Reconciliation | null>(null);
+  const [auditing, setAuditing] = useState(false);
 
   const loadLinks = useCallback(async () => {
     try {
@@ -58,6 +76,18 @@ export const TelegramAccessCard: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  const runReconciliation = async () => {
+    setAuditing(true);
+    setError(null);
+    try {
+      setAudit(await authorizedFetch('/api/telegram/conferir'));
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível conferir os lançamentos.');
+    } finally {
+      setAuditing(false);
+    }
+  };
 
   useEffect(() => {
     loadLinks();
@@ -202,6 +232,53 @@ export const TelegramAccessCard: React.FC = () => {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      <div className="mt-6 pt-6 border-t border-slate-100">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Conferência</p>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Compara, por pedido, a soma dos recibos com a soma das baixas no financeiro.
+            </p>
+          </div>
+          <button
+            onClick={runReconciliation}
+            disabled={auditing}
+            className="shrink-0 px-4 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-700 rounded-xl text-xs font-black transition-colors"
+          >
+            {auditing ? 'Conferindo...' : 'Conferir agora'}
+          </button>
+        </div>
+
+        {audit && (
+          <div
+            className={`p-4 rounded-2xl border text-xs font-semibold ${
+              audit.divergencias.length
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            }`}
+          >
+            {audit.divergencias.length === 0 ? (
+              <p>
+                Tudo batendo em {audit.pedidosConferidos} pedido(s). Lançamentos feitos pelo Telegram:{' '}
+                {audit.lancamentosPeloTelegram}.
+              </p>
+            ) : (
+              <>
+                <p className="mb-2">{audit.divergencias.length} pedido(s) com diferença:</p>
+                <ul className="space-y-1">
+                  {audit.divergencias.slice(0, 8).map((issue) => (
+                    <li key={issue.reference}>
+                      {issue.reference}: recibos {formatBRL(issue.receiptsTotal)} × baixas{' '}
+                      {formatBRL(issue.paymentsTotal)} (diferença {formatBRL(issue.difference)})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>
