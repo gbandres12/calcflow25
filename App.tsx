@@ -20,10 +20,11 @@ import { FiscalConfigView } from './components/FiscalConfigView';
 import TransferManagement from './components/TransferManagement';
 import Transportadores from './components/Transportadores';
 import ErrorBoundary from './components/ErrorBoundary';
+import TransfersPage from './components/TransfersPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -57,6 +58,7 @@ import { financeService, userService, inventoryService, orderService, db, isDemo
 import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument } from './services/saleNfe';
+import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -369,33 +371,17 @@ const App: React.FC = () => {
     persistDelete('transfers', id);
   };
 
-  const handleIntegrateTransferredItemsWithStore = (items: { name: string; category: any; quantity: number; unit: string }[]) => {
+  const handleIntegrateTransferredItemsWithStore = (items: StoreIntegrationIncoming[]) => {
     items.forEach(incoming => {
       setStoreItems(prev => {
-        const existingIndex = prev.findIndex(s => s.name.trim().toLowerCase() === incoming.name.trim().toLowerCase());
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          const current = updated[existingIndex];
-          const updatedItem: StoreItem = {
-            ...current,
-            quantity: Number(current.quantity || 0) + Number(incoming.quantity || 0)
-          };
-          updated[existingIndex] = updatedItem;
-          persistCloud('store_items', updatedItem);
-          return updated;
-        } else {
-          const newItem: StoreItem = {
-            id: newId('store'),
-            name: incoming.name,
-            category: incoming.category || 'Peças',
-            quantity: Number(incoming.quantity || 0),
-            unit: incoming.unit || 'UN',
-            minStock: 2,
-            companyId: activeCompanyId
-          };
-          persistCloud('store_items', newItem);
-          return [...prev, newItem];
-        }
+        const { items: next, touched } = applyStoreIntegration(
+          prev,
+          incoming,
+          newId('store'),
+          activeCompanyId
+        );
+        persistCloud('store_items', touched);
+        return next;
       });
     });
   };
@@ -1196,7 +1182,7 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'transfers' && (
-            <TransferManagement 
+            <TransfersPage 
               transfers={transfers}
               storeItems={storeItems}
               company={operatingCompany}
@@ -1257,6 +1243,16 @@ const App: React.FC = () => {
         >
           <Package size={18} />
           <span className="text-[10px] tracking-tight">Estoque</span>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('transfers')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+          }`}
+        >
+          <ArrowRightLeft size={18} />
+          <span className="text-[10px] tracking-tight">Remessas</span>
         </button>
 
         <button

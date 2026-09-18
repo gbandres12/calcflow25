@@ -1,4 +1,9 @@
+import { StoreItemCategory } from '../types';
+
 export type ParsedNfItem = {
+  nItem?: number;
+  cProd?: string;
+  cEAN?: string;
   productName: string;
   ncm?: string;
   cfop?: string;
@@ -6,7 +11,17 @@ export type ParsedNfItem = {
   unit: string;
   unitCost: number;
   totalCost: number;
-  category: 'Peças' | 'Lubrificantes' | 'EPI' | 'Ferramentas' | 'Insumos' | 'Outros';
+  uTrib?: string;
+  qTrib?: number;
+  infAdProd?: string;
+  category: StoreItemCategory;
+};
+
+export type ParsedNfParty = {
+  name?: string;
+  document?: string;
+  ie?: string;
+  city?: string;
 };
 
 export type ParsedNfDocument = {
@@ -14,14 +29,26 @@ export type ParsedNfDocument = {
   nfNumber?: string;
   series?: string;
   issuedAt?: string;
+  nature?: string;
   supplier?: string;
   supplierDocument?: string;
+  supplierIe?: string;
+  supplierCity?: string;
+  destName?: string;
+  destDocument?: string;
   accessKey?: string;
+  carrierName?: string;
+  vehiclePlate?: string;
+  vProd?: number;
+  vFrete?: number;
+  vNF?: number;
   items: ParsedNfItem[];
+  rawXml?: string;
   rawPreview?: string;
+  warnings?: string[];
 };
 
-const guessCategory = (name: string): ParsedNfItem['category'] => {
+const guessCategory = (name: string): StoreItemCategory => {
   const n = (name || '').toLowerCase();
   if (/oleo|óleo|graxa|lubrific/.test(n)) return 'Lubrificantes';
   if (/luva|capacete|bota|epi|mascara|máscara|protetor/.test(n)) return 'EPI';
@@ -38,43 +65,94 @@ const num = (value?: string | null) => {
 };
 
 const tag = (xml: string, name: string) => {
-  const re = new RegExp(`<(?:\\w+:)?${name}[^>]*>([^<]*)</(?:\\w+:)?${name}>`, 'i');
+  const re = new RegExp(`<(?:\\w+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'i');
   return xml.match(re)?.[1]?.trim() || '';
 };
 
 const allTags = (xml: string, name: string) => {
-  const re = new RegExp(`<(?:\\w+:)?${name}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'gi');
+  const re = new RegExp(`<(?:\\w+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${name}>`, 'gi');
   return [...xml.matchAll(re)].map((m) => m[1]);
 };
 
+const attr = (xml: string, name: string) => {
+  const re = new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, 'i');
+  return xml.match(re)?.[1] || '';
+};
+
+const parseParty = (block: string): ParsedNfParty => ({
+  name: tag(block, 'xNome') || undefined,
+  document: tag(block, 'CNPJ') || tag(block, 'CPF') || undefined,
+  ie: tag(block, 'IE') || undefined,
+  city: tag(block, 'xMun') || undefined
+});
+
+const accessKeyFromInfNfe = (xml: string) => {
+  const infOpen = xml.match(/<(?:\w+:)?infNFe\b[^>]*>/i)?.[0] || '';
+  const id = attr(infOpen, 'Id').replace(/^NFe/i, '');
+  if (/^\d{44}$/.test(id)) return id;
+  const fromProt = tag(xml, 'chNFe');
+  if (/^\d{44}$/.test(fromProt)) return fromProt;
+  return undefined;
+};
+
 export const parseNfeXml = (xml: string): ParsedNfDocument => {
-  const dets = allTags(xml, 'det');
-  const items: ParsedNfItem[] = dets.map((block) => {
-    const name = tag(block, 'xProd') || 'Item da NF-e';
-    const qty = num(tag(block, 'qCom')) || num(tag(block, 'qTrib')) || 1;
-    const unitCost = num(tag(block, 'vUnCom')) || num(tag(block, 'vUnTrib'));
-    const total = num(tag(block, 'vProd')) || qty * unitCost;
+  const infNFe = allTags(xml, 'infNFe')[0] || xml;
+  const ide = allTags(infNFe, 'ide')[0] || '';
+  const emit = allTags(infNFe, 'emit')[0] || '';
+  const dest = allTags(infNFe, 'dest')[0] || '';
+  const transp = allTags(infNFe, 'transp')[0] || '';
+  const total = allTags(infNFe, 'total')[0] || '';
+  const icmsTot = allTags(total, 'ICMSTot')[0] || total;
+  const emitente = parseParty(emit);
+  const destinatario = parseParty(dest);
+
+  const detMatches = [...infNFe.matchAll(/<(?:\w+:)?det\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?det>/gi)];
+  const items: ParsedNfItem[] = detMatches.map((match, index) => {
+    const block = match[2];
+    const prod = allTags(block, 'prod')[0] || block;
+    const name = tag(prod, 'xProd') || 'Item da NF-e';
+    const qty = num(tag(prod, 'qCom')) || num(tag(prod, 'qTrib')) || 1;
+    const unitCost = num(tag(prod, 'vUnCom')) || num(tag(prod, 'vUnTrib'));
+    const totalProd = num(tag(prod, 'vProd')) || qty * unitCost;
+    const nItem = Number(attr(match[1] || '', 'nItem')) || index + 1;
     return {
+      nItem,
+      cProd: tag(prod, 'cProd') || undefined,
+      cEAN: tag(prod, 'cEAN') || undefined,
       productName: name,
-      ncm: tag(block, 'NCM') || undefined,
-      cfop: tag(block, 'CFOP') || undefined,
+      ncm: tag(prod, 'NCM') || undefined,
+      cfop: tag(prod, 'CFOP') || undefined,
       quantitySent: qty,
-      unit: (tag(block, 'uCom') || tag(block, 'uTrib') || 'UN').toUpperCase(),
+      unit: (tag(prod, 'uCom') || tag(prod, 'uTrib') || 'UN').toUpperCase(),
       unitCost,
-      totalCost: total,
+      totalCost: totalProd,
+      uTrib: tag(prod, 'uTrib') || undefined,
+      qTrib: num(tag(prod, 'qTrib')) || undefined,
+      infAdProd: tag(block, 'infAdProd') || undefined,
       category: guessCategory(name)
     };
   }).filter((it) => it.productName);
 
   return {
     source: 'xml',
-    nfNumber: tag(xml, 'nNF') || undefined,
-    series: tag(xml, 'serie') || undefined,
-    issuedAt: tag(xml, 'dhEmi') || tag(xml, 'dEmi') || undefined,
-    supplier: tag(xml, 'xNome') || undefined,
-    supplierDocument: tag(xml, 'CNPJ') || tag(xml, 'CPF') || undefined,
-    accessKey: xml.match(/\d{44}/)?.[0],
+    nfNumber: tag(ide, 'nNF') || undefined,
+    series: tag(ide, 'serie') || undefined,
+    issuedAt: tag(ide, 'dhEmi') || tag(ide, 'dEmi') || undefined,
+    nature: tag(ide, 'natOp') || undefined,
+    supplier: emitente.name,
+    supplierDocument: emitente.document,
+    supplierIe: emitente.ie,
+    supplierCity: emitente.city,
+    destName: destinatario.name,
+    destDocument: destinatario.document,
+    accessKey: accessKeyFromInfNfe(xml),
+    carrierName: tag(transp, 'xNome') || undefined,
+    vehiclePlate: (tag(transp, 'placa') || '').toUpperCase() || undefined,
+    vProd: num(tag(icmsTot, 'vProd')) || undefined,
+    vFrete: num(tag(icmsTot, 'vFrete')) || undefined,
+    vNF: num(tag(icmsTot, 'vNF')) || undefined,
     items,
+    rawXml: xml,
     rawPreview: xml.slice(0, 400)
   };
 };
@@ -101,9 +179,6 @@ export const extractPdfLatinText = (buffer: ArrayBuffer): string => {
   return chunks.join(' ').replace(/\s+/g, ' ').trim();
 };
 
-// DANFEs normalmente guardam o texto em streams Flate comprimidos. A primeira
-// versão lia apenas PDFs sem compressão, o que fazia parecer que o importador
-// estava parado. Esta leitura continua toda no navegador, sem enviar a NF.
 const extractCompressedPdfText = async (buffer: ArrayBuffer): Promise<string> => {
   if (typeof DecompressionStream === 'undefined') return '';
   const raw = new TextDecoder('latin1').decode(buffer);
@@ -125,8 +200,7 @@ const extractCompressedPdfText = async (buffer: ArrayBuffer): Promise<string> =>
       const text = extractPdfLatinText(inflated);
       if (text) chunks.push(text);
     } catch {
-      // Alguns PDFs usam filtros adicionais. Nesses casos mantemos a leitura
-      // direta e orientamos o usuário a usar o XML da mesma NF-e.
+      // PDF com filtro extra: o fluxo de UI pede o XML da mesma nota.
     }
   }
   return chunks.join(' ').replace(/\s+/g, ' ').trim();
@@ -154,13 +228,18 @@ export const parseDanfeText = (text: string): ParsedNfDocument => {
       category: guessCategory(name)
     });
   }
+  const warnings: string[] = [];
+  if (!items.length || !accessKey) {
+    warnings.push('O PDF não trouxe itens ou a chave da NF com segurança. Envie o XML da mesma nota.');
+  }
   return {
     source: 'text',
     nfNumber,
     supplier,
     accessKey,
     items,
-    rawPreview: text.slice(0, 500)
+    rawPreview: text.slice(0, 500),
+    warnings
   };
 };
 
