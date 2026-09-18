@@ -76,11 +76,17 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
 
-  const [infCplTouched, setInfCplTouched] = useState(Boolean((order.nfeInfCpl || '').trim()));
+  const [infCplTouched, setInfCplTouched] = useState(order.nfeStatus === 'autorizada');
   const [infCplDraft, setInfCplDraft] = useState(
-    order.nfeInfCpl || assembleAutoInfCpl(config.observacoesFiscaisPadrao, order.items)
+    order.nfeInfCpl || assembleAutoInfCpl(config.observacoesFiscaisPadrao, hydrateSaleItemsFromCatalog(
+      order.items,
+      inventory,
+      { cfop: cfopSugerido, cst: config.cstIcmsPadrao || '40' }
+    ))
   );
-  const infCpl = infCplTouched ? infCplDraft : assembleAutoInfCpl(config.observacoesFiscaisPadrao, items);
+  const infCpl = (infCplTouched || order.nfeStatus === 'autorizada')
+    ? infCplDraft
+    : assembleAutoInfCpl(config.observacoesFiscaisPadrao, items);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const itemsSubtotal = items.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
