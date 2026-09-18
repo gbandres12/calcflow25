@@ -145,6 +145,16 @@ const Transportadores: React.FC<TransportadoresProps> = ({
 
   const fieldClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
   const labelClass = 'mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500';
+  const summaryCards: Array<{
+    label: string;
+    value: number;
+    Icon: React.ComponentType<{ size?: number; className?: string }>;
+  }> = [
+    { label: 'Cadastros', value: stats.total, Icon: Truck },
+    { label: 'Ativos', value: stats.ativos, Icon: BadgeCheck },
+    { label: 'Operação interna', value: stats.internos, Icon: UserRound },
+    { label: 'Entregas', value: stats.entregas, Icon: MapPin }
+  ];
 
   return (
     <div className="space-y-5 pb-24 lg:pb-8">
@@ -166,16 +176,11 @@ const Transportadores: React.FC<TransportadoresProps> = ({
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          ['Cadastros', stats.total, Truck],
-          ['Ativos', stats.ativos, BadgeCheck],
-          ['Operação interna', stats.internos, UserRound],
-          ['Entregas', stats.entregas, MapPin]
-        ].map(([label, value, Icon]) => (
-          <div key={String(label)} className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4">
+        {summaryCards.map(({ label, value, Icon }) => (
+          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4">
             <Icon size={17} className="mb-2 text-emerald-700" />
-            <p className="text-xl font-black text-slate-900">{String(value)}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{String(label)}</p>
+            <p className="text-xl font-black text-slate-900">{value}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
           </div>
         ))}
       </div>
