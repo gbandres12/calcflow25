@@ -148,6 +148,7 @@ export interface InventoryItem {
   fatorConversao?: number;
   observacoesFiscais?: string;
   informacoesComplementares?: string; // Informações Complementares pré-definidas para a NF-e
+  infAdProd?: string; // Informação adicional do produto (tag infAdProd, por item)
 
   // Reforma Tributária (RTC - EC 132/2023)
   cClassTrib?: string; // Código de Classificação Tributária RTC
@@ -347,6 +348,7 @@ export interface SaleOrderItem {
   aliquotaCbs?: number;
   aliquotaIs?: number;
   informacoesComplementares?: string;
+  infAdProd?: string;
   /** Texto da coluna Descrição no pedido impresso (se vazio, usa productName). */
   productDescription?: string;
 }

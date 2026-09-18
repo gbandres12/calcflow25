@@ -4,6 +4,7 @@ import { db, resolveCompanyKey } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
+import { INF_ADPROD_MAX } from './nfeComplementares';
 
 /**
  * URL Base Oficial da API NotaAs (NF-e modelo 55)
@@ -56,6 +57,7 @@ export interface NotaAsItemPayload {
   aliquotaPis?: number;
   aliquotaCofins?: number;
   nfeReferenciada?: NotaAsNfeReferenciada;
+  infAdProd?: string;
 }
 
 export interface NfeEmitOpts {
@@ -601,6 +603,8 @@ export const fiscalService = {
           nItem: opts.devolucao.nItem || idx + 1
         };
       }
+      const infAdProd = String(it.infAdProd || '').trim().slice(0, INF_ADPROD_MAX);
+      if (infAdProd) row.infAdProd = infAdProd;
       return row;
     });
 
