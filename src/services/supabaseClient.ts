@@ -69,10 +69,11 @@ export const getSupabaseConfig = () => ({
 export const SUPABASE_SQL_SCHEMA = `-- O schema do CalcárioFlow é versionado em supabase/migrations.
 --
 -- Não aplique políticas abertas para anon ou authenticated.
--- A migration 003_secure_multi_tenant_access.sql cria o vínculo de cada usuário
--- autenticado com a sua empresa e restringe a tabela app_records por empresa.
+-- A migration 003 cria o vínculo de cada usuário autenticado com a sua empresa.
+-- A migration 007 adiciona ensure_own_company_membership() para o frontend
+-- gravar clientes e vendas no banco da empresa certa, e não só no cache.
 --
--- Para um projeto novo, aplique as migrations 001, 002 e 003 na ordem.`;
+-- Aplique as migrations 001 a 007 na ordem.`;
 
 /**
  * Testa a conexão com o Supabase e verifica se a tabela app_records existe

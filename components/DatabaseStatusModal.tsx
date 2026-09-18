@@ -187,7 +187,18 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
             )}
 
             {/* Metrics Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+              <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                  <ArrowUpRight size={12} className="text-cyan-400" />
+                  Clientes
+                </div>
+                <div className="text-lg font-black text-white">
+                  {persistenceResult ? persistenceResult.counts.customers : '...'}
+                </div>
+                <div className="text-[9px] text-slate-500">gravados em app_records</div>
+              </div>
+
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
                 <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
                   <DollarSign size={12} className="text-purple-400" />

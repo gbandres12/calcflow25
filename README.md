@@ -7,7 +7,7 @@ Produção: https://calcflow25.vercel.app
 ## Stack
 
 - React + Vite
-- Persistência principal: **Supabase** (`app_records`)
+- Persistência principal: **Supabase** (`app_records`). localStorage é só cache/fila de reenvio.
 - Fallback: localStorage (e Firestore legado, se configurado)
 - Deploy: Vercel
 
@@ -15,7 +15,7 @@ Produção: https://calcflow25.vercel.app
 
 1. `npm install`
 2. Copie `.env.example` para `.env.local` e preencha URL + anon key do Supabase
-3. No SQL Editor do Supabase, rode `supabase/migrations/001_app_records.sql` e `002_order_lookups.sql`
+3. No SQL Editor do Supabase, rode as migrations `001` a `007` em `supabase/migrations/` (a `007` evita clientes/vendas ficarem só no cache do navegador).
 4. `npm run dev`
 
 Demo: `admin@calcarioflow.com.br` / `123456`
@@ -30,8 +30,7 @@ Opcional: `NOTAAS_API_KEY`, `NOTAAS_WEBHOOK_SECRET`.
 
 Não coloque service_role no frontend.
 
-## Segurança (ainda em aberto)
+## Segurança
 
-- RLS atual é pública (bootstrap). Trocar após Auth.
-- Contas novas exigem senha (hash SHA-256). Operadores cadastrados na equipe também.
-- Próximo passo: Supabase Auth + policy por `company_id`.
+- RLS em `app_records` por empresa via `company_memberships` (migrations 003–007).
+- Contas novas usam Supabase Auth. Rode a migration `007` no SQL Editor para o app conseguir gravar clientes e vendas na empresa certa.

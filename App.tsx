@@ -52,8 +52,8 @@ import {
   INITIAL_COST_CENTERS,
   COMPANY_INFO
 } from './constants';
-import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
-import { toPublicUser } from './services/authLogic';
+import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
+import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextOrderReference } from './services/ids';
 
 const App: React.FC = () => {
@@ -81,6 +81,8 @@ const App: React.FC = () => {
   };
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
+  const [persistError, setPersistError] = useState<string | null>(null);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showDbModal, setShowDbModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -123,10 +125,49 @@ const App: React.FC = () => {
   };
 
   const persistCloud = (tableName: string, record: any) => {
-    db.upsert(tableName, activeCompanyId, record).catch((err) => {
-      console.warn('[PERSISTÊNCIA] Aviso ao sincronizar com nuvem (dado salvo localmente com segurança):', tableName, err);
-    });
+    db.upsert(tableName, activeCompanyId, record)
+      .then(() => {
+        const state = db.getSyncState(activeCompanyId);
+        setPendingSyncCount(state.pendingCount);
+        setPersistError(state.lastError);
+      })
+      .catch((err) => {
+        const state = db.getSyncState(activeCompanyId);
+        setPendingSyncCount(state.pendingCount);
+        setPersistError(err?.message || `Não foi possível gravar ${tableName} no Supabase.`);
+        console.warn('[PERSISTÊNCIA] Gravação no banco falhou; o registro ficou na fila local para reenvio:', tableName, err);
+      });
   };
+
+  const persistDelete = (tableName: string, id: string) => {
+    db.delete(tableName, activeCompanyId, id)
+      .then(() => {
+        const state = db.getSyncState(activeCompanyId);
+        setPendingSyncCount(state.pendingCount);
+        setPersistError(state.lastError);
+      })
+      .catch((err) => {
+        const state = db.getSyncState(activeCompanyId);
+        setPendingSyncCount(state.pendingCount);
+        setPersistError(err?.message || `Não foi possível excluir ${tableName} no Supabase.`);
+      });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sessionUser = await userService.getCurrentSessionUser();
+      if (cancelled) return;
+      if (sessionUser) {
+        handleSetCurrentUser(sessionUser);
+        return;
+      }
+      if (currentUser && !isDemoCompany(currentUser.companyId) && !isDemoEmail(currentUser.email || '')) {
+        handleSetCurrentUser(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
@@ -172,6 +213,14 @@ const App: React.FC = () => {
         setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
         setTransportadores(Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : []);
 
+        db.flushPending(activeCompanyId).catch((err) => {
+          console.warn('[PERSISTÊNCIA] Reenvio da fila para o Supabase falhou:', err);
+        }).finally(() => {
+          const state = db.getSyncState(activeCompanyId);
+          setPendingSyncCount(state.pendingCount);
+          setPersistError(state.lastError);
+        });
+
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
       } finally {
@@ -199,7 +248,7 @@ const App: React.FC = () => {
 
   const handleDeleteCategory = (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
-    db.delete('categories', activeCompanyId, id);
+    persistDelete('categories', id);
   };
 
   // Handlers de Maquinário
@@ -301,7 +350,7 @@ const App: React.FC = () => {
 
   const handleDeleteTransfer = (id: string) => {
     setTransfers(prev => prev.filter(t => t.id !== id));
-    db.delete('transfers', activeCompanyId, id).catch(() => {});
+    persistDelete('transfers', id);
   };
 
   const handleIntegrateTransferredItemsWithStore = (items: { name: string; category: any; quantity: number; unit: string }[]) => {
@@ -362,7 +411,7 @@ const App: React.FC = () => {
 
   const handleDeleteTransaction = (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
-    db.delete('transactions', activeCompanyId, id);
+    persistDelete('transactions', id);
   };
 
   // Clientes
@@ -397,7 +446,7 @@ const App: React.FC = () => {
 
   const handleDeleteCustomer = (id: string) => {
     setCustomers(prev => prev.filter(c => c.id !== id));
-    db.delete('customers', activeCompanyId, id).catch(() => {});
+    persistDelete('customers', id);
   };
 
   // Transportadores / caminhoneiros
@@ -429,7 +478,7 @@ const App: React.FC = () => {
 
   const handleDeleteTransportador = (id: string) => {
     setTransportadores(prev => prev.filter(item => item.id !== id));
-    db.delete('transportadores', activeCompanyId, id).catch(() => {});
+    persistDelete('transportadores', id);
   };
 
   // Estoque
@@ -457,7 +506,7 @@ const App: React.FC = () => {
 
   const handleDeleteInventoryItem = (id: string) => {
     setInventory(prev => prev.filter(i => i.id !== id));
-    db.delete('inventory', activeCompanyId, id);
+    persistDelete('inventory', id);
   };
 
   // Usuários
@@ -685,11 +734,11 @@ const App: React.FC = () => {
       const linkedTransactions = transactions.filter(transaction => transaction.orderId === orderId);
       setTransactions(prev => prev.filter(transaction => transaction.orderId !== orderId));
       linkedTransactions.forEach(transaction => {
-        db.delete('transactions', activeCompanyId, transaction.id).catch(() => {});
+        persistDelete('transactions', transaction.id);
       });
     }
     setOrders(prev => prev.filter(o => o.id !== orderId));
-    db.delete('sales_orders', activeCompanyId, orderId).catch(() => {});
+    persistDelete('sales_orders', orderId);
   };
 
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
@@ -871,6 +920,31 @@ const App: React.FC = () => {
               </div>
             </div>
           </header>
+
+          {(persistError || pendingSyncCount > 0) && (
+            <div className={`mb-4 rounded-xl border px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center gap-2 ${persistError ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
+              <p className="flex-1">
+                {persistError
+                  ? `O banco não confirmou a última gravação (${pendingSyncCount} item(ns) na fila). Clientes e vendas não ficam só no navegador — vamos reenviar ao Supabase.`
+                  : `${pendingSyncCount} registro(s) aguardando confirmação no Supabase.`}
+              </p>
+              <button
+                type="button"
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-current/20 text-xs font-bold"
+                onClick={() => {
+                  db.flushPending(activeCompanyId)
+                    .then(() => {
+                      const state = db.getSyncState(activeCompanyId);
+                      setPendingSyncCount(state.pendingCount);
+                      setPersistError(state.lastError);
+                    })
+                    .catch((err) => setPersistError(err?.message || 'Falha ao reenviar a fila.'));
+                }}
+              >
+                Reenviar agora
+              </button>
+            </div>
+          )}
           
           {currentView === 'dashboard' && (
             <Dashboard 

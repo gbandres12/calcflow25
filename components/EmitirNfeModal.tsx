@@ -170,7 +170,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       setIsEditingCustomer(false);
       setCepFeedback(null);
     } catch (err: any) {
-      console.warn('Erro ao salvar cliente localmente:', err);
+      console.warn('Erro ao salvar cliente no Supabase:', err);
       setIsEditingCustomer(false);
     }
   };

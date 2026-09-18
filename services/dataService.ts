@@ -15,14 +15,22 @@ import {
   DEFAULT_FISCAL_CONFIG
 } from '../constants';
 import { User, UserRole } from '../types';
-import { getSupabase, isSupabaseConfigured } from './supabaseClient';
-import { firestoreDb } from './firebase';
+import { getSupabase } from './supabaseClient';
 import { isDemoEmail } from './authLogic';
-import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import {
+  SEED_DOC_ID,
+  applyPendingDeletes,
+  hasSeedMeta,
+  mapSupabaseRows,
+  mergeRecordsById,
+  remainingPendingAfterConfirm,
+  remainingPendingDeletes,
+  seedMetaUpsertRow,
+  splitConfirmedPending,
+  stripSeedDocs
+} from './persistSeed';
 
-const SEED_DOC_ID = '__seed__';
-
-// Utilitário de armazenamento local (cache resiliente)
+// Cache local e fila de reenvio. A fonte da verdade é o Supabase.
 const storage = {
   get(key: string) {
     try {
@@ -49,33 +57,13 @@ const storage = {
 };
 
 const pendingStorageKey = (tableStorageKey: string) => `${tableStorageKey}__pending_upserts`;
+const pendingDeleteStorageKey = (tableStorageKey: string) => `${tableStorageKey}__pending_deletes`;
 
 const getPendingUpserts = (tableStorageKey: string): any[] =>
   stripSeedDocs(storage.get(pendingStorageKey(tableStorageKey)) || []);
 
-const serializeRecord = (value: any): string => {
-  if (Array.isArray(value)) return `[${value.map(serializeRecord).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) =>
-      `${JSON.stringify(key)}:${serializeRecord(value[key])}`
-    ).join(',')}}`;
-  }
-  return JSON.stringify(value);
-};
-
-const mergeRecordsById = (remoteRecords: any[], localRecords: any[]): any[] => {
-  const merged = new Map<string, any>();
-  stripSeedDocs(remoteRecords).forEach((record) => {
-    if (record?.id) merged.set(String(record.id), record);
-  });
-  stripSeedDocs(localRecords).forEach((record) => {
-    if (record?.id) {
-      const id = String(record.id);
-      merged.set(id, { ...(merged.get(id) || {}), ...record, id });
-    }
-  });
-  return Array.from(merged.values());
-};
+const getPendingDeleteIds = (tableStorageKey: string): string[] =>
+  (storage.get(pendingDeleteStorageKey(tableStorageKey)) || []).map((id: any) => String(id));
 
 const queuePendingUpserts = (tableStorageKey: string, records: any[]) => {
   const pending = mergeRecordsById(getPendingUpserts(tableStorageKey), records);
@@ -83,12 +71,10 @@ const queuePendingUpserts = (tableStorageKey: string, records: any[]) => {
 };
 
 const confirmPendingUpserts = (tableStorageKey: string, sentRecords: any[]) => {
-  const sentById = new Map(sentRecords.map((record) => [String(record.id), serializeRecord(record)]));
-  const remaining = getPendingUpserts(tableStorageKey).filter((record) => {
-    const sentVersion = sentById.get(String(record.id));
-    return !sentVersion || serializeRecord(record) !== sentVersion;
-  });
-  storage.set(pendingStorageKey(tableStorageKey), remaining);
+  storage.set(
+    pendingStorageKey(tableStorageKey),
+    remainingPendingAfterConfirm(getPendingUpserts(tableStorageKey), sentRecords)
+  );
 };
 
 const removePendingUpsert = (tableStorageKey: string, id: string) => {
@@ -96,6 +82,37 @@ const removePendingUpsert = (tableStorageKey: string, id: string) => {
     .filter((record) => String(record.id) !== String(id));
   storage.set(pendingStorageKey(tableStorageKey), remaining);
 };
+
+const queuePendingDelete = (tableStorageKey: string, id: string) => {
+  const next = Array.from(new Set([...getPendingDeleteIds(tableStorageKey), String(id)]));
+  storage.set(pendingDeleteStorageKey(tableStorageKey), next);
+};
+
+const confirmPendingDeletes = (tableStorageKey: string, remoteRecords: any[]) => {
+  storage.set(
+    pendingDeleteStorageKey(tableStorageKey),
+    remainingPendingDeletes(getPendingDeleteIds(tableStorageKey), remoteRecords)
+  );
+};
+
+const removePendingDelete = (tableStorageKey: string, id: string) => {
+  storage.set(
+    pendingDeleteStorageKey(tableStorageKey),
+    getPendingDeleteIds(tableStorageKey).filter((item) => item !== String(id))
+  );
+};
+
+let lastPersistError: string | null = null;
+
+const setPersistError = (message: string | null) => {
+  lastPersistError = message;
+};
+
+const composeVisibleRows = (
+  remoteRecords: any[],
+  pendingUpserts: any[],
+  pendingDeletes: string[]
+) => applyPendingDeletes(mergeRecordsById(remoteRecords, pendingUpserts), pendingDeletes);
 
 const DEMO_TABLE_DATA: Record<string, any[]> = {
   inventory: INITIAL_INVENTORY,
@@ -173,9 +190,6 @@ const getStorageKey = (tableName: string, companyId?: string) => {
   return `${tableName}_${resolveCompanyKey(companyId)}`;
 };
 
-const stripSeedDocs = (rows: any[]) =>
-  (rows || []).filter((row) => row && row.id !== SEED_DOC_ID && !row.__isSeedMeta);
-
 const createSupabaseRows = (tableName: string, companyId: string, records: any[]) =>
   records.map((record) => ({
     id: String(record.id),
@@ -192,33 +206,169 @@ const persistPendingUpserts = async (
 ) => {
   const supabase = getSupabase();
   if (!supabase || records.length === 0) return;
+  const operational = stripSeedDocs(records);
+  if (operational.length === 0) return;
 
   const { error } = await supabase
     .from('app_records')
-    .upsert(createSupabaseRows(tableName, companyId, records), {
+    .upsert(createSupabaseRows(tableName, companyId, operational), {
       onConflict: 'table_name,company_id,id'
     });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    setPersistError(`Falha ao gravar ${tableName} no Supabase: ${error.message}`);
+    throw new Error(error.message);
+  }
+  setPersistError(null);
+};
+
+const persistPendingDeletes = async (
+  tableName: string,
+  companyId: string,
+  ids: string[]
+) => {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return;
+  for (const id of ids) {
+    const { error } = await supabase
+      .from('app_records')
+      .delete()
+      .eq('table_name', tableName)
+      .eq('company_id', companyId)
+      .eq('id', String(id));
+    if (error) {
+      setPersistError(`Falha ao excluir ${tableName} no Supabase: ${error.message}`);
+      throw new Error(error.message);
+    }
+  }
+};
+
+const writeSeedMeta = async (tableName: string, companyId: string) => {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('app_records')
+    .upsert([seedMetaUpsertRow(tableName, companyId)], {
+      onConflict: 'table_name,company_id,id'
+    });
+  if (error) {
+    console.warn(`[Supabase] Não foi possível marcar '${tableName}' como inicializada:`, error.message);
+  }
+};
+
+const snapshotPending = (storageKey: string) => ({
+  upserts: getPendingUpserts(storageKey),
+  deletes: getPendingDeleteIds(storageKey)
+});
+
+const retryUnconfirmed = (
+  tableName: string,
+  companyId: string,
+  storageKey: string,
+  remoteRecords: any[],
+  pendingUpserts: any[],
+  pendingDeletes: string[]
+) => {
+  const { confirmed, unconfirmed } = splitConfirmedPending(pendingUpserts, remoteRecords);
+  if (confirmed.length) confirmPendingUpserts(storageKey, confirmed);
+  const leftoverDeletes = remainingPendingDeletes(pendingDeletes, remoteRecords);
+  pendingDeletes.filter((id) => !leftoverDeletes.includes(id)).forEach((id) => removePendingDelete(storageKey, id));
+  if (unconfirmed.length) {
+    persistPendingUpserts(tableName, companyId, unconfirmed).then(() => {
+      confirmPendingUpserts(storageKey, unconfirmed);
+    }).catch((err) => {
+      console.warn(`[Supabase] Reenvio pendente de '${tableName}' falhou:`, err);
+    });
+  }
+  if (leftoverDeletes.length) {
+    persistPendingDeletes(tableName, companyId, leftoverDeletes).then(() => {
+      leftoverDeletes.forEach((id) => removePendingDelete(storageKey, id));
+    }).catch((err) => {
+      console.warn(`[Supabase] Reenvio de exclusão pendente em '${tableName}' falhou:`, err);
+    });
+  }
+};
+
+const membershipCompanyFromRpc = (payload: any): string | null => {
+  if (!payload) return null;
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  const companyId = row?.company_id || row?.companyId;
+  return companyId ? String(companyId) : null;
+};
+
+export const resolveMembershipCompanyId = async (
+  userId: string,
+  fallback: string
+): Promise<string> => {
+  const supabase = getSupabase();
+  if (!supabase || !userId) return fallback;
+  try {
+    const { data, error } = await supabase
+      .from('company_memberships')
+      .select('company_id, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (!error && Array.isArray(data) && data[0]?.company_id) {
+      return String(data[0].company_id);
+    }
+  } catch (err) {
+    console.warn('[Supabase] Falha ao ler company_memberships:', err);
+  }
+  try {
+    const { data, error } = await supabase.rpc('ensure_own_company_membership');
+    const ensured = membershipCompanyFromRpc(data);
+    if (!error && ensured) return ensured;
+    if (error) console.warn('[Supabase] ensure_own_company_membership:', error.message);
+  } catch (err) {
+    console.warn('[Supabase] RPC ensure_own_company_membership indisponível:', err);
+  }
+  return fallback;
 };
 
 // ========================================================
-// REPOSITÓRIO UNIFICADO: SUPABASE (PRIORIDADE) + FIRESTORE + LOCALSTORAGE
+// REPOSITÓRIO UNIFICADO: SUPABASE É A FONTE DA VERDADE
+// localStorage só guarda cache e fila de reenvio
 // ========================================================
 
 export const db = {
-  /**
-   * Obtém todos os registros de uma tabela e empresa
-   */
+  getSyncState(companyId?: string) {
+    const compKey = resolveCompanyKey(companyId);
+    let pendingCount = 0;
+    ALL_TABLES.forEach((tableName) => {
+      const storageKey = getStorageKey(tableName, compKey);
+      pendingCount += getPendingUpserts(storageKey).length + getPendingDeleteIds(storageKey).length;
+    });
+    return {
+      pendingCount,
+      lastError: lastPersistError,
+      cloudEnabled: Boolean(getSupabase())
+    };
+  },
+
+  async flushPending(companyId?: string) {
+    const compKey = resolveCompanyKey(companyId);
+    for (const tableName of ALL_TABLES) {
+      const storageKey = getStorageKey(tableName, compKey);
+      const pendingUpserts = getPendingUpserts(storageKey);
+      const pendingDeletes = getPendingDeleteIds(storageKey);
+      if (pendingUpserts.length) {
+        await persistPendingUpserts(tableName, compKey, pendingUpserts);
+        confirmPendingUpserts(storageKey, pendingUpserts);
+      }
+      if (pendingDeletes.length) {
+        await persistPendingDeletes(tableName, compKey, pendingDeletes);
+        pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
+      }
+    }
+  },
+
   async getTable(tableName: string, companyId?: string): Promise<any[]> {
     const compKey = resolveCompanyKey(companyId);
     const storageKey = getStorageKey(tableName, compKey);
     const demo = isDemoCompany(compKey);
-    // Capturar antes da leitura evita que uma resposta iniciada antes da gravação
-    // remova um registro que acabou de ser confirmado enquanto a consulta estava em voo.
-    const pendingAtReadStart = getPendingUpserts(storageKey);
+    const pendingAtReadStart = snapshotPending(storageKey);
 
-    // 1. Tentar ler do Supabase se configurado
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -229,99 +379,68 @@ export const db = {
           .eq('company_id', compKey);
 
         if (!error && Array.isArray(data)) {
-          if (data.length > 0) {
-            const records = data
-              .map((row: any) => ({ ...(row.data || row), id: String(row.data?.id || row.id) }))
-              .filter(Boolean);
-            const cleanRecords = stripSeedDocs(records);
-            const pending = mergeRecordsById(pendingAtReadStart, getPendingUpserts(storageKey));
-            const safeRecords = mergeRecordsById(cleanRecords, pending);
-            storage.set(storageKey, safeRecords);
+          const records = mapSupabaseRows(data);
+          const initialized = hasSeedMeta(records) || data.length > 0;
+          const cleanRecords = stripSeedDocs(records);
+          const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
+          const pendingDeletes = Array.from(new Set([
+            ...pendingAtReadStart.deletes,
+            ...getPendingDeleteIds(storageKey)
+          ]));
+          const safeRecords = composeVisibleRows(cleanRecords, pendingUpserts, pendingDeletes);
 
-            if (pending.length > 0) {
-              const remoteById = new Map(cleanRecords.map((record) => [
-                String(record.id),
-                serializeRecord(record)
-              ]));
-              const confirmed = pending.filter((record) =>
-                remoteById.get(String(record.id)) === serializeRecord(record)
-              );
-              confirmPendingUpserts(storageKey, confirmed);
-              const unconfirmed = pending.filter((record) =>
-                remoteById.get(String(record.id)) !== serializeRecord(record)
-              );
-              persistPendingUpserts(tableName, compKey, unconfirmed).catch((err) =>
-                console.warn(`[Supabase] Reenvio pendente de '${tableName}' falhou:`, err)
-              );
-            }
+          if (initialized || cleanRecords.length > 0) {
+            storage.set(storageKey, safeRecords);
+            if (!hasSeedMeta(records)) writeSeedMeta(tableName, compKey);
+            retryUnconfirmed(tableName, compKey, storageKey, cleanRecords, pendingUpserts, pendingDeletes);
             return safeRecords;
           }
 
-          // Se a tabela no Supabase estiver vazia para esta empresa, verificar se já temos dados locais para enviar
-          const localCache = stripSeedDocs(storage.get(storageKey) || []);
-          if (localCache.length > 0) {
-            this.upsert(tableName, compKey, localCache).catch((e) =>
-              console.warn('[Supabase] Sync local cache to cloud warning:', e)
+          const recovered = composeVisibleRows(
+            stripSeedDocs(storage.get(storageKey) || []),
+            pendingUpserts,
+            pendingDeletes
+          );
+          if (recovered.length > 0) {
+            storage.set(storageKey, recovered);
+            this.upsert(tableName, compKey, recovered).catch((e) =>
+              console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
             );
-            return localCache;
+            writeSeedMeta(tableName, compKey);
+            return recovered;
           }
 
-          // Inicializar com dados iniciais ou demo
           const initialData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
+          storage.set(storageKey, initialData);
           if (initialData.length > 0) {
             this.upsert(tableName, compKey, initialData).catch((e) =>
               console.warn('[Supabase] Seed initial data warning:', e)
             );
           }
-          storage.set(storageKey, initialData);
+          writeSeedMeta(tableName, compKey);
           return initialData;
         } else if (error) {
           console.warn(`[Supabase] Consulta '${tableName}' retornou aviso (código ${error.code}):`, error.message);
+          setPersistError(`Falha ao ler ${tableName} no Supabase: ${error.message}`);
         }
       } catch (err) {
         console.warn(`[Supabase] Falha ao consultar '${tableName}':`, err);
       }
     }
 
-    // 2. Tentar ler do Firestore se disponível
-    if (firestoreDb) {
-      try {
-        const colName = `${tableName}_${compKey}`;
-        const snapshot = await getDocs(collection(firestoreDb, colName));
-        const remoteData: any[] = [];
-
-        snapshot.forEach((docSnap) => {
-          if (docSnap.id !== SEED_DOC_ID && !docSnap.data()?.__isSeedMeta) {
-            remoteData.push({ id: docSnap.id, ...docSnap.data() });
-          }
-        });
-
-        if (remoteData.length > 0) {
-          const safeRecords = mergeRecordsById(
-            remoteData,
-            mergeRecordsById(pendingAtReadStart, getPendingUpserts(storageKey))
-          );
-          storage.set(storageKey, safeRecords);
-          return safeRecords;
-        }
-      } catch (e) {
-        console.warn(`[Firestore] Falha ao consultar '${tableName}':`, e);
-      }
-    }
-
-    // 3. Fallback: LocalStorage / Dados Iniciais
+    const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
+    const pendingDeletes = Array.from(new Set([
+      ...pendingAtReadStart.deletes,
+      ...getPendingDeleteIds(storageKey)
+    ]));
     let localData = storage.get(storageKey);
     if (!localData || !Array.isArray(localData)) {
       localData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
       storage.set(storageKey, localData);
     }
-
-    return stripSeedDocs(localData || []);
+    return composeVisibleRows(localData || [], pendingUpserts, pendingDeletes);
   },
 
-  /**
-   * Salva ou atualiza um ou vários registros
-   */
   async upsert(tableName: string, companyId: string, record: any): Promise<any[]> {
     const compKey = resolveCompanyKey(companyId);
     const storageKey = getStorageKey(tableName, compKey);
@@ -331,11 +450,9 @@ export const db = {
       return stripSeedDocs(storage.get(storageKey) || []);
     }
 
-    // 1. Atualizar cache local imediatamente para resposta instantânea
     const current = stripSeedDocs(storage.get(storageKey) || []);
     const normalizedRecords = records.map((newRec) => {
-      // Versões antigas armazenavam hash de senha no perfil. Não permita que um
-      // cache pendente volte a sobrepor a sanitização feita pelo banco.
+      if (newRec?.id === SEED_DOC_ID || newRec?.__isSeedMeta) return newRec;
       const safeRecord = tableName === 'users'
         ? Object.fromEntries(Object.entries(newRec).filter(([key]) => key !== 'passwordHash'))
         : newRec;
@@ -345,85 +462,59 @@ export const db = {
         companyId: safeRecord.companyId || compKey
       };
     });
-    const updated = mergeRecordsById(current, normalizedRecords);
+    const operational = stripSeedDocs(normalizedRecords);
+    const updated = mergeRecordsById(current, operational);
     storage.set(storageKey, updated);
 
-    // 2. Persistir no Supabase
     const supabase = getSupabase();
-    let supabaseError: unknown = null;
-    if (supabase) {
-      queuePendingUpserts(storageKey, normalizedRecords);
-      try {
-        await persistPendingUpserts(tableName, compKey, normalizedRecords);
-      } catch (err) {
-        console.warn(`[Supabase] Falha de comunicação ao gravar '${tableName}':`, err);
-        supabaseError = err;
+    if (!supabase) {
+      if (!isDemoCompany(compKey)) {
+        const err = new Error('Supabase não está configurado. Cliente e venda não foram gravados no banco.');
+        setPersistError(err.message);
+        throw err;
       }
+      return updated;
     }
 
-    // 3. Persistir no Firestore se disponível
-    if (firestoreDb) {
-      try {
-        const colName = `${tableName}_${compKey}`;
-        for (const item of normalizedRecords) {
-          await setDoc(doc(firestoreDb, colName, item.id), item, { merge: true });
-        }
-      } catch (e) {
-        console.warn(`[Firestore] Erro ao gravar '${tableName}':`, e);
-      }
+    queuePendingUpserts(storageKey, operational);
+    try {
+      await persistPendingUpserts(tableName, compKey, operational);
+      confirmPendingUpserts(storageKey, operational);
+      return updated;
+    } catch (err) {
+      console.warn(`[Supabase] Falha de comunicação ao gravar '${tableName}':`, err);
+      throw err;
     }
-
-    if (supabaseError) {
-      throw supabaseError;
-    }
-
-    return updated;
   },
 
-  /**
-   * Deleta um registro por ID
-   */
   async delete(tableName: string, companyId: string, id: string): Promise<void> {
     const compKey = resolveCompanyKey(companyId);
     const storageKey = getStorageKey(tableName, compKey);
     const current = storage.get(storageKey) || [];
-    const updated = current.filter((r: any) => r.id !== id);
-    storage.set(storageKey, updated);
+    storage.set(storageKey, current.filter((r: any) => r.id !== id));
     removePendingUpsert(storageKey, id);
+    queuePendingDelete(storageKey, id);
 
-    // Deletar no Supabase
     const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { error } = await supabase
-          .from('app_records')
-          .delete()
-          .eq('table_name', tableName)
-          .eq('company_id', compKey)
-          .eq('id', String(id));
-
-        if (error) {
-          console.warn(`[Supabase] Erro ao deletar em '${tableName}':`, error.message);
-        }
-      } catch (err) {
-        console.warn(`[Supabase] Falha ao deletar em '${tableName}':`, err);
+    if (!supabase) {
+      if (!isDemoCompany(compKey)) {
+        const err = new Error('Supabase não está configurado. A exclusão não foi gravada no banco.');
+        setPersistError(err.message);
+        throw err;
       }
+      removePendingDelete(storageKey, id);
+      return;
     }
 
-    // Deletar no Firestore se disponível
-    if (firestoreDb) {
-      try {
-        const colName = `${tableName}_${compKey}`;
-        await deleteDoc(doc(firestoreDb, colName, id));
-      } catch (e) {
-        console.warn(`[Firestore] Erro ao deletar em '${tableName}':`, e);
-      }
+    try {
+      await persistPendingDeletes(tableName, compKey, [String(id)]);
+      removePendingDelete(storageKey, id);
+    } catch (err) {
+      console.warn(`[Supabase] Falha ao deletar em '${tableName}':`, err);
+      throw err;
     }
   },
 
-  /**
-   * Restaura empresa Demo para dados limpos
-   */
   async resetCompanyToClean(companyId: string) {
     const compKey = resolveCompanyKey(companyId);
     if (!isDemoCompany(compKey)) {
@@ -435,6 +526,7 @@ export const db = {
       const storageKey = getStorageKey(t, compKey);
       storage.set(storageKey, cleanData);
       storage.remove(pendingStorageKey(storageKey));
+      storage.remove(pendingDeleteStorageKey(storageKey));
 
       const supabase = getSupabase();
       if (supabase) {
@@ -448,6 +540,7 @@ export const db = {
           if (cleanData.length > 0) {
             await this.upsert(t, compKey, cleanData);
           }
+          await writeSeedMeta(t, compKey);
         } catch (e) {
           console.warn(`[Supabase] Erro ao resetar tabela ${t}:`, e);
         }
@@ -455,9 +548,6 @@ export const db = {
     }
   },
 
-  /**
-   * Carrega dados de demonstração completos
-   */
   async loadDemoDataForCompany(companyId: string) {
     const compKey = resolveCompanyKey(companyId);
     if (!isDemoCompany(compKey)) {
@@ -465,10 +555,13 @@ export const db = {
     }
 
     for (const [table, data] of Object.entries(DEMO_TABLE_DATA)) {
-      storage.set(getStorageKey(table, compKey), data);
+      const storageKey = getStorageKey(table, compKey);
+      storage.set(storageKey, data);
+      storage.remove(pendingDeleteStorageKey(storageKey));
       await this.upsert(table, compKey, data).catch((e) =>
         console.warn(`[Supabase] Erro ao carregar demo em ${table}:`, e)
       );
+      await writeSeedMeta(table, compKey);
     }
   }
 };
@@ -524,7 +617,8 @@ export const userService = {
         if (!authError && authData?.user) {
           const authUser = authData.user;
           const meta = authUser.user_metadata || {};
-          const userCompanyId = meta.companyId || (cleanEmail.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${authUser.id}`);
+          const fallbackCompanyId = meta.companyId || (cleanEmail.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${authUser.id}`);
+          const userCompanyId = await resolveMembershipCompanyId(authUser.id, fallbackCompanyId);
 
           // Buscar perfil já salvo nas tabelas ou compor a partir dos metadados do Supabase Auth
           let profile: User | undefined;
@@ -560,11 +654,15 @@ export const userService = {
             };
             await this.saveUser(profile);
           } else {
-            profile = { ...profile, lastAccess: new Date().toISOString() };
+            profile = {
+              ...profile,
+              companyId: userCompanyId,
+              lastAccess: new Date().toISOString()
+            };
             await this.saveUser(profile);
           }
 
-          return profile;
+          return { ...profile, companyId: userCompanyId };
         }
 
         // Se o Supabase Auth retornou erro
@@ -643,7 +741,7 @@ export const userService = {
 
     let authUserId = `usr-${Date.now()}`;
     let requiresEmailConfirmation = false;
-    const compId = `comp-${Date.now()}`;
+    let compId = `comp-${Date.now()}`;
 
     // 1. Cadastrar no Supabase Auth nativo
     if (supabase) {
@@ -676,8 +774,9 @@ export const userService = {
 
         if (authData?.user) {
           authUserId = authData.user.id;
-          // Se não houver sessão ativa, significa que a confirmação por e-mail está habilitada no projeto Supabase
-          if (!authData.session) {
+          if (authData.session) {
+            compId = await resolveMembershipCompanyId(authData.user.id, compId);
+          } else {
             requiresEmailConfirmation = true;
           }
         }
@@ -775,15 +874,16 @@ export const userService = {
         const email = session.user.email?.toLowerCase();
         if (!email) return null;
         const meta = session.user.user_metadata || {};
-        const compId = meta.companyId || (email.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${session.user.id}`);
-        
+        const fallbackCompanyId = meta.companyId || (email.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${session.user.id}`);
+        const compId = await resolveMembershipCompanyId(session.user.id, fallbackCompanyId);
+
         let profile: User | undefined;
         try {
           const users = await db.getTable('users', compId);
           profile = users.find(u => u.email.toLowerCase() === email || u.id === session.user.id);
         } catch {}
 
-        if (profile) return profile;
+        if (profile) return { ...profile, companyId: compId };
 
         return {
           id: session.user.id,
