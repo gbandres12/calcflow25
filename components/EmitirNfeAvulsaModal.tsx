@@ -39,8 +39,8 @@ interface AvulsaItem {
 }
 
 export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
-  customers,
-  inventory,
+  customers = [],
+  inventory = [],
   config,
   company,
   currentUser,
@@ -71,39 +71,43 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [destEmail, setDestEmail] = useState('');
 
   // Parâmetros da NF-e
-  const [naturezaOperacao, setNaturezaOperacao] = useState(config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento');
+  const [naturezaOperacao, setNaturezaOperacao] = useState(config?.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento');
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'Boleto' | 'Dinheiro' | 'Transferência' | 'Sem Pagamento'>('PIX');
   // Frete / transporte (modFrete SEFAZ): 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2/3/4
   const [frete, setFrete] = useState<FreteInfo>({ modalidade: 9, valor: 0 });
   const [infCplCustom, setInfCplCustom] = useState<string>('');
 
   // Itens da Nota
-  const [items, setItems] = useState<AvulsaItem[]>([
+  const [items, setItems] = useState<AvulsaItem[]>(() => {
+    const firstProd = (inventory || [])[0];
+    return [
     {
       id: `item-1`,
-      productId: inventory[0]?.id || 'moido',
-      productCode: inventory[0]?.code || '001',
-      productName: inventory[0]?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
-      unit: inventory[0]?.unit || 'TON',
+      productId: firstProd?.id || 'moido',
+      productCode: firstProd?.code || '001',
+      productName: firstProd?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
+      unit: firstProd?.unit || 'TON',
       quantity: 10,
-      unitPrice: inventory[0]?.unitPrice || 180,
+      unitPrice: firstProd?.unitPrice || 180,
       discount: 0,
-      total: (inventory[0]?.unitPrice || 180) * 10,
-      ncm: inventory[0]?.ncm || '2517.10.00',
-      cfop: inventory[0]?.cfop || config.cfopPadraoEstadual || '5101',
-      cst: inventory[0]?.cst || config.cstIcmsPadrao || '40',
-      cClassTrib: inventory[0]?.cClassTrib,
-      aliquotaIbs: inventory[0]?.aliquotaIbs,
-      aliquotaCbs: inventory[0]?.aliquotaCbs,
-      aliquotaIs: inventory[0]?.aliquotaIs,
-      informacoesComplementares: inventory[0]?.informacoesComplementares
+      total: (firstProd?.unitPrice || 180) * 10,
+      ncm: firstProd?.ncm || '2517.10.00',
+      cfop: firstProd?.cfop || config?.cfopPadraoEstadual || '5101',
+      cst: firstProd?.cst || config?.cstIcmsPadrao || '40',
+      cClassTrib: firstProd?.cClassTrib,
+      aliquotaIbs: firstProd?.aliquotaIbs,
+      aliquotaCbs: firstProd?.aliquotaCbs,
+      aliquotaIs: firstProd?.aliquotaIs,
+      informacoesComplementares: firstProd?.informacoesComplementares
     }
-  ]);
+  ];
+  });
 
   // Cliente selecionado ou montado
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
   const activeCustomer: Customer = useMemo(() => {
     if (!isNewCustomer && selectedCustomerId) {
-      const found = customers.find(c => c.id === selectedCustomerId);
+      const found = (Array.isArray(customers) ? customers : []).find(c => c && c.id === selectedCustomerId);
       if (found) return found;
     }
     return {
@@ -129,23 +133,28 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     destCity, destState, destZip, destIbge, destEmail
   ]);
 
-  // Seletor de clientes cadastrados
+  // Seletor de clientes cadastrados (blindado contra cadastros com campos vazios)
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return customers;
-    const term = customerSearch.toLowerCase();
-    const cleanDigits = customerSearch.replace(/\D/g, '');
-    return customers.filter(c => 
-      c.name.toLowerCase().includes(term) ||
-      (c.document && c.document.replace(/\D/g, '').includes(cleanDigits)) ||
-      (c.city && c.city.toLowerCase().includes(term))
-    );
+    const list = Array.isArray(customers) ? customers.filter(Boolean) : [];
+    const rawSearch = (customerSearch || '').trim();
+    if (!rawSearch) return list.slice(0, 60);
+    const term = rawSearch.toLowerCase();
+    const cleanDigits = rawSearch.replace(/\D/g, '');
+    return list.filter(c => {
+      const name = String(c.name || '').toLowerCase();
+      const doc = String(c.document || '').replace(/\D/g, '');
+      const city = String(c.city || '').toLowerCase();
+      const docMatch = cleanDigits ? doc.includes(cleanDigits) : false;
+      return name.includes(term) || docMatch || city.includes(term);
+    }).slice(0, 60);
   }, [customers, customerSearch]);
 
   const selectCustomer = (c: Customer) => {
-    setSelectedCustomerId(c.id);
+    if (!c) return;
+    setSelectedCustomerId(c.id || '');
     setIsNewCustomer(false);
-    setDestName(c.name);
-    setDestDoc(c.document);
+    setDestName(c.name || '');
+    setDestDoc(c.document || '');
     setDestIe(c.ie || '');
     setDestIsentoIe(Boolean(c.isentoIE));
     setDestStreet(c.street || '');
@@ -157,21 +166,27 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     setDestIbge(c.ibgeCode || '');
     setDestEmail(c.email || '');
 
-    // Ajustar CFOPs dos itens caso mude para interestadual
-    const isInter = c.state && c.state !== 'PA';
-    setItems(prev => prev.map(it => ({
-      ...it,
-      cfop: isInter 
-        ? (it.cfop.startsWith('5') ? '6' + it.cfop.slice(1) : (config.cfopPadraoInterestadual || '6101'))
-        : (it.cfop.startsWith('6') ? '5' + it.cfop.slice(1) : (config.cfopPadraoEstadual || '5101'))
-    })));
+    // Ajustar CFOPs dos itens caso mude para interestadual (sem quebrar com CFOP vazio)
+    const isInter = Boolean(c.state) && c.state !== 'PA';
+    const cfopInter = config?.cfopPadraoInterestadual || '6101';
+    const cfopEstadual = config?.cfopPadraoEstadual || '5101';
+    setItems(prev => prev.map(it => {
+      const cfopAtual = String(it.cfop || '');
+      return {
+        ...it,
+        cfop: isInter
+          ? (cfopAtual.startsWith('5') ? '6' + cfopAtual.slice(1) : (cfopAtual.startsWith('6') ? cfopAtual : cfopInter))
+          : (cfopAtual.startsWith('6') ? '5' + cfopAtual.slice(1) : (cfopAtual.startsWith('5') ? cfopAtual : cfopEstadual))
+      };
+    }));
   };
 
   // Manipulação de Itens
   const handleAddItem = () => {
-    const isInter = activeCustomer.state && activeCustomer.state !== 'PA';
-    const defaultCfop = isInter ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101');
-    const firstProd = inventory[0];
+    const list = Array.isArray(inventory) ? inventory : [];
+    const isInter = Boolean(activeCustomer.state) && activeCustomer.state !== 'PA';
+    const defaultCfop = isInter ? (config?.cfopPadraoInterestadual || '6101') : (config?.cfopPadraoEstadual || '5101');
+    const firstProd = list[0];
     const newItem: AvulsaItem = {
       id: `item-${Date.now()}`,
       productId: firstProd?.id || 'custom',
@@ -184,7 +199,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       total: firstProd?.unitPrice || 180,
       ncm: firstProd?.ncm || '2517.10.00',
       cfop: defaultCfop,
-      cst: firstProd?.cst || config.cstIcmsPadrao || '40',
+      cst: firstProd?.cst || config?.cstIcmsPadrao || '40',
       cClassTrib: firstProd?.cClassTrib,
       aliquotaIbs: firstProd?.aliquotaIbs,
       aliquotaCbs: firstProd?.aliquotaCbs,
@@ -213,15 +228,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
         updated.total = Math.max(0, (q * p) - d);
       }
       if (field === 'productId') {
-        const prod = inventory.find(p => p.id === value);
+        const prod = (Array.isArray(inventory) ? inventory : []).find(p => p && p.id === value);
         if (prod) {
-          const isInter = activeCustomer.state && activeCustomer.state !== 'PA';
+          const isInter = Boolean(activeCustomer.state) && activeCustomer.state !== 'PA';
           updated.productCode = prod.code || updated.productCode;
-          updated.productName = prod.name;
+          updated.productName = prod.name || updated.productName;
           updated.unit = prod.unit || 'TON';
           updated.unitPrice = prod.unitPrice || updated.unitPrice;
           updated.ncm = prod.ncm || updated.ncm;
-          updated.cfop = prod.cfop || (isInter ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
+          updated.cfop = prod.cfop || (isInter ? (config?.cfopPadraoInterestadual || '6101') : (config?.cfopPadraoEstadual || '5101'));
           updated.cst = prod.cst || updated.cst;
           updated.cClassTrib = prod.cClassTrib;
           updated.aliquotaIbs = prod.aliquotaIbs;
@@ -252,10 +267,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const resolvedInfCpl = useMemo(() => {
     if (infCplCustom.trim()) return infCplCustom;
     return [
-      config.observacoesFiscaisPadrao,
+      config?.observacoesFiscaisPadrao,
       ...Array.from(new Set(productComplementares))
     ].filter(Boolean).join(' | ');
-  }, [infCplCustom, config.observacoesFiscaisPadrao, productComplementares]);
+  }, [infCplCustom, config?.observacoesFiscaisPadrao, productComplementares]);
 
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
@@ -378,13 +393,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   Sem Pedido Prévio
                 </span>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  config.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  config?.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
-                  {config.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
+                  {config?.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                Próximo Nº NF-e: <b>{config.proxNumeroNFe || 1042}</b> (Série {config.serieNFe || 1}) | Emitente: <b>{config.razaoSocial}</b>
+                Próximo Nº NF-e: <b>{config?.proxNumeroNFe || 1042}</b> (Série {config?.serieNFe || 1}) | Emitente: <b>{config?.razaoSocial || ''}</b>
               </p>
             </div>
           </div>
@@ -469,9 +484,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1">
-                  {filteredCustomers.map(c => (
+                  {filteredCustomers.length === 0 ? (
+                    <p className="col-span-full text-center text-xs text-slate-400 font-medium py-6">
+                      Nenhum cliente encontrado para essa busca.
+                    </p>
+                  ) : filteredCustomers.map((c, idx) => (
                     <button
-                      key={c.id}
+                      key={c.id || `cust-${idx}`}
                       type="button"
                       onClick={() => selectCustomer(c)}
                       className={`text-left p-3 rounded-2xl border transition-all ${
@@ -480,9 +499,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                           : 'bg-white border-slate-200 hover:bg-slate-100/70'
                       }`}
                     >
-                      <p className="font-bold text-slate-800 text-xs truncate">{c.name}</p>
-                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">{c.document}</p>
-                      <p className="text-[9px] text-slate-400 truncate">{c.city} - {c.state}</p>
+                      <p className="font-bold text-slate-800 text-xs truncate">{c.name || 'Sem nome'}</p>
+                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">{c.document || 'Sem documento'}</p>
+                      <p className="text-[9px] text-slate-400 truncate">{c.city || '—'} - {c.state || '—'}</p>
                     </button>
                   ))}
                 </div>
@@ -632,7 +651,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                         onChange={e => handleUpdateItem(idx, 'productId', e.target.value)}
                         className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
                       >
-                        {inventory.map(p => (
+                        {safeInventory.map(p => (
                           <option key={p.id} value={p.id}>{p.name} ({p.unit || 'TON'})</option>
                         ))}
                       </select>
