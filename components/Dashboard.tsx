@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import {
-  Transaction, InventoryItem, Customer, TransactionType, View, User,
-  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, TransferStatus
+  Transaction, InventoryItem, Customer, View, User,
+  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, RecurringBill, Employee
 } from '../types';
 import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingChecklist } from './OnboardingChecklist';
+import { accountLedgerBalance, cashInPeriod, cashOnDate, openBooks, titleBalance } from '../services/financeMath';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -14,6 +15,8 @@ interface DashboardProps {
   orders?: SaleOrder[];
   accounts?: FinancialAccount[];
   transfers?: TransferShipment[];
+  recurringBills?: RecurringBill[];
+  employees?: Employee[];
   user?: User | null;
   onNavigate?: (view: View) => void;
   onOpenOnboardingModal?: () => void;
@@ -33,6 +36,7 @@ const stockOf = (inventory: InventoryItem[], keys: string[]) =>
 
 const Dashboard: React.FC<DashboardProps> = ({
   transactions, inventory, customers, orders = [], accounts = [], transfers = [],
+  recurringBills = [], employees = [],
   user, onNavigate, onOpenOnboardingModal
 }) => {
   const today = todayISO();
@@ -47,43 +51,37 @@ const Dashboard: React.FC<DashboardProps> = ({
     o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando')
   ).slice(0, 5);
   const rejectedNfe = orders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
-  const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);
-  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
-  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
-  const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
-  const saldoDia = saldoContas + dayTx.reduce((s, t) => {
-    const v = Number(t.paidAmount || t.amount || 0);
-    return t.type === TransactionType.SALE ? s + v : s - v;
-  }, 0);
+  const dayCash = cashOnDate(transactions, today);
+  const entradas = dayCash.inflow;
+  const saidas = dayCash.outflow;
+  const saldoContas = accounts.reduce((s, a) => s + accountLedgerBalance(a, transactions), 0);
+  const books = openBooks(transactions);
+  const payrollOpen = transactions
+    .filter((tx) => tx.origin === 'payroll')
+    .reduce((sum, tx) => sum + titleBalance(tx), 0);
+  const recurringOpen = transactions
+    .filter((tx) => tx.origin === 'recurring')
+    .reduce((sum, tx) => sum + titleBalance(tx), 0);
   const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
   const strategic = useMemo(() => {
     const start = isoDaysAgo(29);
     const finalized = orders.filter((o) => o.status === OrderStatus.FINALIZED && (o.date || '') >= start);
     const soldValue = finalized.reduce((sum, order) => sum + Number(order.total || 0), 0);
     const soldTons = finalized.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
-    const received = finalized.reduce((sum, order) => sum + (order.payments || []).reduce((paid, payment) => {
-      const amount = Number(payment.paidAmount ?? payment.amount ?? 0);
-      return paid + amount;
-    }, 0), 0);
-    const openReceivable = Math.max(0, soldValue - received);
     const chart = Array.from({ length: 7 }, (_, index) => {
       const date = isoDaysAgo(6 - index);
-      const daily = transactions.filter((tx) => (tx.paymentDate || tx.date || '').slice(0, 10) === date);
-      const receivedDay = daily.filter((tx) => tx.type === TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
-      const spentDay = daily.filter((tx) => tx.type !== TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
-      return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: receivedDay, saidas: spentDay };
+      const daily = cashOnDate(transactions, date);
+      return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: daily.inflow, saidas: daily.outflow };
     });
     return {
       soldValue,
       soldTons,
-      received,
-      openReceivable,
+      received: cashInPeriod(transactions, start).inflow,
+      openReceivable: books.receivableOpen,
       averageTicket: finalized.length ? soldValue / finalized.length : 0,
       chart
     };
-  }, [orders, transactions]);
+  }, [orders, transactions, books.receivableOpen]);
 
   return (
     <div className="space-y-4">
@@ -97,6 +95,28 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
         <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">Dados atualizados agora</span>
       </header>
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button type="button" onClick={() => onNavigate?.('receivable')} className="bg-white border border-slate-200 rounded-xl p-3 text-left">
+          <p className="text-[10px] uppercase font-bold text-slate-400">A receber</p>
+          <p className="text-lg font-black text-emerald-700">{brl(books.receivableOpen)}</p>
+          <p className="text-[11px] text-rose-600">Vencido {brl(books.receivableOverdue)}</p>
+        </button>
+        <button type="button" onClick={() => onNavigate?.('payable')} className="bg-white border border-slate-200 rounded-xl p-3 text-left">
+          <p className="text-[10px] uppercase font-bold text-slate-400">A pagar</p>
+          <p className="text-lg font-black text-rose-700">{brl(books.payableOpen)}</p>
+          <p className="text-[11px] text-rose-600">Vencido {brl(books.payableOverdue)}</p>
+        </button>
+        <button type="button" onClick={() => onNavigate?.('payroll')} className="bg-white border border-slate-200 rounded-xl p-3 text-left">
+          <p className="text-[10px] uppercase font-bold text-slate-400">Folha a depositar</p>
+          <p className="text-lg font-black text-slate-800">{brl(payrollOpen)}</p>
+          <p className="text-[11px] text-slate-500">{employees.filter((e) => e.status === 'Ativo').length} funcionários</p>
+        </button>
+        <button type="button" onClick={() => onNavigate?.('recurring')} className="bg-white border border-slate-200 rounded-xl p-3 text-left">
+          <p className="text-[10px] uppercase font-bold text-slate-400">Recorrentes do mês</p>
+          <p className="text-lg font-black text-slate-800">{brl(recurringOpen)}</p>
+          <p className="text-[11px] text-slate-500">{recurringBills.filter((b) => b.active !== false).length} cadastros</p>
+        </button>
+      </section>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -231,15 +251,15 @@ const Dashboard: React.FC<DashboardProps> = ({
           </thead>
           <tbody>
             <tr className="border-t border-slate-100">
-              <td className="px-4 py-2.5 text-slate-600">Movimento de hoje ({dayTx.length} lançamentos)</td>
+              <td className="px-4 py-2.5 text-slate-600">Movimento de hoje (pagamentos reais)</td>
               <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{brl(entradas)}</td>
               <td className="px-4 py-2.5 text-right text-rose-600 font-medium">{brl(saidas)}</td>
               <td className="px-4 py-2.5 text-right font-semibold">{brl(entradas - saidas)}</td>
             </tr>
             <tr className="border-t border-slate-100 bg-slate-50/60">
-              <td className="px-4 py-2.5 font-semibold text-slate-700"><Scale size={12} className="inline mr-1" /> Posição estimada nas contas</td>
+              <td className="px-4 py-2.5 font-semibold text-slate-700"><Scale size={12} className="inline mr-1" /> Posição nas contas (saldo inicial + caixa)</td>
               <td /><td />
-              <td className={`px-4 py-2.5 text-right font-semibold ${saldoDia >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{brl(saldoDia)}</td>
+              <td className={`px-4 py-2.5 text-right font-semibold ${saldoContas >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{brl(saldoContas)}</td>
             </tr>
           </tbody>
         </table>

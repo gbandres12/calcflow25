@@ -78,14 +78,7 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
 
   const orderTotal = Number(order.total) || 0;
   const receiptsPaid = (order.receipts || []).reduce((s, r) => s + (Number(r?.amount) || 0), 0);
-  const scheduledPaid = (order.payments || []).reduce((s, p) => {
-    if (!p) return s;
-    return (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO)
-      ? s + (Number(p.amount) || 0)
-      : s + (Number(p.paidAmount) || 0);
-  }, 0);
-
-  const totalPaid = Math.max(receiptsPaid, scheduledPaid);
+  const totalPaid = receiptsPaid;
   const remainingDebt = Math.max(0, orderTotal - totalPaid);
   const financialProgress = orderTotal > 0 ? Math.min(100, (totalPaid / orderTotal) * 100) : 0;
 

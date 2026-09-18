@@ -20,17 +20,12 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   onClose
 }) => {
   const receiptsPaid = (order.receipts || []).reduce((acc, r) => acc + (r.amount || 0), 0);
-  const scheduledPaid = (order.payments || []).reduce((acc, p) => (
-    p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO
-      ? acc + p.amount
-      : acc + (p.paidAmount || 0)
-  ), 0);
-  const totalPaidSoFar = Math.max(receiptsPaid, scheduledPaid);
+  const totalPaidSoFar = receiptsPaid;
   const currentDebt = Math.max(0, order.total - totalPaidSoFar);
 
   const [amount, setAmount] = useState(currentDebt > 0 ? (currentDebt > 5000 ? '5000' : currentDebt.toString()) : '0');
   const [paymentType, setPaymentType] = useState<'ENTRADA' | 'PARCELA' | 'ABATIMENTO'>(
-    (order.receipts || []).length === 0 ? 'ENTRADA' : 'ABATIMENTO'
+    (order.receipts || []).length === 0 ? 'ENTRADA' : 'PARCELA'
   );
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
@@ -66,17 +61,19 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       customerDocument: customer?.document,
       amount: amountNum,
       date,
-      paymentMethod,
+      paymentMethod: paymentType === 'ABATIMENTO' ? 'Abatimento / Devolução' : paymentMethod,
       accountId,
       accountName: selectedAccount?.name || 'Caixa Geral',
       receivedBy,
       description: paymentType === 'ENTRADA' ? `Entrada Pedido #${order.reference}` : 
                    paymentType === 'ABATIMENTO' ? `Abatimento Pedido #${order.reference}` : `Parcela Pedido #${order.reference}`,
       type: paymentType,
+      side: 'receber',
       totalOrderAmount: order.total,
       totalPaidSoFar: totalPaidSoFar + amountNum,
       remainingDebt: remainingDebtAfter,
-      notes: notes.trim()
+      notes: notes.trim(),
+      companyId: company.id
     };
 
     const updatedReceipts = [...(order.receipts || []), newReceipt];
@@ -179,6 +176,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
           </div>
 
           {/* Forma de Pagamento e Conta de Destino */}
+          {paymentType !== 'ABATIMENTO' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</label>
@@ -212,6 +210,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               </select>
             </div>
           </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">

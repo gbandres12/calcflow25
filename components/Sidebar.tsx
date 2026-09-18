@@ -29,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     if (user.role === UserRole.ADMIN) return true;
     if (itemRoles && !itemRoles.includes(user.role)) return false;
     if (itemId === 'fiscal') return Boolean(userPermissions.fiscal || userPermissions.financial);
-    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(itemId)) return userPermissions.financial;
+    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config', 'receivable', 'payable', 'recurring', 'payroll'].includes(itemId)) return userPermissions.financial;
     if (['users'].includes(itemId)) return userPermissions.users;
     if (['inventory', 'milling'].includes(itemId)) return userPermissions.inventory;
     if (['orders', 'quotes', 'customers', 'transportadores', 'yard', 'transfers'].includes(itemId)) return userPermissions.orders;
@@ -57,9 +57,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     ]},
     { title: 'Financeiro & Caixa', items: [
       { id: 'daily', label: 'Movimentação Diária', icon: Calendar },
+      { id: 'receivable', label: 'Contas a receber', icon: Briefcase },
+      { id: 'payable', label: 'Contas a pagar', icon: CreditCard },
       { id: 'transactions', label: 'Lançamentos / Extrato', icon: CreditCard },
       { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
       { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
+      { id: 'recurring', label: 'Contas recorrentes', icon: Calendar },
+      { id: 'payroll', label: 'Folha / depósitos', icon: Users },
     ]},
     { title: 'Gestão & Sistema', items: [
       { id: 'users', label: 'Usuários & Equipe', icon: UserCog },

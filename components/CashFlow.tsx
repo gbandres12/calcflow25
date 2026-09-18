@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, TransactionType, TransactionStatus, CostCenter, Category } from '../types';
+import { cashFromPayments, cashInPeriod, cashOnDate } from '../services/financeMath';
+import { Transaction, TransactionType, Category } from '../types';
 import { INITIAL_COST_CENTERS } from '../constants';
 import { 
   TrendingUp, 
@@ -53,80 +54,30 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
   // Compute total cash inflows and outflows within date range
   const { totalIn, totalOut, costCenterSummary } = useMemo(() => {
-    let sumIn = 0;
-    let sumOut = 0;
+    const { inflow, outflow } = cashInPeriod(filteredTransactions, startDate || undefined, endDate || undefined);
     const ccSummary: Record<string, { in: number, out: number }> = {};
     INITIAL_COST_CENTERS.forEach(cc => {
       ccSummary[cc.id] = { in: 0, out: 0 };
     });
-
     filteredTransactions.forEach(t => {
-      const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
       const ccId = t.costCenterId || 'cc1';
-
-      if (hasPayments) {
-        t.payments!.forEach(pmt => {
-          if (pmt.isDiscountOrDeduction) return;
-          const pmtDate = pmt.paymentDate || t.paymentDate || t.date;
-          const pmtDateMatch = (!startDate || pmtDate >= startDate) && (!endDate || pmtDate <= endDate);
-          if (!pmtDateMatch) return;
-
-          const pmtAmt = Number(pmt.amount) || 0;
-          if (t.type === TransactionType.SALE) {
-            sumIn += pmtAmt;
-            if (ccSummary[ccId]) ccSummary[ccId].in += pmtAmt;
-          } else {
-            sumOut += pmtAmt;
-            if (ccSummary[ccId]) ccSummary[ccId].out += pmtAmt;
-          }
-        });
-      } else {
-        const isPaid = 
-          t.status === TransactionStatus.CONFIRMADO || 
-          t.status === TransactionStatus.PAGO || 
-          t.status === TransactionStatus.PARCIAL;
-        if (!isPaid) return;
-
-        const paidAmt = Number(
-          t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
-            ? t.paidAmount 
-            : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
-        ) || 0;
-
-        if (t.type === TransactionType.SALE) {
-          sumIn += paidAmt;
-          if (ccSummary[ccId]) ccSummary[ccId].in += paidAmt;
-        } else {
-          sumOut += paidAmt;
-          if (ccSummary[ccId]) ccSummary[ccId].out += paidAmt;
-        }
-      }
+      const cash = cashFromPayments(t);
+      if (!ccSummary[ccId]) ccSummary[ccId] = { in: 0, out: 0 };
+      if (t.type === TransactionType.SALE) ccSummary[ccId].in += cash;
+      else ccSummary[ccId].out += cash;
     });
-
-    return { totalIn: sumIn, totalOut: sumOut, costCenterSummary: ccSummary };
+    return { totalIn: inflow, totalOut: outflow, costCenterSummary: ccSummary };
   }, [filteredTransactions, startDate, endDate]);
 
-  const todayTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const txDate = t.paymentDate || t.date;
-      if (txDate !== todayStr) return false;
-      return t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL;
-    });
-  }, [transactions, todayStr]);
-
-  const todayIn = useMemo(() => 
-    todayTransactions
-      .filter(t => t.type === TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
-  , [todayTransactions]);
-
-  const todayOut = useMemo(() => 
-    todayTransactions
-      .filter(t => t.type !== TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
-  , [todayTransactions]);
-
+  const todayCash = cashOnDate(transactions, todayStr);
+  const todayIn = todayCash.inflow;
+  const todayOut = todayCash.outflow;
   const todayBalance = todayIn - todayOut;
+  const todayTransactions = useMemo(() => {
+    return transactions.filter(t =>
+      (t.payments || []).some((p) => (p.paymentDate || t.paymentDate || t.date) === todayStr && !p.isDiscountOrDeduction)
+    );
+  }, [transactions, todayStr]);
 
   const resetFilters = () => {
     setStartDate('');

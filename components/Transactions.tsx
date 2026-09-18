@@ -140,12 +140,9 @@ export const Transactions: React.FC<TransactionsProps> = ({
     endDate !== '';
 
   const actualCashAmount = (transaction: Transaction) => {
-    if (transaction.payments && transaction.payments.length > 0) {
-      return transaction.payments
-        .filter(payment => !payment.isDiscountOrDeduction)
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    }
-    return Number(transaction.paidAmount || (transaction.status === TransactionStatus.PAGO ? transaction.amount : 0));
+    return (transaction.payments || [])
+      .filter(payment => !payment.isDiscountOrDeduction)
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   };
 
   // Cálculos Globais de Métricas

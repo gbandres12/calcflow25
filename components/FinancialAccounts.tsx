@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { FinancialAccount, Transaction, TransactionStatus, TransactionType, AccountType } from '../types';
+import { FinancialAccount, Transaction, TransactionType, TransactionStatus, AccountType } from '../types';
+import { accountLedgerBalance, cashFromPayments, titleBalance } from '../services/financeMath';
 import { 
   CreditCard, Settings, Wallet, TrendingUp, TrendingDown, 
   Info, X, Lock, ShieldAlert, CheckCircle2, Building, Scale, AlertTriangle 
@@ -24,39 +25,19 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
   const [error, setError] = useState('');
 
   const calculateBalances = (account: FinancialAccount) => {
-    const actualCashAmount = (transaction: Transaction) => {
-      if (transaction.payments && transaction.payments.length > 0) {
-        return transaction.payments
-          .filter(payment => !payment.isDiscountOrDeduction)
-          .filter(payment => (payment.accountId || transaction.accountId) === account.id)
-          .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-      }
-      return Number(transaction.paidAmount || 0);
-    };
-
-    const accTransactions = transactions.filter(t => 
-      t.accountId === account.id && 
-      (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL)
-    );
-
-    const totalIn = accTransactions
-      .filter(t => t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + actualCashAmount(t), 0);
-
-    const totalOut = accTransactions
-      .filter(t => t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + actualCashAmount(t), 0);
-
-    const currentBalance = account.initialBalance + totalIn - totalOut;
-
+    const currentBalance = accountLedgerBalance(account, transactions);
     const pendingIn = transactions
-      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
-
+      .filter(t => (t.accountId === account.id) && t.type === TransactionType.SALE)
+      .reduce((sum, t) => sum + titleBalance(t), 0);
     const pendingOut = transactions
-      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
-
+      .filter(t => (t.accountId === account.id) && t.type !== TransactionType.SALE)
+      .reduce((sum, t) => sum + titleBalance(t), 0);
+    const totalIn = transactions
+      .filter(t => t.type === TransactionType.SALE)
+      .reduce((sum, t) => sum + cashFromPayments(t, account.id), 0);
+    const totalOut = transactions
+      .filter(t => t.type !== TransactionType.SALE)
+      .reduce((sum, t) => sum + cashFromPayments(t, account.id), 0);
     return { currentBalance, totalIn, totalOut, projected: currentBalance + pendingIn - pendingOut };
   };
 
@@ -94,11 +75,21 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
         accountId: reconcilingAccount.id,
         date: new Date().toISOString().split('T')[0],
         type: diff > 0 ? TransactionType.SALE : TransactionType.EXPENSE,
-        status: TransactionStatus.CONFIRMADO,
+        status: TransactionStatus.PAGO,
         description: `Ajuste de Conciliação (Caixa Real)`,
         category: 'Ajuste de Saldo',
         amount: Math.abs(diff),
-        paidAmount: Math.abs(diff)
+        paidAmount: Math.abs(diff),
+        origin: 'manual',
+        payments: [{
+          id: `pmt-adj-${Date.now()}`,
+          transactionId: '',
+          amount: Math.abs(diff),
+          paymentDate: new Date().toISOString().split('T')[0],
+          accountId: reconcilingAccount.id,
+          paymentMethod: 'Ajuste',
+          origin: 'manual'
+        }]
       });
       alert(`Ajuste de R$ ${Math.abs(diff).toFixed(2)} lançado com sucesso!`);
     } else {
