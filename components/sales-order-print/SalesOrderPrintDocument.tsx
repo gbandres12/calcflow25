@@ -3,6 +3,7 @@ import { Company, Customer, SaleOrder } from '../../types';
 import { fiscalService } from '../../services/fiscalService';
 import { SO } from './theme';
 import { formatBRL, formatQty, formatDate, dash } from './format';
+import { DEFAULT_PRODUCT_SHEET } from '../../utils/salesOrderProduct';
 
 interface Props {
   order: SaleOrder;
@@ -38,6 +39,16 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
   ].filter(Boolean);
   const phones = [brand?.telefoneEmitente, company.phone].filter(Boolean);
   const items = order.items || [];
+  const multiItem = items.length > 1;
+  const sheetTitle =
+    order.productSheetTitle?.trim() ||
+    (multiItem ? 'Informações complementares do pedido' : DEFAULT_PRODUCT_SHEET.title);
+  const sheetLines = (
+    order.productSheetBody?.trim() ||
+    (multiItem ? 'Consulte a tabela de itens acima para descrição de cada produto.' : DEFAULT_PRODUCT_SHEET.body)
+  )
+    .split('\n')
+    .filter(Boolean);
 
   return (
     <article id="printable-sales-order" className="bg-white" style={{ fontFamily: SO.font, color: SO.text }}>
@@ -123,7 +134,7 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
               <tr key={idx} className="border-b" style={{ borderColor: SO.border, background: idx % 2 ? '#F7F9FC' : 'white' }}>
                 <td className="py-1.5 px-2 font-bold">{String(idx + 1).padStart(2, '0')}</td>
                 <td className="py-1.5 px-2 font-bold">{it.productCode || it.productName}</td>
-                <td className="py-1.5 px-2">{it.productName}</td>
+                <td className="py-1.5 px-2">{it.productDescription?.trim() || it.productName}</td>
                 <td className="py-1.5 px-2 text-right font-bold">{formatQty(it.quantity)}</td>
                 <td className="py-1.5 px-2 text-center">{it.unit || 'Ton'}</td>
                 <td className="py-1.5 px-2 text-right">{formatBRL(it.unitPrice)}</td>
@@ -137,10 +148,12 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
       <section className="mx-7 mb-3 grid grid-cols-2 gap-3">
         <div className="border p-3 text-[10px]" style={{ borderColor: SO.border }}>
           <p className="font-black uppercase text-[8px] tracking-widest" style={{ color: SO.muted }}>Produto</p>
-          <p className="font-black mt-1" style={{ color: SO.navy }}>Calcário dolomítico</p>
-          <p>PRNT mínimo garantido: 80%</p>
-          <p>MgO mínimo garantido: 14%</p>
-          <p className="italic mt-1" style={{ color: SO.muted }}>Valores sujeitos a variação conforme lote e análise laboratorial.</p>
+          <p className="font-black mt-1" style={{ color: SO.navy }}>{sheetTitle}</p>
+          {sheetLines.map((line, i) => (
+            <p key={i} className={line.startsWith('*') || line.toLowerCase().includes('sujeito') ? 'italic mt-1' : undefined} style={line.toLowerCase().includes('sujeito') ? { color: SO.muted } : undefined}>
+              {line.replace(/^\*+\s*/, '')}
+            </p>
+          ))}
         </div>
         <div>
           <div className="px-3 py-1.5 text-[10px] font-black tracking-widest text-white uppercase" style={{ background: SO.navy }}>Resumo do pedido</div>

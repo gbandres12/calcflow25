@@ -10,6 +10,8 @@ import {
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
+import { resolveCustomerForOrder } from '../utils/customerUtils';
+import ErrorBoundary from './ErrorBoundary';
 
 interface FiscalManagementProps {
   orders: SaleOrder[];
@@ -371,9 +373,10 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {/* Modal de Emissão Direta de Pedido Existente */}
       {orderToEmitNfe && (
+        <ErrorBoundary label="emissão NF-e">
         <EmitirNfeModal
           order={orderToEmitNfe}
-          customer={safeCustomers.find((c) => c.id === orderToEmitNfe.customerId) as Customer}
+          customer={resolveCustomerForOrder(safeCustomers, orderToEmitNfe.customerId)}
           config={config}
           company={company}
           transportadores={transportadores}
@@ -391,6 +394,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
             setSelectedDanfeOrder(updatedOrder);
           }}
         />
+        </ErrorBoundary>
       )}
 
       {/* Modal de Visualização de DANFE */}
@@ -398,7 +402,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         <DanfeModal
           order={selectedDanfeOrder}
           linkedNfeId={selectedDanfeLinkedNfeId}
-          customer={safeCustomers.find((c) => c.id === selectedDanfeOrder.customerId) as Customer}
+          customer={resolveCustomerForOrder(safeCustomers, selectedDanfeOrder.customerId)}
           config={config}
           company={company}
           onClose={() => {

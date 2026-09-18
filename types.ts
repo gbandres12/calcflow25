@@ -337,6 +337,8 @@ export interface SaleOrderItem {
   aliquotaCbs?: number;
   aliquotaIs?: number;
   informacoesComplementares?: string;
+  /** Texto da coluna Descrição no pedido impresso (se vazio, usa productName). */
+  productDescription?: string;
 }
 
 /** NF-e vinculada ao pedido (completa, avulsa/parcial, devolução ou transferência). */
@@ -457,6 +459,10 @@ export interface SaleOrder {
   nfes?: SaleOrderLinkedNfe[];
   /** Referência única enviada à API fiscal (ex.: PED-2026-0001#AV#nfa-xxx). */
   nfeReferenciaExterna?: string;
+  /** Título do bloco "Produto" no PDF/impressão do pedido. */
+  productSheetTitle?: string;
+  /** Linhas de especificação no PDF (uma linha por parágrafo). */
+  productSheetBody?: string;
   subtotal: number;
   discount: number;
   shipping: number;

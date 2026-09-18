@@ -30,6 +30,20 @@ import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity } from '../services/saleNfe';
+import { resolveCustomerForOrder } from '../utils/customerUtils';
+import {
+  DEFAULT_PRODUCT_SHEET,
+  OrderLineDraft,
+  buildItemsFromDrafts,
+  lineDraftSubtotal,
+  newOrderLineDraft,
+  orderItemsToDrafts,
+  productSheetFromInventory,
+  resolveInventoryProduct,
+  sellableInventoryItems,
+  sumLineDrafts
+} from '../utils/salesOrderProduct';
+import ErrorBoundary from './ErrorBoundary';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -93,10 +107,10 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
 };
 
 const SalesOrders: React.FC<SalesOrdersProps> = ({ 
-  orders, 
-  customers, 
-  inventory, 
-  accounts, 
+  orders: rawOrders, 
+  customers: rawCustomers, 
+  inventory: rawInventory, 
+  accounts: rawAccounts, 
   company,
   companyId,
   onAddOrder, 
@@ -110,6 +124,73 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onPaymentReceived,
   mode = 'orders'
 }) => {
+  // Dados legados podem conter registros parciais ou nulos. Normalizar aqui evita
+  // que um único cadastro inválido derrube toda a tela de vendas.
+  const customers = useMemo<Customer[]>(() => {
+    if (!Array.isArray(rawCustomers)) return [];
+    return rawCustomers
+      .filter((item): item is Customer => Boolean(item && typeof item === 'object' && item.id))
+      .map(item => ({
+        ...item,
+        id: String(item.id),
+        name: String(item.name || 'Cliente sem nome'),
+        document: String(item.document || ''),
+        email: String(item.email || ''),
+        phone: String(item.phone || ''),
+        totalSpent: Number(item.totalSpent) || 0
+      }));
+  }, [rawCustomers]);
+
+  const inventory = useMemo<InventoryItem[]>(() => {
+    if (!Array.isArray(rawInventory)) return [];
+    return rawInventory.filter((item): item is InventoryItem => Boolean(item && typeof item === 'object' && item.id));
+  }, [rawInventory]);
+
+  const sellableProducts = useMemo(() => sellableInventoryItems(inventory), [inventory]);
+
+  const accounts = useMemo<FinancialAccount[]>(() => {
+    if (!Array.isArray(rawAccounts)) return [];
+    return rawAccounts.filter((item): item is FinancialAccount => Boolean(item && typeof item === 'object' && item.id));
+  }, [rawAccounts]);
+
+  const orders = useMemo<SaleOrder[]>(() => {
+    if (!Array.isArray(rawOrders)) return [];
+    return rawOrders
+      .filter((item): item is SaleOrder => Boolean(item && typeof item === 'object' && item.id))
+      .map(item => ({
+        ...item,
+        id: String(item.id),
+        reference: String(item.reference || `PED-${String(item.id).slice(-6)}`),
+        customerId: String(item.customerId || ''),
+        sellerName: String(item.sellerName || ''),
+        date: String(item.date || new Date().toISOString().split('T')[0]),
+        subtotal: Number(item.subtotal) || 0,
+        discount: Number(item.discount) || 0,
+        shipping: Number(item.shipping) || 0,
+        total: Number(item.total) || 0,
+        status: item.status || OrderStatus.BUDGET,
+        items: (Array.isArray(item.items) ? item.items : [])
+          .filter(Boolean)
+          .map((row, index) => ({
+            ...row,
+            productId: String(row.productId || `produto-${index + 1}`),
+            productCode: String(row.productCode || ''),
+            productName: String(row.productName || 'Produto sem nome'),
+            unit: String(row.unit || 'TON'),
+            quantity: Number(row.quantity) || 0,
+            unitPrice: Number(row.unitPrice) || 0,
+            discount: Number(row.discount) || 0,
+            total: Number(row.total) || 0,
+            productDescription: row.productDescription != null ? String(row.productDescription) : undefined
+          })),
+        productSheetTitle: item.productSheetTitle != null ? String(item.productSheetTitle) : undefined,
+        productSheetBody: item.productSheetBody != null ? String(item.productSheetBody) : undefined,
+        payments: Array.isArray(item.payments) ? item.payments.filter(Boolean) : [],
+        receipts: Array.isArray(item.receipts) ? item.receipts.filter(Boolean) : [],
+        withdrawals: Array.isArray(item.withdrawals) ? item.withdrawals.filter(Boolean) : []
+      }));
+  }, [rawOrders]);
+
   const isQuotesView = mode === 'quotes';
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>(
     isQuotesView ? 'BUDGET' : 'ALL'
@@ -150,8 +231,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [quantity, setQuantity] = useState('');
-  const [unitPrice, setUnitPrice] = useState('180');
+  const [lineItems, setLineItems] = useState<OrderLineDraft[]>(() => [newOrderLineDraft([])]);
+  const [productSheetTitle, setProductSheetTitle] = useState(DEFAULT_PRODUCT_SHEET.title);
+  const [productSheetBody, setProductSheetBody] = useState(DEFAULT_PRODUCT_SHEET.body);
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(isQuotesView);
@@ -170,9 +252,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const formatBRL = (val?: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  const subtotalValue = useMemo(() => {
-    return (parseFloat(quantity) || 0) * (parseFloat(unitPrice) || 0);
-  }, [quantity, unitPrice]);
+  const subtotalValue = useMemo(() => sumLineDrafts(lineItems), [lineItems]);
 
   const totalOrderValue = useMemo(() => {
     return subtotalValue - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0);
@@ -203,7 +283,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
     if (selectedCustomerId) {
       const selected = customers.find(c => c.id === selectedCustomerId);
-      if (selected && selected.name.toLowerCase() === trimmedSearch.toLowerCase()) {
+      if (selected && String(selected.name || '').toLowerCase() === trimmedSearch.toLowerCase()) {
         return customers;
       }
     }
@@ -231,6 +311,44 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     customers.find(c => c.id === selectedCustomerId), 
   [customers, selectedCustomerId]);
 
+  const updateLineItem = (lineId: string, patch: Partial<OrderLineDraft>) => {
+    setLineItems(prev => prev.map(line => (line.lineId === lineId ? { ...line, ...patch } : line)));
+  };
+
+  const handleLineProductChange = (lineId: string, productId: string) => {
+    const prod = resolveInventoryProduct(productId, sellableProducts, inventory);
+    updateLineItem(lineId, {
+      productId,
+      productDescription: prod?.name || '',
+      unitPrice: String(Number(prod?.unitPrice) || 0)
+    });
+  };
+
+  const addLineItem = () => {
+    setLineItems(prev => [...prev, newOrderLineDraft(sellableProducts)]);
+  };
+
+  const removeLineItem = (lineId: string) => {
+    setLineItems(prev => (prev.length <= 1 ? prev : prev.filter(l => l.lineId !== lineId)));
+  };
+
+  const applyProductSheetFromLine = (lineId: string) => {
+    const line = lineItems.find(l => l.lineId === lineId) || lineItems[0];
+    if (!line) return;
+    const prod = resolveInventoryProduct(line.productId, sellableProducts, inventory);
+    const sheet = productSheetFromInventory(prod);
+    setProductSheetTitle(sheet.title);
+    setProductSheetBody(sheet.body);
+  };
+
+  const hasValidLineItems = useMemo(
+    () =>
+      lineItems.some(
+        l => (parseFloat(l.quantity) || 0) > 0 && (parseFloat(l.unitPrice) || 0) > 0
+      ),
+    [lineItems]
+  );
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
@@ -243,24 +361,37 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   useEffect(() => {
     if (editingOrder) {
-      setSelectedCustomerId(editingOrder.customerId);
+      setSelectedCustomerId(String(editingOrder.customerId || ''));
       const cust = customers.find(c => c.id === editingOrder.customerId);
       setCustomerSearch(cust?.name || '');
-      const firstItem = editingOrder.items[0];
-      setQuantity(firstItem ? firstItem.quantity.toString() : '');
-      setUnitPrice(firstItem ? firstItem.unitPrice.toString() : '180');
-      setDiscount(editingOrder.discount.toString());
-      setShipping(editingOrder.shipping.toString());
+      const drafts = orderItemsToDrafts(editingOrder.items);
+      setLineItems(drafts.length ? drafts : [newOrderLineDraft(sellableProducts)]);
+      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title);
+      setProductSheetBody(editingOrder.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body);
+      setDiscount(String(Number(editingOrder.discount) || 0));
+      setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
-      setNotes(editingOrder.notes || '');
-      setPayments(editingOrder.payments || []);
+      setNotes(String(editingOrder.notes || ''));
+      setPayments(
+        (Array.isArray(editingOrder.payments) ? editingOrder.payments : [])
+          .filter((p): p is SalePayment => Boolean(p && typeof p === 'object' && p.id))
+          .map(p => ({
+            ...p,
+            id: String(p.id),
+            amount: Number(p.amount) || 0,
+            paidAmount: Number(p.paidAmount) || 0,
+            date: String(p.date || new Date().toISOString().split('T')[0]),
+            accountId: String(p.accountId || accounts[0]?.id || ''),
+            description: String(p.description || '')
+          }))
+      );
       setDownPayment('0');
       setIsModalOpen(true);
     } else {
       setPayments([]);
       setDownPayment('0');
     }
-  }, [editingOrder, customers]);
+  }, [editingOrder, customers, accounts, sellableProducts]);
 
   const addPaymentRow = () => {
     const newPayment: SalePayment = {
@@ -294,8 +425,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     }));
   };
 
-  const handleCreateOrUpdateOrder = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateOrUpdateOrder = (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault?.();
     if (!selectedCustomerId) {
       alert("Por favor, selecione um cliente da lista.");
       return;
@@ -306,26 +437,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
-    const moidoProd = inventory.find(i => i.id === 'moido');
-    const isInter = selectedCustomer?.state && selectedCustomer.state !== 'PA';
-    const itemData = {
-      productId: 'moido',
-      productCode: moidoProd?.code || '001',
-      productName: moidoProd?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
-      unit: moidoProd?.unit || 'TON',
-      quantity: parseFloat(quantity) || 1,
-      unitPrice: parseFloat(unitPrice) || 0,
-      discount: 0,
-      total: subtotalValue,
-      ncm: moidoProd?.ncm || '2517.10.00',
-      cfop: moidoProd?.cfop || (isInter ? '6101' : '5101'),
-      cst: moidoProd?.cst || '102',
-      cClassTrib: moidoProd?.cClassTrib,
-      aliquotaIbs: moidoProd?.aliquotaIbs,
-      aliquotaCbs: moidoProd?.aliquotaCbs,
-      aliquotaIs: moidoProd?.aliquotaIs,
-      informacoesComplementares: moidoProd?.informacoesComplementares
-    };
+    const isInter = Boolean(selectedCustomer?.state && selectedCustomer.state !== 'PA');
+    const builtItems = buildItemsFromDrafts(lineItems, sellableProducts, inventory, isInter);
+    if (!builtItems.length) {
+      alert('Informe ao menos um item com quantidade e preço unitário válidos.');
+      return;
+    }
+    const itemsSubtotal = builtItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
 
     // Cria recibo de entrada se houver valor de entrada
     const generatedReceipts: PaymentReceipt[] = editingOrder?.receipts || [];
@@ -362,16 +480,18 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       date: editingOrder?.date || new Date().toISOString().split('T')[0],
       deliveryDate: new Date().toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-      subtotal: subtotalValue,
+      subtotal: itemsSubtotal,
       discount: parseFloat(discount) || 0,
       shipping: parseFloat(shipping) || 0,
-      total: totalOrderValue,
+      total: itemsSubtotal - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0),
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
       isBarter: isBarter,
       barterCommodityType: isBarter ? barterCommodityType : undefined,
       cornTons: isBarter ? grainTonsEquivalent : undefined,
       cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
-      items: [itemData],
+      items: builtItems,
+      productSheetTitle: productSheetTitle.trim() || DEFAULT_PRODUCT_SHEET.title,
+      productSheetBody: productSheetBody.trim() || DEFAULT_PRODUCT_SHEET.body,
       payments: payments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
@@ -407,8 +527,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCurrentStep(1);
     setSelectedCustomerId('');
     setCustomerSearch('');
-    setQuantity('');
-    setUnitPrice('180');
     setDiscount('0');
     setShipping('0');
     setIsBudget(isQuotesView);
@@ -418,6 +536,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
+    const defaultLine = newOrderLineDraft(sellableProducts, 'moido');
+    setLineItems([defaultLine]);
+    const defaultProd = resolveInventoryProduct(defaultLine.productId, sellableProducts, inventory);
+    const sheet = productSheetFromInventory(defaultProd);
+    setProductSheetTitle(sheet.title);
+    setProductSheetBody(sheet.body);
   };
 
   const openNewOrder = () => {
@@ -432,12 +556,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         alert("Por favor, selecione um cliente da lista antes de avançar.");
         return;
       }
-      if (!quantity || parseFloat(quantity) <= 0) {
-        alert("Por favor, informe a quantidade de calcário em toneladas.");
-        return;
-      }
-      if (!unitPrice || parseFloat(unitPrice) <= 0) {
-        alert("Por favor, informe o preço unitário por tonelada.");
+      if (!hasValidLineItems) {
+        alert('Adicione ao menos um item com quantidade e preço unitário válidos.');
         return;
       }
       setCurrentStep(2);
@@ -518,7 +638,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const totalOrdersAmount = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => acc + o.total, 0);
   
   const totalPaidGlobal = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => {
-    const receiptsTotal = (o.receipts || []).reduce((rSum, r) => rSum + r.amount, 0);
+    const receiptsTotal = (o.receipts || []).reduce((rSum, r) => rSum + (Number(r?.amount) || 0), 0);
     return acc + receiptsTotal;
   }, 0);
 
@@ -558,8 +678,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const customer = customers.find(c => c.id === o.customerId);
-      const matchCust = customer?.name.toLowerCase().includes(q) || customer?.document.includes(q);
-      const matchRef = o.reference.toLowerCase().includes(q);
+      const name = String(customer?.name || '').toLowerCase();
+      const doc = String(customer?.document || '').toLowerCase();
+      const ref = String(o.reference || '').toLowerCase();
+      const matchCust = name.includes(q) || doc.includes(q);
+      const matchRef = ref.includes(q);
       const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
       return matchCust || matchRef || matchPaymentStatus;
     }
@@ -1175,6 +1298,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
       {/* Modal Criar / Editar Pedido em Etapas (Stepper) */}
       {isModalOpen && (
+        <ErrorBoundary label="novo pedido de venda">
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 print:hidden">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
             
@@ -1188,7 +1312,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   <h3 className="text-base font-bold text-slate-900 tracking-tight">
                     {editingOrder ? `Editar Pedido (${editingOrder.reference})` : (isBudget ? 'Novo Orçamento Comercial' : 'Novo Pedido de Venda')}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">{company.name} • Unidade de Faturamento</p>
+                  <p className="text-[11px] text-slate-500 font-medium">{company?.name || 'Empresa'} • Unidade de Faturamento</p>
                 </div>
               </div>
               <button 
@@ -1235,7 +1359,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                    if (selectedCustomerId && hasValidLineItems) {
                       setCurrentStep(2);
                     }
                   }}
@@ -1266,7 +1390,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                    if (selectedCustomerId && hasValidLineItems) {
                       setCurrentStep(3);
                     }
                   }}
@@ -1418,40 +1542,147 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     )}
                   </div>
 
-                  {/* Volume e Preço Unitário */}
+                  {/* Itens do pedido (multi-produto) */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Package size={14} /> Especificação do Produto & Quantidade
+                        <Package size={14} /> Itens do pedido ({lineItems.length})
                       </span>
-                      <span className="text-[11px] text-slate-500 font-medium">Calcário Agrícola Granel (PRNT &gt; 85%)</span>
+                      <button
+                        type="button"
+                        onClick={addLineItem}
+                        className="text-[11px] font-black text-purple-700 hover:text-purple-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200"
+                      >
+                        <Plus size={14} /> Adicionar produto
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-3 max-h-[min(42vh,420px)] overflow-y-auto custom-scrollbar pr-1">
+                      {lineItems.map((line, lineIndex) => {
+                        const lineProd = resolveInventoryProduct(line.productId, sellableProducts, inventory);
+                        const lineTotal = lineDraftSubtotal(line);
+                        return (
+                          <div
+                            key={line.lineId}
+                            className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-sm"
+                          >
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Item {String(lineIndex + 1).padStart(2, '0')}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-emerald-700">{formatBRL(lineTotal)}</span>
+                                {lineItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLineItem(line.lineId)}
+                                    className="p-1 text-slate-400 hover:text-rose-600"
+                                    title="Remover item"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Produto *</label>
+                              <select
+                                value={line.productId}
+                                onChange={e => handleLineProductChange(line.lineId, e.target.value)}
+                                className="w-full p-2 bg-white border border-slate-300 rounded-lg outline-none font-bold text-xs"
+                              >
+                                {sellableProducts.length === 0 ? (
+                                  <option value="moido">Cadastre produtos no estoque</option>
+                                ) : (
+                                  sellableProducts.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} — {formatBRL(p.unitPrice)}/{p.unit || 'TON'}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                              {lineProd && (
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  Estoque: {Number(lineProd.quantity).toLocaleString('pt-BR')} {lineProd.unit || 'TON'}
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Descrição no PDF</label>
+                              <input
+                                type="text"
+                                value={line.productDescription}
+                                onChange={e => updateLineItem(line.lineId, { productDescription: e.target.value })}
+                                placeholder={lineProd?.name || 'Descrição na tabela impressa'}
+                                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                  Qtd. ({lineProd?.unit || 'TON'})
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.quantity}
+                                  onChange={e => updateLineItem(line.lineId, { quantity: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                  Preço / {lineProd?.unit || 'TON'}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.unitPrice}
+                                  onChange={e => updateLineItem(line.lineId, { unitPrice: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                      <p className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
+                        Caixa técnica no PDF (geral do pedido)
+                      </p>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Volume (Toneladas) *</label>
-                        <input 
-                          required 
-                          type="number" 
-                          step="0.1" 
-                          value={quantity} 
-                          onChange={e => setQuantity(e.target.value)} 
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
-                          placeholder="Ex: 50.0" 
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Título</label>
+                        <input
+                          type="text"
+                          value={productSheetTitle}
+                          onChange={e => setProductSheetTitle(e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Preço Unitário (R$ / Tonelada) *</label>
-                        <input 
-                          required 
-                          type="number" 
-                          step="0.01" 
-                          value={unitPrice} 
-                          onChange={e => setUnitPrice(e.target.value)} 
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
-                          placeholder="180.00" 
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Especificações (uma linha por parágrafo)</label>
+                        <textarea
+                          value={productSheetBody}
+                          onChange={e => setProductSheetBody(e.target.value)}
+                          rows={3}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium resize-y"
                         />
                       </div>
+                      {lineItems[0] && (
+                        <button
+                          type="button"
+                          onClick={() => applyProductSheetFromLine(lineItems[0].lineId)}
+                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900"
+                        >
+                          Usar ficha padrão do 1º item
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -1543,7 +1774,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center text-xs">
                     <div className="space-y-0.5">
                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Subtotal Líquido</p>
-                      <p className="font-bold">{parseFloat(quantity) || 0} TON @ {formatBRL(parseFloat(unitPrice) || 0)}</p>
+                      <p className="font-bold">{lineItems.length} item(ns) • Subtotal {formatBRL(subtotalValue)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total do Documento</p>
@@ -1686,7 +1917,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </div>
                         ) : (
                           <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                            {payments.map((p, idx) => (
+                            {payments.filter(p => p && p.id).map((p, idx) => (
                               <div key={p.id} className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center gap-3 shadow-sm">
                                 <span className="text-[11px] font-bold text-slate-400 w-6 text-center">#{idx + 1}</span>
                                 <div className="flex-1 grid grid-cols-2 gap-2">
@@ -1763,22 +1994,39 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         Alterar
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">VOLUME</span>
-                        <p className="font-bold text-slate-900">{quantity} TON</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">PREÇO / TON</span>
-                        <p className="font-bold text-slate-900">{formatBRL(parseFloat(unitPrice) || 0)}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
-                        <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
-                        <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
+                    <div className="space-y-2 pt-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Itens</span>
+                      <ul className="space-y-1.5">
+                        {lineItems.map((line, idx) => {
+                          const prod = resolveInventoryProduct(line.productId, sellableProducts, inventory);
+                          const qty = parseFloat(line.quantity) || 0;
+                          if (qty <= 0) return null;
+                          return (
+                            <li key={line.lineId} className="flex justify-between gap-2 text-[11px] border-b border-slate-100 pb-1">
+                              <span className="font-medium text-slate-800">
+                                {String(idx + 1).padStart(2, '0')} — {line.productDescription || prod?.name || 'Produto'}{' '}
+                                <span className="text-slate-500">
+                                  ({qty} {prod?.unit || 'TON'} × {formatBRL(parseFloat(line.unitPrice) || 0)})
+                                </span>
+                              </span>
+                              <span className="font-bold shrink-0">{formatBRL(lineDraftSubtotal(line))}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">SUBTOTAL</span>
+                          <p className="font-bold text-slate-900">{formatBRL(subtotalValue)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
+                          <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
+                          <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1879,6 +2127,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           </div>
         </div>
+        </ErrorBoundary>
       )}
 
       {/* Modal de Histórico de Recibos & Retiradas do Pedido */}
@@ -2083,9 +2332,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
       {/* Modal de Emissão de NF-e via NotaAs */}
       {orderToEmitNfe && (
+        <ErrorBoundary label="emissão NF-e">
         <EmitirNfeModal
           order={{ ...orderToEmitNfe, companyId: orderToEmitNfe.companyId || companyId || company.id }}
-          customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, orderToEmitNfe.customerId)}
           config={fiscalConfig}
           company={company}
           transportadores={transportadores}
@@ -2110,6 +2360,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             setOrderToViewDanfe(updatedOrder);
           }}
         />
+        </ErrorBoundary>
       )}
 
       {/* Modal de Visualização e Impressão de DANFE */}
@@ -2117,7 +2368,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         <DanfeModal
           order={orderToViewDanfe}
           linkedNfeId={danfeLinkedNfeId}
-          customer={customers.find(c => c.id === orderToViewDanfe.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, orderToViewDanfe.customerId)}
           config={fiscalConfig}
           company={company}
           onClose={() => {
@@ -2153,7 +2404,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {printOrder && (
         <SalesOrderPdfModal
           order={printOrder}
-          customer={customers.find(c => c.id === printOrder.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, printOrder.customerId)}
           company={company}
           onClose={() => setPrintOrder(null)}
         />

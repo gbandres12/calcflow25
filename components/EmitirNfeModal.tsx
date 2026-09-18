@@ -19,6 +19,7 @@ import {
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
+import { normalizeCustomer } from '../utils/customerUtils';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -47,8 +48,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   transferencia,
   modo = 'pedido',
 }) => {
+  const safeCustomer = normalizeCustomer(customer, order.customerId);
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+
   const [currentConfig, setCurrentConfig] = useState<FiscalConfig>(config);
-  const [activeCustomer, setActiveCustomer] = useState<Customer>({ ...customer });
+  const [activeCustomer, setActiveCustomer] = useState<Customer>(safeCustomer);
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,11 +65,15 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [cepFeedback, setCepFeedback] = useState<string | null>(null);
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
 
+  useEffect(() => {
+    setActiveCustomer(normalizeCustomer(customer, order.customerId));
+  }, [customer, order.customerId]);
+
   const isSubmittingRef = useRef(false);
   const isDevolucao = Boolean(devolutionChave);
   const isTransferencia = Boolean(transferencia) && !isDevolucao;
   const isAvulsa = modo === 'avulsa' && !isDevolucao && !isTransferencia;
-  const isInterestadual = customer.state && customer.state !== 'PA';
+  const isInterestadual = Boolean(safeCustomer.state && safeCustomer.state !== 'PA');
   const cfopSugerido = isDevolucao
     ? (isInterestadual ? '6202' : '5202')
     : isTransferencia
@@ -76,7 +84,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [items, setItems] = useState<(SaleOrderItem & { maxQuantity?: number })[]>(() => {
     const remaining = remainingQuantityByProduct(order);
     const useRemaining = !isDevolucao && !isTransferencia;
-    return order.items.map((it) => {
+    return orderItems.map((it) => {
       const rem = remaining.get(saleItemKey(it));
       const qty = useRemaining ? (rem ?? it.quantity) : it.quantity;
       const ratio = it.quantity ? qty / it.quantity : 1;
@@ -129,7 +137,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   }, [itemsSubtotal, discountEfetivo, freteValorEfetivo]);
 
   // Informações Complementares pré-definidas do produto + padrão
-  const productComplementares = order.items
+  const productComplementares = orderItems
     .map(it => it.informacoesComplementares)
     .filter((txt): txt is string => Boolean(txt && txt.trim()));
   const initialInfCpl = order.nfeInfCpl || [
