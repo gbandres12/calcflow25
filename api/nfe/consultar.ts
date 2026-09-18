@@ -1,3 +1,5 @@
+import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin';
+
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 function setCors(res: any) {
@@ -19,9 +21,16 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = req.body || {};
-    const id = body.invoiceId || body.nfeIdOrChave || body.referencia;
-    const key = String(body.apiKey || process.env.NOTAAS_API_KEY || '').trim();
-    const base = String(body.apiBaseUrl || 'https://platform.notaas.com.br/api/v1').replace(/\/$/, '');
+    const id = body.invoiceId || body.nfeIdOrChave;
+    let key = String(body.apiKey || process.env.NOTAAS_API_KEY || '').trim();
+    let base = String(body.apiBaseUrl || 'https://platform.notaas.com.br/api/v1').replace(/\/$/, '');
+    const companyId = String(body.companyId || '').trim();
+
+    if (!key && companyId) {
+      const cfg = await getFiscalConfigForCompany(companyId);
+      if (cfg?.apiKey) key = String(cfg.apiKey).trim();
+      if (cfg?.apiBaseUrl) base = String(cfg.apiBaseUrl).replace(/\/$/, '');
+    }
 
     if (!id) {
       return res.status(400).json({ error: 'Informe o invoiceId da NotaAs para consultar o status.' });

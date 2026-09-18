@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
-import { fiscalService } from '../services/fiscalService';
+import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
@@ -340,19 +340,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       const payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config);
       const result = await fiscalService.emitirNFe(syntheticOrder, activeCustomer, config, company.id);
 
-      if (result.success) {
-        let finalStatus = result.nfeStatus;
-
-        if (result.nfeStatus === 'processando' && result.nfeId) {
-          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 3, 2000);
-          if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
-            finalStatus = pollResult.status;
-          }
-        }
-
+      if (result.success || result.nfeId) {
         const createdOrder: SaleOrder = {
           ...syntheticOrder,
-          nfeStatus: finalStatus,
+          nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
           nfeNumero: result.nfeNumero,
@@ -361,12 +352,21 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           nfeDanfeUrl: result.nfeDanfeUrl,
           nfeXmlUrl: result.nfeXmlUrl,
           nfeEmissao: result.nfeEmissao,
+          nfeErro: result.nfeErro,
           nfeNaturezaOperacao: result.naturezaOperacao,
           nfePayload: payloadSent,
           nfeRawResponse: result.rawResponse
         };
 
-        onSuccess(createdOrder);
+        let saved = createdOrder;
+        if (result.nfeId) {
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 8, 2500);
+          if (pollResult.status && pollResult.status !== 'nao_emitida') {
+            saved = mergeNfeConsulta(saved, pollResult);
+          }
+        }
+
+        onSuccess(saved);
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e.');
       }

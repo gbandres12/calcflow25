@@ -209,11 +209,81 @@ export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus
   return 'rejeitada';
 }
 
-function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | undefined, chaveAcesso?: string): NfeStatus {
+function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | undefined, _chaveAcesso?: string): NfeStatus {
   if (httpStatus === 202) return 'processando';
-  const mapped = mapRemoteNfeStatus(rawStatus, httpStatus);
-  if (mapped === 'autorizada' && !chaveAcesso) return 'processando';
-  return mapped;
+  return mapRemoteNfeStatus(rawStatus, httpStatus);
+}
+
+function unwrapFiscalJson(raw: any): any {
+  if (!raw || typeof raw !== 'object') return raw || {};
+  if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
+    return { ...raw, ...raw.data };
+  }
+  return raw;
+}
+
+export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): SaleOrder {
+  const n = result.nfe;
+  const nfeStatus = result.status && result.status !== 'nao_emitida' ? result.status : order.nfeStatus;
+  const nfeErro =
+    nfeStatus === 'rejeitada'
+      ? (n?.xMotivo || n?.motivoStatus || result.error || order.nfeErro || 'Rejeitada pela SEFAZ')
+      : nfeStatus === 'autorizada'
+        ? ''
+        : (n?.xMotivo || order.nfeErro);
+  return {
+    ...order,
+    nfeStatus,
+    nfeId: n?.invoiceId || n?.id || order.nfeId,
+    nfeChave: n?.chaveAcesso || order.nfeChave,
+    nfeNumero: n?.nNf != null ? String(n.nNf) : (n?.numero != null ? String(n.numero) : order.nfeNumero),
+    nfeSerie: n?.serie != null ? String(n.serie) : order.nfeSerie,
+    nfeProtocolo: n?.nProt || n?.protocolo || order.nfeProtocolo,
+    nfeDanfeUrl: n?.pdfUrl || n?.danfeUrl || order.nfeDanfeUrl,
+    nfeXmlUrl: n?.xmlUrl || order.nfeXmlUrl,
+    nfeEmissao: n?.dataEmissao || n?.dataAutorizacao || order.nfeEmissao,
+    nfeErro: nfeErro || undefined,
+  };
+}
+
+function nfeFromStatusPayload(data: any, httpStatus?: number): ConsultarNFeResult {
+  const raw = unwrapFiscalJson(data);
+  const chaveAcesso = raw.chaveAcesso || raw.chave || raw.nfeKey || '';
+  const st = resolveNfeStatus(raw.status || raw.nfe?.status, httpStatus, chaveAcesso);
+  const invoiceId = raw.invoiceId || raw.id;
+  const nNf = raw.nNf ?? raw.numero;
+  const nProt = raw.nProt || raw.protocolo || raw.protocol;
+  const pdfUrl = raw.pdfUrl || raw.danfeUrl;
+  const xMotivo = raw.xMotivo || raw.motivo || raw.motivoStatus || raw.errorMessage;
+  return {
+    success: st === 'autorizada' || st === 'processando' || st === 'cancelada',
+    status: st,
+    error: st === 'rejeitada' ? (xMotivo || raw.error || raw.message) : undefined,
+    nfe: {
+      id: invoiceId,
+      invoiceId,
+      referenciaExterna: raw.referenciaExterna || raw.externalReference,
+      status: st as any,
+      ambiente: raw.tpAmb === 1 ? 'producao' : 'homologacao',
+      modelo: raw.modelo || 55,
+      numero: nNf,
+      nNf,
+      serie: raw.serie || 1,
+      chaveAcesso,
+      protocolo: nProt,
+      nProt,
+      cStat: raw.cStat ?? raw.codigoStatus,
+      xMotivo,
+      motivoStatus: xMotivo,
+      codigoStatusSefaz: raw.cStat != null ? String(raw.cStat) : (raw.codigoStatus != null ? String(raw.codigoStatus) : undefined),
+      danfeUrl: pdfUrl,
+      pdfUrl,
+      xmlUrl: raw.xmlUrl,
+      dataEmissao: raw.dataEmissao || raw.createdAt,
+      dataAutorizacao: raw.dataAutorizacao || raw.authorizedAt || raw.dhRecbto,
+      valorTotal: raw.vNf || raw.valorTotal || raw.total,
+    },
+  };
 }
 
 async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: boolean; status: number; data: any; isJson: boolean }> {
@@ -586,7 +656,6 @@ export const fiscalService = {
       ...uniqueProductComplementares,
       ...freteInfParts,
       order.reference ? (order.isAvulsa ? `Emissão Avulsa: ${order.reference}` : `Pedido: ${order.reference}`) : '',
-      order.sellerName ? `Vendedor: ${order.sellerName}` : '',
       isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
       isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
     ].filter(Boolean);
@@ -859,13 +928,15 @@ export const fiscalService = {
     while (retries < maxRetries) {
       console.info(`⏳ [POLLING NF-e] Tentativa ${retries + 1}/${maxRetries} consultando status da nota ${nfeIdOrChave}...`);
       const result = await this.consultarNFe(nfeIdOrChave, overrideConfig);
-      if (result.success && result.status !== 'processando') {
+      if (result.status && result.status !== 'processando' && result.status !== 'nao_emitida') {
         console.info(`🎉 [POLLING NF-e] Processamento finalizado! Status final: ${result.status.toUpperCase()}`);
         return result;
       }
       retries++;
       if (retries < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else if (result.nfe) {
+        return result;
       }
     }
     return {
@@ -920,41 +991,7 @@ export const fiscalService = {
       }
 
       if (proxied.ok) {
-        const data = proxied.data?.data || proxied.data;
-        const chaveAcesso = data.chaveAcesso || data.chave || '';
-        const st = resolveNfeStatus(data.status || data.nfe?.status, proxied.status, chaveAcesso);
-        const invoiceId = data.invoiceId || data.id || nfeIdOrChave;
-        const nNf = data.nNf ?? data.numero ?? 0;
-        const nProt = data.nProt || data.protocolo || data.protocol;
-        const pdfUrl = data.pdfUrl || data.danfeUrl;
-        return {
-          success: st !== 'rejeitada',
-          status: st,
-          nfe: {
-            id: invoiceId,
-            invoiceId,
-            referenciaExterna: data.referenciaExterna || data.externalReference,
-            status: st as any,
-            ambiente: config.environment === 'production' ? 'producao' : 'homologacao',
-            modelo: 55,
-            numero: nNf,
-            nNf,
-            serie: data.serie || 1,
-            chaveAcesso,
-            protocolo: nProt,
-            nProt,
-            cStat: data.cStat,
-            xMotivo: data.xMotivo,
-            motivoStatus: data.xMotivo || data.motivoStatus,
-            codigoStatusSefaz: data.cStat != null ? String(data.cStat) : undefined,
-            danfeUrl: pdfUrl,
-            pdfUrl,
-            xmlUrl: data.xmlUrl,
-            dataEmissao: data.dataEmissao || data.createdAt,
-            dataAutorizacao: data.dataAutorizacao || data.authorizedAt,
-            valorTotal: data.vNf || data.valorTotal || data.total
-          }
-        };
+        return nfeFromStatusPayload(proxied.data, proxied.status);
       }
 
       return {
@@ -992,10 +1029,8 @@ export const fiscalService = {
         if (proxied.ok && proxied.isJson) {
           const data = proxied.data?.data || proxied.data;
           const item = Array.isArray(data) ? data[0] : (data.items ? data.items[0] : data);
-          if (item && (item.invoiceId || item.id || item.chaveAcesso || item.chave)) {
-            const chave = item.chaveAcesso || item.chave || '';
-            const st = resolveNfeStatus(item.status, proxied.status, chave);
-            return { success: st === 'autorizada' || st === 'processando' || st === 'cancelada', status: st, nfe: item };
+          if (item && (item.invoiceId || item.id || item.chaveAcesso || item.chave || item.status)) {
+            return nfeFromStatusPayload(item, proxied.status);
           }
         }
       } catch {}
@@ -1115,57 +1150,98 @@ export const fiscalService = {
   },
 
   /**
+   * Consulta a NotaAs/SEFAZ e devolve o pedido com status, chave, protocolo e links reais.
+   */
+  async sincronizarPedidoComSefaz(order: SaleOrder, overrideConfig?: FiscalConfig): Promise<SaleOrder> {
+    const config = overrideConfig || (await this.getConfig(order.companyId || overrideConfig?.companyId));
+    const id = (order.nfeId || '').trim();
+    if (id) {
+      const result = await this.consultarNFe(id, config);
+      if (result.status !== 'nao_emitida' || result.nfe) {
+        return mergeNfeConsulta(order, result);
+      }
+    }
+    if (order.reference) {
+      const byRef = await this.consultarPorReferencia(order.reference, config);
+      if (byRef.nfe || (byRef.status && byRef.status !== 'nao_emitida')) {
+        return mergeNfeConsulta(order, byRef);
+      }
+    }
+    return order;
+  },
+
+  /** DANFE oficial (PDF binário) gerado pela NotaAs. Exige invoiceId e nota issued/cancelled. */
+  async baixarDanfePdf(invoiceId: string, overrideConfig?: FiscalConfig): Promise<{ ok: boolean; blob?: Blob; error?: string }> {
+    if (!invoiceId) return { ok: false, error: 'NF-e sem invoiceId da NotaAs. Não é possível gerar o DANFE oficial.' };
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
+    try {
+      const res = await fetch('/api/nfe/danfe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId,
+          nfeIdOrChave: invoiceId,
+          apiKey: (config.apiKey || '').trim(),
+          apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+          companyId: config.companyId || overrideConfig?.companyId,
+        }),
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/pdf') || contentType.includes('octet-stream')) {
+        return { ok: true, blob: await res.blob() };
+      }
+      const data = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        error: data.error || data.xMotivo || data.motivo || `Não foi possível obter o DANFE (HTTP ${res.status}).`,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Falha de rede ao baixar o DANFE.' };
+    }
+  },
+
+  async baixarXmlNFe(invoiceId: string, overrideConfig?: FiscalConfig, type: 'emission' | 'cancel' = 'emission'): Promise<{ ok: boolean; blob?: Blob; error?: string }> {
+    if (!invoiceId) return { ok: false, error: 'NF-e sem invoiceId da NotaAs.' };
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
+    try {
+      const res = await fetch('/api/nfe/xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId,
+          nfeIdOrChave: invoiceId,
+          type,
+          apiKey: (config.apiKey || '').trim(),
+          apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+          companyId: config.companyId || overrideConfig?.companyId,
+        }),
+      });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('xml') || contentType.includes('octet-stream')) {
+        return { ok: true, blob: await res.blob() };
+      }
+      const data = await res.json().catch(() => ({}));
+      return { ok: false, error: data.error || data.message || `Não foi possível obter o XML (HTTP ${res.status}).` };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Falha de rede ao baixar o XML.' };
+    }
+  },
+
+  /**
    * Obtém a URL de download ou visualização do DANFE PDF
    */
   async obterDanfePdfUrl(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
-    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
-    const apiKey = (config.apiKey || '').trim();
-    if (apiKey) {
-      try {
-        const proxied = await fiscalApiFetch('/api/nfe/consultar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            invoiceId: chaveOuId,
-            nfeIdOrChave: chaveOuId,
-            resource: 'danfe',
-            apiKey,
-            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
-            provider: config.apiProvider || 'notaas'
-          })
-        });
-        const url = proxied.data?.pdfUrl || proxied.data?.danfeUrl || proxied.data?.data?.pdfUrl || proxied.data?.data?.danfeUrl;
-        if (proxied.ok && url) return url;
-      } catch {}
-    }
-    return null;
+    const consult = await this.consultarNFe(chaveOuId, overrideConfig);
+    return consult.nfe?.pdfUrl || consult.nfe?.danfeUrl || null;
   },
 
   /**
    * Obtém o XML assinado da NF-e
    */
   async obterXmlNFe(chaveOuId: string, overrideConfig?: FiscalConfig): Promise<string | null> {
-    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
-    const apiKey = (config.apiKey || '').trim();
-    if (apiKey) {
-      try {
-        const proxied = await fiscalApiFetch('/api/nfe/consultar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            invoiceId: chaveOuId,
-            nfeIdOrChave: chaveOuId,
-            resource: 'xml',
-            apiKey,
-            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
-            provider: config.apiProvider || 'notaas'
-          })
-        });
-        const xml = proxied.data?.xml || proxied.data?.data?.xml || proxied.data?.xmlUrl;
-        if (proxied.ok && xml) return typeof xml === 'string' ? xml : null;
-      } catch {}
-    }
-    return null;
+    const xml = await this.baixarXmlNFe(chaveOuId, overrideConfig);
+    if (!xml.ok || !xml.blob) return null;
+    return xml.blob.text();
   },
 
   /**

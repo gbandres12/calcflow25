@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SaleOrder, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
-import { fiscalService } from '../services/fiscalService';
+import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
@@ -234,20 +234,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         opts
       );
 
-      if (result.success) {
-        let finalStatus = result.nfeStatus;
-
-        // Se o servidor respondeu status processando, dispara polling de acompanhamento
-        if (result.nfeStatus === 'processando' && result.nfeId) {
-          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, currentConfig, 3, 2000);
-          if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
-            finalStatus = pollResult.status;
-          }
-        }
-
-        const updatedOrder: SaleOrder = {
+      if (result.success || result.nfeId) {
+        let updatedOrder: SaleOrder = {
           ...orderWithEdits,
-          nfeStatus: finalStatus,
+          nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
           nfeNumero: result.nfeNumero,
@@ -256,10 +246,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           nfeDanfeUrl: result.nfeDanfeUrl,
           nfeXmlUrl: result.nfeXmlUrl,
           nfeEmissao: result.nfeEmissao,
+          nfeErro: result.nfeErro,
           nfeNaturezaOperacao: result.naturezaOperacao,
           nfePayload: payloadSent,
           nfeRawResponse: result.rawResponse
         };
+
+        if (result.nfeId) {
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, currentConfig, 8, 2500);
+          if (pollResult.status && pollResult.status !== 'nao_emitida') {
+            updatedOrder = mergeNfeConsulta(updatedOrder, pollResult);
+          }
+        }
 
         onSuccess(updatedOrder);
       } else {

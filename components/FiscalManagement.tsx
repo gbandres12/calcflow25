@@ -50,6 +50,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [filterStatus, setFilterStatus] = useState('all');
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
 
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
   useEffect(() => {
     fiscalService.getConfig(companyId).then((c) => {
       setConfig(c);
@@ -73,6 +75,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const nfeStatusLabel = (status?: string) => {
+    if (status === 'autorizada') return 'Autorizada';
+    if (status === 'rejeitada') return 'Rejeitada';
+    if (status === 'cancelada') return 'Cancelada';
+    if (status === 'processando') return 'Processando';
+    return status || 'Não emitida';
+  };
+
+  const syncFromSefaz = async (order: SaleOrder) => {
+    if (!config) return;
+    setSyncingId(order.id);
+    try {
+      const updated = await fiscalService.sincronizarPedidoComSefaz(order, config);
+      onUpdateOrder(updated);
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   const safeOrders = orders || [];
@@ -230,12 +251,21 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                           </div>
                         </td>
                         <td className="px-4 py-3">{customer?.name || 'Cliente Geral'}</td>
-                        <td className="px-4 py-3">{order.nfeStatus || 'nao_emitida'}</td>
+                        <td className="px-4 py-3">{nfeStatusLabel(order.nfeStatus)}</td>
                         <td className="px-4 py-3 text-right font-black">{formatBRL(order.total)}</td>
                         <td className="px-4 py-3 text-center">
-                          <button onClick={() => setSelectedDanfeOrder(order)} className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black">
-                            <Eye size={12} /> DANFE
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => syncFromSefaz(order)}
+                              disabled={syncingId === order.id}
+                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black disabled:opacity-50"
+                            >
+                              {syncingId === order.id ? '…' : 'SEFAZ'}
+                            </button>
+                            <button onClick={() => setSelectedDanfeOrder(order)} className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black">
+                              <Eye size={12} /> DANFE
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

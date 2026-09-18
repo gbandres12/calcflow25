@@ -825,10 +825,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     )}
 
                     {order.status === OrderStatus.FINALIZED && (
-                      order.nfeStatus === 'autorizada' ? (
+                      order.nfeStatus && order.nfeStatus !== 'nao_emitida' ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                            <FileCheck size={12} /> NF-e Nº {order.nfeNumero || '1041'}
+                          <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 ${
+                            order.nfeStatus === 'autorizada' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            order.nfeStatus === 'rejeitada' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                            order.nfeStatus === 'cancelada' ? 'bg-slate-50 text-slate-700 border-slate-200' :
+                            'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}>
+                            <FileCheck size={12} /> {order.nfeStatus === 'autorizada' ? `NF-e Nº ${order.nfeNumero || ''}` : order.nfeStatus === 'rejeitada' ? 'NF-e rejeitada' : order.nfeStatus === 'cancelada' ? 'NF-e cancelada' : 'NF-e processando'}
                           </span>
                           <button
                             onClick={() => setOrderToViewDanfe(order)}
@@ -836,6 +841,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           >
                             <Eye size={12} /> DANFE
                           </button>
+                          {order.nfeStatus === 'autorizada' && (
                           <button
                             onClick={() => {
                               setDevolutionChave(order.nfeChave || '');
@@ -846,6 +852,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           >
                             <Undo2 size={12} /> Devolver
                           </button>
+                          )}
+                          {order.nfeStatus === 'rejeitada' && (
+                            <button
+                              onClick={() => {
+                                setEmitTransferencia(false);
+                                setDevolutionChave(undefined);
+                                setOrderToEmitNfe(order);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm"
+                            >
+                              <Send size={12} /> Reenviar
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
