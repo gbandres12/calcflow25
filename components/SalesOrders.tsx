@@ -30,6 +30,12 @@ import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
+import {
+  DEFAULT_PRODUCT_SHEET,
+  inventoryProductCode,
+  productSheetFromInventory,
+  sellableInventoryItems
+} from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
 
 interface SalesOrdersProps {
@@ -133,6 +139,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     return rawInventory.filter((item): item is InventoryItem => Boolean(item && typeof item === 'object' && item.id));
   }, [rawInventory]);
 
+  const sellableProducts = useMemo(() => sellableInventoryItems(inventory), [inventory]);
+
   const accounts = useMemo<FinancialAccount[]>(() => {
     if (!Array.isArray(rawAccounts)) return [];
     return rawAccounts.filter((item): item is FinancialAccount => Boolean(item && typeof item === 'object' && item.id));
@@ -165,8 +173,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             quantity: Number(row.quantity) || 0,
             unitPrice: Number(row.unitPrice) || 0,
             discount: Number(row.discount) || 0,
-            total: Number(row.total) || 0
+            total: Number(row.total) || 0,
+            productDescription: row.productDescription != null ? String(row.productDescription) : undefined
           })),
+        productSheetTitle: item.productSheetTitle != null ? String(item.productSheetTitle) : undefined,
+        productSheetBody: item.productSheetBody != null ? String(item.productSheetBody) : undefined,
         payments: Array.isArray(item.payments) ? item.payments.filter(Boolean) : [],
         receipts: Array.isArray(item.receipts) ? item.receipts.filter(Boolean) : [],
         withdrawals: Array.isArray(item.withdrawals) ? item.withdrawals.filter(Boolean) : []
@@ -211,6 +222,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [selectedProductId, setSelectedProductId] = useState('moido');
+  const [productLineDescription, setProductLineDescription] = useState('');
+  const [productSheetTitle, setProductSheetTitle] = useState(DEFAULT_PRODUCT_SHEET.title);
+  const [productSheetBody, setProductSheetBody] = useState(DEFAULT_PRODUCT_SHEET.body);
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('180');
   const [discount, setDiscount] = useState('0');
@@ -292,6 +307,27 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     customers.find(c => c.id === selectedCustomerId), 
   [customers, selectedCustomerId]);
 
+  const selectedProduct = useMemo(
+    () => sellableProducts.find(p => p.id === selectedProductId) || sellableProducts[0],
+    [sellableProducts, selectedProductId]
+  );
+
+  const applyProductDefaults = (prod: InventoryItem) => {
+    const sheet = productSheetFromInventory(prod);
+    setProductSheetTitle(sheet.title);
+    setProductSheetBody(sheet.body);
+    setProductLineDescription(prod.name);
+    if (!quantity || parseFloat(quantity) <= 0) {
+      setUnitPrice(String(Number(prod.unitPrice) || 180));
+    }
+  };
+
+  const handleSelectProduct = (productId: string) => {
+    setSelectedProductId(productId);
+    const prod = sellableProducts.find(p => p.id === productId);
+    if (prod) applyProductDefaults(prod);
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
@@ -308,6 +344,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       const cust = customers.find(c => c.id === editingOrder.customerId);
       setCustomerSearch(cust?.name || '');
       const firstItem = (Array.isArray(editingOrder.items) ? editingOrder.items : [])[0];
+      const prodId = firstItem?.productId ? String(firstItem.productId) : 'moido';
+      setSelectedProductId(prodId);
+      setProductLineDescription(
+        firstItem?.productDescription?.trim() || firstItem?.productName || ''
+      );
+      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title);
+      setProductSheetBody(editingOrder.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body);
       setQuantity(firstItem != null ? String(Number(firstItem.quantity) || 0) : '');
       setUnitPrice(firstItem != null ? String(Number(firstItem.unitPrice) || 0) : '180');
       setDiscount(String(Number(editingOrder.discount) || 0));
@@ -379,25 +422,31 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
-    const moidoProd = inventory.find(i => i.id === 'moido');
+    const prod =
+      sellableProducts.find(i => i.id === selectedProductId) ||
+      inventory.find(i => i.id === selectedProductId) ||
+      sellableProducts[0];
+    const prodIndex = sellableProducts.findIndex(i => i.id === prod?.id);
     const isInter = selectedCustomer?.state && selectedCustomer.state !== 'PA';
+    const lineDescription = productLineDescription.trim() || prod?.name || 'Produto';
     const itemData = {
-      productId: 'moido',
-      productCode: moidoProd?.code || '001',
-      productName: moidoProd?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
-      unit: moidoProd?.unit || 'TON',
+      productId: String(prod?.id || selectedProductId || 'moido'),
+      productCode: prod ? inventoryProductCode(prod, prodIndex >= 0 ? prodIndex : 0) : '001',
+      productName: prod?.name || lineDescription,
+      productDescription: lineDescription,
+      unit: (prod?.unit || 'TON').toUpperCase(),
       quantity: parseFloat(quantity) || 1,
       unitPrice: parseFloat(unitPrice) || 0,
       discount: 0,
       total: subtotalValue,
-      ncm: moidoProd?.ncm || '2517.10.00',
-      cfop: moidoProd?.cfop || (isInter ? '6101' : '5101'),
-      cst: moidoProd?.cst || '102',
-      cClassTrib: moidoProd?.cClassTrib,
-      aliquotaIbs: moidoProd?.aliquotaIbs,
-      aliquotaCbs: moidoProd?.aliquotaCbs,
-      aliquotaIs: moidoProd?.aliquotaIs,
-      informacoesComplementares: moidoProd?.informacoesComplementares
+      ncm: prod?.ncm || '2517.10.00',
+      cfop: prod?.cfop || (isInter ? '6101' : '5101'),
+      cst: prod?.cst || '102',
+      cClassTrib: prod?.cClassTrib,
+      aliquotaIbs: prod?.aliquotaIbs,
+      aliquotaCbs: prod?.aliquotaCbs,
+      aliquotaIs: prod?.aliquotaIs,
+      informacoesComplementares: prod?.informacoesComplementares
     };
 
     // Cria recibo de entrada se houver valor de entrada
@@ -445,6 +494,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       cornTons: isBarter ? grainTonsEquivalent : undefined,
       cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
       items: [itemData],
+      productSheetTitle: productSheetTitle.trim() || DEFAULT_PRODUCT_SHEET.title,
+      productSheetBody: productSheetBody.trim() || DEFAULT_PRODUCT_SHEET.body,
       payments: payments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
@@ -491,6 +542,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
+    const defaultProd = sellableProducts.find(p => p.id === 'moido') || sellableProducts[0];
+    setSelectedProductId(defaultProd?.id || 'moido');
+    if (defaultProd) {
+      const sheet = productSheetFromInventory(defaultProd);
+      setProductSheetTitle(sheet.title);
+      setProductSheetBody(sheet.body);
+      setProductLineDescription(defaultProd.name);
+      setUnitPrice(String(Number(defaultProd.unitPrice) || 180));
+    } else {
+      setProductSheetTitle(DEFAULT_PRODUCT_SHEET.title);
+      setProductSheetBody(DEFAULT_PRODUCT_SHEET.body);
+      setProductLineDescription('');
+    }
   };
 
   const openNewOrder = () => {
@@ -1410,18 +1474,88 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     )}
                   </div>
 
-                  {/* Volume e Preço Unitário */}
+                  {/* Produto, volume e preço */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Package size={14} /> Especificação do Produto & Quantidade
+                        <Package size={14} /> Produto & Quantidade
                       </span>
-                      <span className="text-[11px] text-slate-500 font-medium">Calcário Agrícola Granel (PRNT &gt; 85%)</span>
+                      {selectedProduct && (
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Estoque: {Number(selectedProduct.quantity).toLocaleString('pt-BR')} {selectedProduct.unit || 'TON'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Produto do pedido *</label>
+                      <select
+                        value={selectedProductId}
+                        onChange={e => handleSelectProduct(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm"
+                      >
+                        {sellableProducts.length === 0 ? (
+                          <option value="moido">Calcário (cadastre produtos no estoque)</option>
+                        ) : (
+                          sellableProducts.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} — {formatBRL(p.unitPrice)}/{p.unit || 'TON'}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Descrição na tabela do pedido impresso</label>
+                      <input
+                        type="text"
+                        value={productLineDescription}
+                        onChange={e => setProductLineDescription(e.target.value)}
+                        placeholder={selectedProduct?.name || 'Ex.: Calcário Agrícola Dolomítico (Granel)'}
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm"
+                      />
+                    </div>
+
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                      <p className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
+                        Informações do produto no PDF (caixa técnica)
+                      </p>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Título</label>
+                        <input
+                          type="text"
+                          value={productSheetTitle}
+                          onChange={e => setProductSheetTitle(e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Especificações (uma linha por parágrafo)</label>
+                        <textarea
+                          value={productSheetBody}
+                          onChange={e => setProductSheetBody(e.target.value)}
+                          rows={4}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium resize-y"
+                          placeholder={'PRNT mínimo garantido: 80%\nMgO mínimo garantido: 14%'}
+                        />
+                      </div>
+                      {selectedProduct && (
+                        <button
+                          type="button"
+                          onClick={() => applyProductDefaults(selectedProduct)}
+                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900"
+                        >
+                          Restaurar texto padrão do cadastro de estoque
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Volume (Toneladas) *</label>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                          Quantidade ({selectedProduct?.unit || 'TON'}) *
+                        </label>
                         <input 
                           required 
                           type="number" 
@@ -1433,7 +1567,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Preço Unitário (R$ / Tonelada) *</label>
+                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                          Preço unitário (R$ / {selectedProduct?.unit || 'TON'}) *
+                        </label>
                         <input 
                           required 
                           type="number" 
@@ -1756,9 +1892,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </button>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      <div className="sm:col-span-2">
+                        <span className="text-[10px] text-slate-400 font-bold">PRODUTO</span>
+                        <p className="font-bold text-slate-900 text-sm">{productLineDescription || selectedProduct?.name || '—'}</p>
+                      </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold">VOLUME</span>
-                        <p className="font-bold text-slate-900">{quantity} TON</p>
+                        <p className="font-bold text-slate-900">{quantity} {selectedProduct?.unit || 'TON'}</p>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold">PREÇO / TON</span>
