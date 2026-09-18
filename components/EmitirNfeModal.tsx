@@ -1,7 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { SaleOrder, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
+import { SaleOrder, SaleOrderItem, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { db } from '../services/dataService';
+import { newId } from '../services/ids';
+import {
+  avulsaExternalRef,
+  buildLinkedNfe,
+  remainingQuantityByProduct,
+  saleItemKey,
+  upsertLinkedNfe,
+} from '../services/saleNfe';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
@@ -23,6 +31,7 @@ interface EmitirNfeModalProps {
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   devolutionChave?: string;
   transferencia?: boolean;
+  modo?: 'pedido' | 'avulsa';
 }
 
 export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
@@ -35,7 +44,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   transportadores = [],
   onAddTransportador,
   devolutionChave,
-  transferencia
+  transferencia,
+  modo = 'pedido',
 }) => {
   const [currentConfig, setCurrentConfig] = useState<FiscalConfig>(config);
   const [activeCustomer, setActiveCustomer] = useState<Customer>({ ...customer });
@@ -54,6 +64,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const isSubmittingRef = useRef(false);
   const isDevolucao = Boolean(devolutionChave);
   const isTransferencia = Boolean(transferencia) && !isDevolucao;
+  const isAvulsa = modo === 'avulsa' && !isDevolucao && !isTransferencia;
   const isInterestadual = customer.state && customer.state !== 'PA';
   const cfopSugerido = isDevolucao
     ? (isInterestadual ? '6202' : '5202')
@@ -61,12 +72,27 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       ? (isInterestadual ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152'))
       : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
 
-  // Itens com CFOP e CST editáveis
-  const [items, setItems] = useState(order.items.map(it => ({
-    ...it,
-    cfop: it.cfop || cfopSugerido,
-    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
-  })));
+  // Itens com CFOP e CST editáveis. Na avulsa, quantidade limitada ao saldo não faturado.
+  const [items, setItems] = useState<(SaleOrderItem & { maxQuantity?: number })[]>(() => {
+    const remaining = remainingQuantityByProduct(order);
+    const useRemaining = !isDevolucao && !isTransferencia;
+    return order.items.map((it) => {
+      const rem = remaining.get(saleItemKey(it));
+      const qty = useRemaining ? (rem ?? it.quantity) : it.quantity;
+      const ratio = it.quantity ? qty / it.quantity : 1;
+      const discount = (Number(it.discount) || 0) * ratio;
+      const unitPrice = Number(it.unitPrice) || 0;
+      return {
+        ...it,
+        quantity: qty,
+        discount,
+        total: Math.max(0, qty * unitPrice - discount),
+        maxQuantity: rem ?? it.quantity,
+        cfop: it.cfop || cfopSugerido,
+        cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
+      };
+    }).filter((it) => isDevolucao || isTransferencia || (Number(it.quantity) || 0) > 0);
+  });
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
     order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
@@ -90,10 +116,17 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
 
+  const itemsSubtotal = useMemo(() => items.reduce((acc, it) => acc + (Number(it.total) || 0), 0), [items]);
+  const discountEfetivo = useMemo(() => {
+    if (isDevolucao || isTransferencia) return Number(order.discount) || 0;
+    const origSub = Number(order.subtotal) || 0;
+    if (origSub <= 0) return Number(order.discount) || 0;
+    return (Number(order.discount) || 0) * (itemsSubtotal / origSub);
+  }, [isDevolucao, isTransferencia, order.discount, order.subtotal, itemsSubtotal]);
+
   const totalComFrete = useMemo(() => {
-    const subtotal = items.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
-    return subtotal - (Number(order.discount) || 0) + freteValorEfetivo;
-  }, [items, order.discount, freteValorEfetivo]);
+    return Math.max(0, itemsSubtotal - discountEfetivo + freteValorEfetivo);
+  }, [itemsSubtotal, discountEfetivo, freteValorEfetivo]);
 
   // Informações Complementares pré-definidas do produto + padrão
   const productComplementares = order.items
@@ -108,12 +141,31 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const validation = fiscalService.validarDadosFiscais(
-    { ...order, items, shipping: freteValorEfetivo, total: totalComFrete, frete },
+    { ...order, items, shipping: freteValorEfetivo, total: totalComFrete, discount: discountEfetivo, frete },
     activeCustomer
   );
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
-    setItems(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
+    setItems(prev => prev.map((item, idx) => {
+      if (idx !== index) return item;
+      const updated = { ...item, [field]: value };
+      if (field === 'quantity') {
+        const raw = parseFloat(value);
+        const qty = Number.isFinite(raw) ? raw : 0;
+        const max = item.maxQuantity ?? qty;
+        updated.quantity = isAvulsa ? Math.min(Math.max(0, qty), max) : qty;
+        const orig = order.items.find(o => saleItemKey(o) === saleItemKey(item));
+        const origQty = Number(orig?.quantity) || item.maxQuantity || updated.quantity || 1;
+        const ratio = origQty ? updated.quantity / origQty : 1;
+        updated.discount = (Number(orig?.discount) || 0) * ratio;
+        updated.total = Math.max(0, updated.quantity * (Number(updated.unitPrice) || 0) - updated.discount);
+      }
+      return updated;
+    }));
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index));
   };
 
   // Safety unlock in case of unforeseen lockups
@@ -205,18 +257,34 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setErrorMsg(null);
 
     try {
+      const emitItems = items.filter((it) => (Number(it.quantity) || 0) > 0);
+      if (emitItems.length === 0) {
+        setErrorMsg('Informe a quantidade de pelo menos um item para emitir a nota.');
+        isSubmittingRef.current = false;
+        setLoading(false);
+        return;
+      }
+
+      const linkedId = newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
+      const referenciaExterna = isAvulsa
+        ? avulsaExternalRef(order.reference, linkedId)
+        : (order.nfeReferenciaExterna || order.reference);
+
       const orderWithEdits: SaleOrder = {
         ...order,
-        items,
+        items: emitItems,
+        discount: discountEfetivo,
         shipping: freteValorEfetivo,
         total: totalComFrete,
+        subtotal: itemsSubtotal,
         frete: {
           ...frete,
           modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
           valor: freteValorEfetivo,
         },
         nfeNaturezaOperacao: naturezaOperacao,
-        nfeInfCpl: infCpl
+        nfeInfCpl: infCpl,
+        nfeReferenciaExterna: referenciaExterna,
       };
 
       const opts = isDevolucao
@@ -235,8 +303,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       );
 
       if (result.success || result.nfeId) {
-        let updatedOrder: SaleOrder = {
-          ...orderWithEdits,
+        const tipo = isDevolucao ? 'devolucao' : isTransferencia ? 'transferencia' : isAvulsa ? 'avulsa' : 'pedido';
+        let resultFields = {
           nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
@@ -248,16 +316,53 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           nfeEmissao: result.nfeEmissao,
           nfeErro: result.nfeErro,
           nfeNaturezaOperacao: result.naturezaOperacao,
-          nfePayload: payloadSent,
-          nfeRawResponse: result.rawResponse
         };
 
         if (result.nfeId) {
           const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, currentConfig, 8, 2500);
           if (pollResult.status && pollResult.status !== 'nao_emitida') {
-            updatedOrder = mergeNfeConsulta(updatedOrder, pollResult);
+            const polled = mergeNfeConsulta({ ...orderWithEdits, ...resultFields }, pollResult);
+            resultFields = {
+              nfeStatus: polled.nfeStatus || resultFields.nfeStatus,
+              nfeId: polled.nfeId,
+              nfeChave: polled.nfeChave,
+              nfeNumero: polled.nfeNumero,
+              nfeSerie: polled.nfeSerie,
+              nfeProtocolo: polled.nfeProtocolo,
+              nfeDanfeUrl: polled.nfeDanfeUrl,
+              nfeXmlUrl: polled.nfeXmlUrl,
+              nfeEmissao: polled.nfeEmissao,
+              nfeErro: polled.nfeErro,
+              nfeNaturezaOperacao: polled.nfeNaturezaOperacao || resultFields.nfeNaturezaOperacao,
+            };
           }
         }
+
+        const linked = buildLinkedNfe({
+          id: linkedId,
+          tipo,
+          reference: referenciaExterna,
+          order: orderWithEdits,
+          items: emitItems,
+          subtotal: itemsSubtotal,
+          discount: discountEfetivo,
+          shipping: freteValorEfetivo,
+          total: totalComFrete,
+          ...resultFields,
+          nfeInfCpl: infCpl,
+          nfePayload: payloadSent,
+          nfeRawResponse: result.rawResponse,
+        });
+
+        const sourceKeepItems: SaleOrder = {
+          ...order,
+          nfePayload: isAvulsa ? order.nfePayload : payloadSent,
+          nfeRawResponse: isAvulsa ? order.nfeRawResponse : result.rawResponse,
+        };
+        const updatedOrder = upsertLinkedNfe(
+          isAvulsa ? sourceKeepItems : { ...sourceKeepItems, items: order.items, subtotal: order.subtotal, discount: order.discount, shipping: order.shipping, total: order.total, frete: orderWithEdits.frete },
+          linked
+        );
 
         onSuccess(updatedOrder);
       } else {
@@ -286,7 +391,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight">
-                  {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : 'Emissão de NF-e Eletrônica'}
+                  {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : isAvulsa ? 'NF-e avulsa desta venda' : 'Emissão de NF-e Eletrônica'}
                 </h3>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
@@ -298,7 +403,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 </span>
               </div>
               <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
-                Pedido <b>{order.reference}</b> | Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
+                Pedido <b>{order.reference}</b>
+                {isAvulsa ? ' · parcial, sem substituir a NF-e do pedido completo' : ''}
+                {' '}| Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
               </p>
             </div>
           </div>
@@ -573,6 +680,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             />
           </div>
 
+          {isAvulsa && (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl text-xs text-purple-950">
+              <p className="font-black uppercase tracking-wider text-[10px] mb-1">Nota avulsa / parcial</p>
+              <p>
+                Esta emissão usa só as quantidades abaixo e fica ligada a esta venda. Não é a NF-e do pedido completo.
+                O saldo ainda não faturado continua disponível para novas notas.
+              </p>
+            </div>
+          )}
+
           {isTransferencia && (
             <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900">
               <p className="font-black uppercase tracking-wider text-[10px] mb-1">Transferência entre estabelecimentos</p>
@@ -630,7 +747,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     <th className="px-3 py-3 w-28">NCM</th>
                     <th className="px-3 py-3 w-28 text-purple-700">CFOP *</th>
                     <th className="px-3 py-3 w-24 text-blue-700">CST *</th>
-                    <th className="px-3 py-3 text-center w-24">Qtd</th>
+                    <th className="px-3 py-3 text-center w-28">Qtd</th>
                     <th className="px-4 py-3 text-right w-28">Total</th>
                   </tr>
                 </thead>
@@ -667,8 +784,34 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                           className="w-20 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
                         />
                       </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-700">
+                        {isAvulsa ? (
+                          <div className="space-y-1">
+                            <input
+                              type="number"
+                              min={0}
+                              max={it.maxQuantity}
+                              step="0.01"
+                              value={it.quantity}
+                              onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)}
+                              className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-black text-center outline-none focus:border-purple-500"
+                            />
+                            <p className="text-[9px] text-slate-400 font-bold">Saldo {it.maxQuantity} {it.unit}</p>
+                          </div>
+                        ) : (
+                          <>{it.quantity} {it.unit}</>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-black text-slate-800">
+                        <div className="flex items-center justify-end gap-2">
+                          <span>{formatBRL(it.total)}</span>
+                          {isAvulsa && items.length > 1 && (
+                            <button type="button" onClick={() => handleRemoveItem(idx)} className="text-[10px] text-rose-600 font-black">
+                              Tirar
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -702,7 +845,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 Total da Nota Fiscal (NF-e) · Frete {FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.sigla || 'Sem frete'}
               </span>
               <p className="text-xs text-slate-400">
-                Produtos: {formatBRL(items.reduce((a, it) => a + (Number(it.total) || 0), 0))} | Frete: {formatBRL(freteValorEfetivo)}{(order.discount || 0) ? ` | Desc: ${formatBRL(order.discount)}` : ''}
+                Produtos: {formatBRL(itemsSubtotal)} | Frete: {formatBRL(freteValorEfetivo)}{discountEfetivo ? ` | Desc: ${formatBRL(discountEfetivo)}` : ''}
               </p>
             </div>
             <p className="text-xl font-black text-emerald-400 self-end sm:self-auto">{formatBRL(totalComFrete)}</p>
@@ -748,7 +891,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
-              disabled={loading || !validation.valid}
+              disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
               onClick={handleEmitir}
               className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
@@ -759,7 +902,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : 'Transmitir e Emitir NF-e'}
+                  <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : isAvulsa ? 'Transmitir NF-e Avulsa' : 'Transmitir e Emitir NF-e'}
                 </>
               )}
             </button>

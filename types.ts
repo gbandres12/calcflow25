@@ -314,6 +314,60 @@ export interface Transaction {
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
 
+export type SaleNfeTipo = 'pedido' | 'avulsa' | 'devolucao' | 'transferencia';
+
+export interface SaleOrderItem {
+  productId: string;
+  productCode: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  total: number;
+  ncm?: string;
+  cfop?: string;
+  cst?: string;
+  csosn?: string;
+  aliquotaIcms?: number;
+  aliquotaPis?: number;
+  aliquotaCofins?: number;
+  cClassTrib?: string;
+  aliquotaIbs?: number;
+  aliquotaCbs?: number;
+  aliquotaIs?: number;
+  informacoesComplementares?: string;
+}
+
+/** NF-e vinculada ao pedido (completa, avulsa/parcial, devolução ou transferência). */
+export interface SaleOrderLinkedNfe {
+  id: string;
+  tipo: SaleNfeTipo;
+  reference: string;
+  items: SaleOrderItem[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  total: number;
+  frete?: FreteInfo;
+  nfeStatus: NfeStatus;
+  nfeId?: string;
+  nfeChave?: string;
+  nfeNumero?: string;
+  nfeSerie?: string;
+  nfeProtocolo?: string;
+  nfeDanfeUrl?: string;
+  nfeXmlUrl?: string;
+  nfeEmissao?: string;
+  nfeErro?: string;
+  nfeNaturezaOperacao?: string;
+  nfeInfCpl?: string;
+  nfePayload?: any;
+  nfeRawResponse?: any;
+  createdAt: string;
+  notes?: string;
+}
+
 /** Modalidade de frete padrão SEFAZ (grupo transp / modFrete) */
 export type FreteModalidade = 0 | 1 | 2 | 3 | 4 | 9;
 
@@ -398,28 +452,11 @@ export interface SaleOrder {
   deliveryDate?: string;
   validUntil?: string;
   isAvulsa?: boolean;
-  items: {
-    productId: string;
-    productCode: string;
-    productName: string;
-    unit: string;
-    quantity: number;
-    unitPrice: number;
-    discount: number;
-    total: number;
-    ncm?: string;
-    cfop?: string;
-    cst?: string;
-    csosn?: string;
-    aliquotaIcms?: number;
-    aliquotaPis?: number;
-    aliquotaCofins?: number;
-    cClassTrib?: string;
-    aliquotaIbs?: number;
-    aliquotaCbs?: number;
-    aliquotaIs?: number;
-    informacoesComplementares?: string;
-  }[];
+  items: SaleOrderItem[];
+  /** Notas emitidas a partir desta venda (pedido completo + avulsas parciais). */
+  nfes?: SaleOrderLinkedNfe[];
+  /** Referência única enviada à API fiscal (ex.: PED-2026-0001#AV#nfa-xxx). */
+  nfeReferenciaExterna?: string;
   subtotal: number;
   discount: number;
   shipping: number;

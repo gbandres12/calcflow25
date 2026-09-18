@@ -231,7 +231,7 @@ export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): 
       : nfeStatus === 'autorizada'
         ? ''
         : (n?.xMotivo || order.nfeErro);
-  return {
+  const merged: SaleOrder = {
     ...order,
     nfeStatus,
     nfeId: n?.invoiceId || n?.id || order.nfeId,
@@ -244,6 +244,27 @@ export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): 
     nfeEmissao: n?.dataEmissao || n?.dataAutorizacao || order.nfeEmissao,
     nfeErro: nfeErro || undefined,
   };
+  const invoiceId = merged.nfeId;
+  if (invoiceId && Array.isArray(order.nfes) && order.nfes.length > 0) {
+    merged.nfes = order.nfes.map((linked) =>
+      linked.nfeId === invoiceId
+        ? {
+            ...linked,
+            nfeStatus: merged.nfeStatus || linked.nfeStatus,
+            nfeId: merged.nfeId || linked.nfeId,
+            nfeChave: merged.nfeChave || linked.nfeChave,
+            nfeNumero: merged.nfeNumero || linked.nfeNumero,
+            nfeSerie: merged.nfeSerie || linked.nfeSerie,
+            nfeProtocolo: merged.nfeProtocolo || linked.nfeProtocolo,
+            nfeDanfeUrl: merged.nfeDanfeUrl || linked.nfeDanfeUrl,
+            nfeXmlUrl: merged.nfeXmlUrl || linked.nfeXmlUrl,
+            nfeEmissao: merged.nfeEmissao || linked.nfeEmissao,
+            nfeErro: merged.nfeErro,
+          }
+        : linked
+    );
+  }
+  return merged;
 }
 
 function nfeFromStatusPayload(data: any, httpStatus?: number): ConsultarNFeResult {
@@ -655,7 +676,11 @@ export const fiscalService = {
       config.observacoesFiscaisPadrao,
       ...uniqueProductComplementares,
       ...freteInfParts,
-      order.reference ? (order.isAvulsa ? `Emissão Avulsa: ${order.reference}` : `Pedido: ${order.reference}`) : '',
+      order.reference
+        ? (order.isAvulsa || (order.nfeReferenciaExterna || '').includes('#AV#')
+          ? `Pedido: ${order.reference} | NF-e avulsa (parcial, não é a nota do pedido completo)`
+          : `Pedido: ${order.reference}`)
+        : '',
       isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
       isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
     ].filter(Boolean);
@@ -676,7 +701,7 @@ export const fiscalService = {
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
       infCpl: infParts.join(' | ').trim(),
-      referenciaExterna: order.reference || `ORDER-${order.id}`
+      referenciaExterna: order.nfeReferenciaExterna || order.reference || `ORDER-${order.id}`
     };
 
     if (hasFreteCobrado) payload.valorFrete = freteValor;
