@@ -1901,7 +1901,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <p className="font-bold text-slate-900">{quantity} {selectedProduct?.unit || 'TON'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-400 font-bold">PREÇO / TON</span>
+                        <span className="text-[10px] text-slate-400 font-bold">PREÇO / {selectedProduct?.unit || 'TON'}</span>
                         <p className="font-bold text-slate-900">{formatBRL(parseFloat(unitPrice) || 0)}</p>
                       </div>
                       <div>
