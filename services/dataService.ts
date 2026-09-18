@@ -148,7 +148,9 @@ export const ALL_TABLES = [
   'fiscal_config',
   'users',
   'transfers',
-  'transportadores'
+  'transportadores',
+  'recurring_bills',
+  'employees'
 ];
 
 export const resolveCompanyKey = (companyId?: string | null): string => {

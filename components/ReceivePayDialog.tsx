@@ -67,7 +67,9 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
         paymentMethod: isDeduction ? 'Abatimento / Devolução' : paymentMethod,
         notes: notes.trim() || (isDeduction ? 'Abatimento / Desconto concedido' : `Pagamento via ${paymentMethod}`),
         isDiscountOrDeduction: isDeduction,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        receiptId: `REC-${Date.now()}`,
+        origin: isDeduction ? 'abatimento' : 'receipt',
       };
 
       const existingPayments = transaction.payments || [];

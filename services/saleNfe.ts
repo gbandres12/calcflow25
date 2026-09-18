@@ -283,6 +283,7 @@ export function buildLinkedNfe(params: {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  nfeAmbiente?: 'sandbox' | 'production';
 }): SaleOrderLinkedNfe {
   return {
     id: params.id,
@@ -308,6 +309,7 @@ export function buildLinkedNfe(params: {
     nfeInfCpl: params.nfeInfCpl,
     nfePayload: params.nfePayload,
     nfeRawResponse: params.nfeRawResponse,
+    nfeAmbiente: params.nfeAmbiente,
     createdAt: new Date().toISOString(),
   };
 }

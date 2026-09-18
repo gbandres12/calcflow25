@@ -230,6 +230,7 @@ export interface PaymentReceipt {
   id: string;
   orderId?: string;
   orderReference?: string;
+  transactionId?: string;
   customerId: string;
   customerName: string;
   customerDocument?: string;
@@ -241,10 +242,12 @@ export interface PaymentReceipt {
   receivedBy?: string;
   description: string;
   type: 'ENTRADA' | 'PARCELA' | 'ABATIMENTO' | 'AVULSO';
+  side?: 'receber' | 'pagar';
   totalOrderAmount?: number;
   totalPaidSoFar?: number;
   remainingDebt?: number;
   notes?: string;
+  companyId?: string;
 }
 
 export interface OrderWithdrawal {
@@ -280,6 +283,16 @@ export interface SalePayment {
   paymentMethod?: string;
 }
 
+export type TransactionOrigin =
+  | 'order'
+  | 'nfe'
+  | 'manual'
+  | 'recurring'
+  | 'payroll'
+  | 'fuel'
+  | 'maintenance'
+  | 'purchase';
+
 export interface TransactionPayment {
   id: string;
   transactionId: string;
@@ -290,6 +303,8 @@ export interface TransactionPayment {
   notes?: string;
   isDiscountOrDeduction?: boolean;
   createdAt?: string;
+  receiptId?: string;
+  origin?: 'receipt' | 'abatimento' | 'manual';
 }
 
 export interface Transaction {
@@ -321,6 +336,40 @@ export interface Transaction {
   receiptId?: string;
   paymentMethod?: string;
   payments?: TransactionPayment[];
+  origin?: TransactionOrigin;
+  originKey?: string;
+  employeeId?: string;
+  recurringBillId?: string;
+  nfeAmbiente?: 'sandbox' | 'production';
+}
+
+export interface RecurringBill {
+  id: string;
+  companyId?: string;
+  description: string;
+  amount: number;
+  dueDay: number;
+  frequency: 'monthly';
+  category: string;
+  costCenterId?: string;
+  accountId?: string;
+  contactName?: string;
+  active: boolean;
+}
+
+export interface Employee {
+  id: string;
+  companyId?: string;
+  name: string;
+  document?: string;
+  jobTitle?: string;
+  pixKey?: string;
+  bankName?: string;
+  agency?: string;
+  accountNumber?: string;
+  depositAmount: number;
+  status: 'Ativo' | 'Inativo';
+  notes?: string;
 }
 
 export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
@@ -380,6 +429,7 @@ export interface SaleOrderLinkedNfe {
   nfeRawResponse?: any;
   createdAt: string;
   notes?: string;
+  nfeAmbiente?: 'sandbox' | 'production';
 }
 
 /** Modalidade de frete padrão SEFAZ (grupo transp / modFrete) */
@@ -513,6 +563,7 @@ export interface SaleOrder {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  nfeAmbiente?: 'sandbox' | 'production';
 }
 
 export interface FiscalConfig {
@@ -611,4 +662,4 @@ export interface TransferShipment {
   supplierName?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'receivable' | 'payable' | 'recurring' | 'payroll';

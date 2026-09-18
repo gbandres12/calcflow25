@@ -483,9 +483,9 @@ export const INITIAL_ORDERS: SaleOrder[] = [
       {
         id: 'pay-1',
         amount: 5000.00,
-        paidAmount: 5000.00,
+        paidAmount: 0,
         date: '2026-08-22',
-        status: TransactionStatus.CONFIRMADO,
+        status: TransactionStatus.PENDENTE,
         accountId: 'acc-1',
         description: 'Entrada / PIX no ato'
       },
@@ -541,11 +541,11 @@ export const INITIAL_ORDERS: SaleOrder[] = [
       {
         id: 'pay-2',
         amount: 9200.00,
-        paidAmount: 9200.00,
+        paidAmount: 0,
         date: '2026-08-23',
-        status: TransactionStatus.CONFIRMADO,
+        status: TransactionStatus.PENDENTE,
         accountId: 'acc-2',
-        description: 'Pagamento Sicredi via Pix'
+        description: 'Saldo em aberto'
       }
     ]
   },
@@ -587,78 +587,124 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     accountId: 'acc-1',
     costCenterId: 'cc4',
     date: '2026-08-22',
+    dueDate: '2026-10-22',
     type: TransactionType.SALE,
-    status: TransactionStatus.CONFIRMADO,
-    description: 'Venda Faturada - PED-2026-0101 (Fazenda Planalto - 120T)',
+    status: TransactionStatus.PARCIAL,
+    description: 'Venda Faturada - PED-2026-0101 (Fazenda Planalto)',
     category: 'Venda Calcário Moído Granel',
-    amount: 12960.00,
-    paidAmount: 12960.00,
-    quantity: 120,
+    amount: 50000.00,
+    paidAmount: 5000.00,
+    quantity: 500,
     customerId: 'cust-1',
-    orderId: 'ord-1'
+    orderId: 'ord-1',
+    origin: 'order',
+    nfeAmbiente: 'production',
+    payments: [{
+      id: 'pmt-ord1',
+      transactionId: 'tx-1',
+      amount: 5000.00,
+      paymentDate: '2026-08-22',
+      accountId: 'acc-1',
+      paymentMethod: 'PIX',
+      notes: 'Entrada / Sinal',
+      receiptId: 'REC-2026-0042',
+      origin: 'receipt'
+    }]
   },
   {
     id: 'tx-2',
     accountId: 'acc-2',
     costCenterId: 'cc4',
     date: '2026-08-23',
+    dueDate: '2026-08-23',
     type: TransactionType.SALE,
-    status: TransactionStatus.CONFIRMADO,
-    description: 'Venda Faturada - PED-2026-0102 (Grupo Maeda - 80T)',
+    status: TransactionStatus.PENDENTE,
+    description: 'Venda Faturada - PED-2026-0102 (Grupo Maeda)',
     category: 'Venda Calcário Dolomítico',
     amount: 9200.00,
-    paidAmount: 9200.00,
+    paidAmount: 0,
     quantity: 80,
     customerId: 'cust-3',
-    orderId: 'ord-2'
+    orderId: 'ord-2',
+    origin: 'order',
+    payments: []
   },
   {
     id: 'tx-3',
     accountId: 'acc-1',
     costCenterId: 'cc2',
     date: '2026-08-20',
+    dueDate: '2026-08-20',
     type: TransactionType.EXPENSE,
-    status: TransactionStatus.CONFIRMADO,
+    status: TransactionStatus.PAGO,
     description: 'Energia Elétrica Industrial - Alta Tensão Equatorial',
     category: 'Energia Elétrica (Alta Tensão)',
     amount: 14820.00,
-    paidAmount: 14820.00
+    paidAmount: 14820.00,
+    origin: 'manual',
+    payments: [{
+      id: 'pmt-tx3',
+      transactionId: 'tx-3',
+      amount: 14820.00,
+      paymentDate: '2026-08-20',
+      accountId: 'acc-1',
+      paymentMethod: 'PIX',
+      origin: 'receipt'
+    }]
   },
   {
     id: 'tx-4',
     accountId: 'acc-1',
     costCenterId: 'cc3',
     date: '2026-08-21',
+    dueDate: '2026-08-21',
     type: TransactionType.EXPENSE,
-    status: TransactionStatus.CONFIRMADO,
+    status: TransactionStatus.PENDENTE,
     description: 'Compra de Carga Diesel S10 (5.000 Litros) - Distribuidora Ipiranga',
     category: 'Combustível (Diesel S10 / S500)',
     amount: 29500.00,
-    paidAmount: 29500.00
+    paidAmount: 0,
+    contactName: 'Distribuidora Ipiranga de Petróleo',
+    origin: 'fuel',
+    payments: []
   },
   {
     id: 'tx-5',
     accountId: 'acc-2',
     costCenterId: 'cc5',
     date: '2026-08-18',
+    dueDate: '2026-08-18',
     type: TransactionType.EXPENSE,
-    status: TransactionStatus.CONFIRMADO,
+    status: TransactionStatus.PENDENTE,
     description: 'Reposição de Martelos de Aço Manganês Moinho Raymond',
     category: 'Peças de Desgaste e Telas',
     amount: 6400.00,
-    paidAmount: 6400.00
+    paidAmount: 0,
+    origin: 'manual',
+    payments: []
   },
   {
     id: 'tx-6',
     accountId: 'acc-3',
     costCenterId: 'cc3',
     date: '2026-08-24',
+    dueDate: '2026-08-24',
     type: TransactionType.EXPENSE,
-    status: TransactionStatus.CONFIRMADO,
+    status: TransactionStatus.PAGO,
     description: 'Alimentação da equipe de britagem e pátio',
     category: 'Alimentação e Refeitório Pátio',
     amount: 680.00,
-    paidAmount: 680.00
+    paidAmount: 680.00,
+    origin: 'manual',
+    payments: [{
+      id: 'pmt-tx6',
+      transactionId: 'tx-6',
+      amount: 680.00,
+      paymentDate: '2026-08-24',
+      accountId: 'acc-3',
+      paymentMethod: 'Dinheiro Físico',
+      origin: 'receipt'
+    }]
   }
 ];
 

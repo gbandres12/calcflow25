@@ -183,42 +183,10 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           }
         });
       } else {
-        // Fallback for transactions without a payments array (direct transactions or quick entries)
-        const isPaidOrConfirmed = 
-          t.status === TransactionStatus.CONFIRMADO || 
-          t.status === TransactionStatus.PAGO || 
-          t.status === TransactionStatus.PARCIAL;
-
         const matchesAccount = selectedAccountId === 'all' || t.accountId === selectedAccountId;
         const txDate = t.paymentDate || t.date;
-
         if (txDate === targetDate && matchesAccount) {
           dayTxIds.add(t.id);
-        }
-
-        if (!isPaidOrConfirmed || !matchesAccount || !txDate) return;
-
-        const paidAmt = Number(
-          t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
-            ? t.paidAmount 
-            : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
-        ) || 0;
-
-        if (txDate < targetDate) {
-          if (t.type === TransactionType.SALE) {
-            priorNetMovements += paidAmt;
-          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
-            priorNetMovements -= paidAmt;
-          }
-        } else if (txDate === targetDate) {
-          if (t.type === TransactionType.SALE) {
-            sumInflows += paidAmt;
-          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
-            sumOutflows += paidAmt;
-          }
-          if (t.discount) {
-            sumDeductions += Number(t.discount) || 0;
-          }
         }
       }
 

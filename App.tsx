@@ -20,6 +20,9 @@ import { FiscalConfigView } from './components/FiscalConfigView';
 import Transportadores from './components/Transportadores';
 import ErrorBoundary from './components/ErrorBoundary';
 import TransfersPage from './components/TransfersPage';
+import { ReceivablePayable } from './components/ReceivablePayable';
+import { RecurringBillsPage } from './components/RecurringBillsPage';
+import { EmployeesPayrollPage } from './components/EmployeesPayrollPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -47,7 +50,9 @@ import {
   Category,
   Company,
   TransferShipment,
-  Transportador
+  Transportador,
+  RecurringBill,
+  Employee
 } from './types';
 import { 
   INITIAL_COST_CENTERS,
@@ -58,6 +63,17 @@ import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
+import {
+  competenceKey,
+  dueDateForDay,
+  isHomologFinanceSkip,
+  paymentFromReceipt,
+  payrollOriginKey,
+  receiptAlreadyPosted,
+  recurringOriginKey,
+  syncPaidAmount,
+  titleBalance,
+} from './services/financeMath';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -106,6 +122,9 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [transfers, setTransfers] = useState<TransferShipment[]>([]);
   const [transportadores, setTransportadores] = useState<Transportador[]>([]);
+  const [recurringBills, setRecurringBills] = useState<RecurringBill[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const generatedFinanceKeysRef = React.useRef(new Set<string>());
 
   // Check if current user needs onboarding upon login
   useEffect(() => {
@@ -183,7 +202,7 @@ const App: React.FC = () => {
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers, savedTransportadores
+          savedCategories, savedUsers, savedTransfers, savedTransportadores, savedRecurring, savedEmployees
         ] = await Promise.all([
           financeService.getTransactions(activeCompanyId),
           inventoryService.getInventory(activeCompanyId),
@@ -198,7 +217,9 @@ const App: React.FC = () => {
           db.getTable('categories', activeCompanyId),
           userService.getAll(activeCompanyId),
           db.getTable('transfers', activeCompanyId),
-          db.getTable('transportadores', activeCompanyId)
+          db.getTable('transportadores', activeCompanyId),
+          db.getTable('recurring_bills', activeCompanyId),
+          db.getTable('employees', activeCompanyId)
         ]);
 
         setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
@@ -229,6 +250,8 @@ const App: React.FC = () => {
         setUsers(Array.isArray(savedUsers) ? savedUsers : []);
         setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
         setTransportadores(Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : []);
+        setRecurringBills(Array.isArray(savedRecurring) ? savedRecurring.filter((b: RecurringBill) => b && b.id) : []);
+        setEmployees(Array.isArray(savedEmployees) ? savedEmployees.filter((e: Employee) => e && e.id) : []);
 
         db.flushPending(activeCompanyId).catch((err) => {
           console.warn('[PERSISTÊNCIA] Reenvio da fila para o Supabase falhou:', err);
@@ -255,6 +278,65 @@ const App: React.FC = () => {
       window.removeEventListener('focus', refreshOnFocus);
     };
   }, [currentUser, activeCompanyId]);
+
+  useEffect(() => {
+    generatedFinanceKeysRef.current = new Set();
+  }, [activeCompanyId]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const competence = competenceKey();
+    const existing = new Set([
+      ...transactions.map((tx) => tx.originKey).filter(Boolean) as string[],
+      ...generatedFinanceKeysRef.current
+    ]);
+    recurringBills.filter((bill) => bill.active !== false).forEach((bill) => {
+      const originKey = recurringOriginKey(activeCompanyId, bill.id, competence);
+      if (existing.has(originKey)) return;
+      existing.add(originKey);
+      generatedFinanceKeysRef.current.add(originKey);
+      handleAddTransaction({
+        accountId: bill.accountId || accounts[0]?.id || 'acc-1',
+        costCenterId: bill.costCenterId,
+        date: dueDateForDay(bill.dueDay),
+        dueDate: dueDateForDay(bill.dueDay),
+        type: TransactionType.EXPENSE,
+        status: TransactionStatus.PENDENTE,
+        description: `${bill.description} (${competence})`,
+        category: bill.category,
+        amount: bill.amount,
+        paidAmount: 0,
+        contactName: bill.contactName,
+        origin: 'recurring',
+        originKey,
+        recurringBillId: bill.id,
+        payments: []
+      });
+    });
+    employees.filter((emp) => emp.status === 'Ativo').forEach((emp) => {
+      const originKey = payrollOriginKey(activeCompanyId, emp.id, competence);
+      if (existing.has(originKey)) return;
+      existing.add(originKey);
+      generatedFinanceKeysRef.current.add(originKey);
+      handleAddTransaction({
+        accountId: accounts[0]?.id || 'acc-1',
+        costCenterId: 'cc1',
+        date: dueDateForDay(5),
+        dueDate: dueDateForDay(5),
+        type: TransactionType.EXPENSE,
+        status: TransactionStatus.PENDENTE,
+        description: `Depósito — ${emp.name} (${competence})`,
+        category: 'Salários e Encargos da Equipe',
+        amount: emp.depositAmount,
+        paidAmount: 0,
+        contactName: emp.name,
+        origin: 'payroll',
+        originKey,
+        employeeId: emp.id,
+        payments: []
+      });
+    });
+  }, [currentUser, activeCompanyId, recurringBills, employees]);
 
   // Handlers para Categorias
   const handleAddCategory = (name: string, type: 'INFLOW' | 'OUTFLOW') => {
@@ -296,12 +378,15 @@ const App: React.FC = () => {
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc3',
       date: fuelData.date,
+      dueDate: fuelData.date,
       type: TransactionType.EXPENSE,
-      status: TransactionStatus.CONFIRMADO,
+      status: TransactionStatus.PENDENTE,
       description: `Abastecimento (${fuelData.fuelType}): ${machines.find(m => m.id === fuelData.machineId)?.name || 'Máquina'}`,
       category: 'Combustível (Diesel S10 / S500)',
       amount: fuelData.totalCost,
-      paidAmount: fuelData.totalCost
+      paidAmount: 0,
+      origin: 'fuel',
+      payments: []
     });
   };
 
@@ -313,12 +398,16 @@ const App: React.FC = () => {
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc3',
       date: purchaseData.date,
+      dueDate: purchaseData.date,
       type: TransactionType.EXPENSE,
-      status: TransactionStatus.CONFIRMADO,
+      status: TransactionStatus.PENDENTE,
       description: `Compra Carga Diesel ${purchaseData.fuelType} (${purchaseData.liters}L) - ${purchaseData.supplier}`,
       category: 'Combustível (Diesel S10 / S500)',
       amount: purchaseData.totalCost,
-      paidAmount: purchaseData.totalCost
+      paidAmount: 0,
+      contactName: purchaseData.supplier,
+      origin: 'fuel',
+      payments: []
     });
   };
 
@@ -331,12 +420,15 @@ const App: React.FC = () => {
       accountId: accounts[0]?.id || 'acc-1',
       costCenterId: 'cc5',
       date: maintData.date,
+      dueDate: maintData.date,
       type: TransactionType.EXPENSE,
-      status: TransactionStatus.CONFIRMADO,
+      status: TransactionStatus.PENDENTE,
       description: `Manutenção: ${machines.find(m => m.id === maintData.machineId)?.name || 'Equipamento'}`,
       category: 'Manutenção de Britador e Moinho',
       amount: maintData.cost,
-      paidAmount: maintData.cost
+      paidAmount: 0,
+      origin: 'maintenance',
+      payments: []
     });
   };
 
@@ -405,7 +497,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
-    const tagged = { ...updatedTx, companyId: updatedTx.companyId || activeCompanyId };
+    const tagged = syncPaidAmount({ ...updatedTx, companyId: updatedTx.companyId || activeCompanyId });
     setTransactions(prev => prev.map(t => t.id === tagged.id ? tagged : t));
     persistCloud('transactions', tagged);
   };
@@ -562,80 +654,84 @@ const App: React.FC = () => {
     persistCloud('sales_orders', newOrder);
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
-      (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      if (!isHomologFinanceSkip(newOrder)) {
+        (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      }
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    (Array.isArray(order.items) ? order.items : []).forEach(item => {
-      if (!item?.productId) return;
-      processStockChange(String(item.productId), -(Number(item.quantity) || 0));
-    });
-    const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
-    const financialSchedule: SalePayment[] = [
-      ...(payments || []),
-      ...(balanceWithoutSchedule > 0.01 ? [{
-        id: newId('pay'),
-        amount: balanceWithoutSchedule,
-        paidAmount: 0,
-        date: order.date,
-        status: TransactionStatus.PENDENTE,
-        accountId: accounts[0]?.id || 'acc-1',
-        description: 'Saldo em aberto da venda'
-      }] : [])
-    ];
-
-    financialSchedule.forEach(payment => {
-      let actualPaid = 0;
-      if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
-        actualPaid = payment.amount;
-      } else if (payment.status === TransactionStatus.PARCIAL) {
-        actualPaid = payment.paidAmount || 0;
-      }
-
-      const accId = payment.accountId || accounts[0]?.id || 'acc-1';
-      const txId = newId('tx');
-      handleAddTransaction({
-        accountId: accId,
-        costCenterId: 'cc4',
-        date: payment.date,
-        type: TransactionType.SALE,
-        status: payment.status,
-        description: `Venda Faturada #${order.reference}`,
-        category: 'Venda Calcário Moído Granel',
-        amount: payment.amount,
-        paidAmount: actualPaid,
-        customerId: order.customerId,
-        orderId: order.id,
-        payments: actualPaid > 0 ? [{
-          id: newId('pmt'),
-          transactionId: txId,
-          amount: actualPaid,
-          paymentDate: payment.date,
-          accountId: accId,
-          paymentMethod: payment.paymentMethod || 'PIX',
-          notes: `Recebimento da venda #${order.reference}`
-        }] : []
+    if (!order.isAvulsa) {
+      (Array.isArray(order.items) ? order.items : []).forEach(item => {
+        if (!item?.productId) return;
+        processStockChange(String(item.productId), -(Number(item.quantity) || 0));
       });
-    });
-    setCustomers(prev => {
-      const updatedList = prev
-        .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
-        .map(c => {
-          if (c.id === order.customerId) {
-            const updatedCustomer = {
-              ...c,
-              totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
-              status: 'Ativo' as const
-            };
-            persistCloud('customers', updatedCustomer);
-            return updatedCustomer;
-          }
-          return c;
+    }
+
+    const skipFinance = isHomologFinanceSkip(order);
+    const accId = accounts[0]?.id || 'acc-1';
+    const firstDue = (payments || []).find((p) => p?.date)?.date || order.date;
+    const financialSchedule: SalePayment[] = (payments || []).length
+      ? (payments || []).map((payment) => ({
+          ...payment,
+          status: TransactionStatus.PENDENTE,
+          paidAmount: 0
+        }))
+      : [{
+          id: newId('pay'),
+          amount: Number(order.total || 0),
+          paidAmount: 0,
+          date: order.date,
+          status: TransactionStatus.PENDENTE,
+          accountId: accId,
+          description: 'Saldo em aberto da venda'
+        }];
+
+    if (!skipFinance) {
+      const alreadyOpen = transactions.some(
+        (transaction) => transaction.orderId === order.id && transaction.type === TransactionType.SALE
+      );
+      if (!alreadyOpen && Number(order.total || 0) > 0.01) {
+        handleAddTransaction({
+          accountId: accId,
+          costCenterId: 'cc4',
+          date: order.date,
+          dueDate: firstDue,
+          type: TransactionType.SALE,
+          status: TransactionStatus.PENDENTE,
+          description: `${order.isAvulsa ? 'NF-e avulsa' : 'Venda'} #${order.reference}`,
+          category: 'Venda Calcário Moído Granel',
+          amount: Number(order.total || 0),
+          paidAmount: 0,
+          customerId: order.customerId,
+          orderId: order.id,
+          origin: order.isAvulsa ? 'nfe' : 'order',
+          nfeAmbiente: order.nfeAmbiente,
+          payments: []
         });
-      return updatedList;
-    });
+      }
+    }
+
+    if (!skipFinance) {
+      setCustomers(prev => {
+        const updatedList = prev
+          .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
+          .map(c => {
+            if (c.id === order.customerId) {
+              const updatedCustomer = {
+                ...c,
+                totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
+                status: 'Ativo' as const
+              };
+              persistCloud('customers', updatedCustomer);
+              return updatedCustomer;
+            }
+            return c;
+          });
+        return updatedList;
+      });
+    }
+
     const finalizedOrder = { ...order, payments: financialSchedule, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
     setOrders(prev => {
       const exists = prev.some(o => o.id === order.id);
@@ -645,49 +741,34 @@ const App: React.FC = () => {
   };
 
   const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
+    if (isHomologFinanceSkip(order)) return;
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
     setTransactions(prev => {
+      if (receiptAlreadyPosted(prev, receipt.id)) return prev;
       const orderTxs = prev.filter(t => t.orderId === (receipt.orderId || order.id) && t.type === TransactionType.SALE);
-      const alreadyReceipt = orderTxs.some(t => t.receiptId === receipt.id);
-      if (alreadyReceipt) return prev;
-
       let remainingReceipt = Number(receipt.amount || 0);
+
       const updatedTransactions = prev.map(transaction => {
         if (transaction.orderId !== (receipt.orderId || order.id) || transaction.type !== TransactionType.SALE || remainingReceipt <= 0.01) {
           return transaction;
         }
-
-        const outstanding = Math.max(0, Number(transaction.amount || 0) - Number(transaction.paidAmount || 0));
+        const outstanding = titleBalance(transaction);
         if (outstanding <= 0.01) return transaction;
-
-        const appliedAmount = Math.min(outstanding, remainingReceipt);
-        remainingReceipt -= appliedAmount;
-        const paidAmount = Number(transaction.paidAmount || 0) + appliedAmount;
-        const updated: Transaction = {
+        const applied = Math.min(outstanding, remainingReceipt);
+        remainingReceipt -= applied;
+        const paymentLine = paymentFromReceipt({ ...receipt, accountId: accId }, transaction.id, applied);
+        const updated = syncPaidAmount({
           ...transaction,
-          paidAmount,
-          status: paidAmount >= Number(transaction.amount || 0) - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
           receiptId: receipt.id,
           paymentDate: receipt.date,
           paymentMethod: receipt.paymentMethod || transaction.paymentMethod,
-          payments: [
-            ...(transaction.payments || []),
-            {
-              id: newId('pmt'),
-              transactionId: transaction.id,
-              amount: appliedAmount,
-              paymentDate: receipt.date,
-              accountId: accId,
-              paymentMethod: receipt.paymentMethod || 'PIX',
-              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
-            }
-          ]
-        };
+          payments: [...(transaction.payments || []), paymentLine]
+        });
         persistCloud('transactions', updated);
         return updated;
       });
 
-      if (remainingReceipt <= 0.01) return updatedTransactions;
+      if (remainingReceipt <= 0.01 || orderTxs.length > 0) return updatedTransactions;
 
       const tx: Transaction = {
         id: newId('tx'),
@@ -695,30 +776,21 @@ const App: React.FC = () => {
         costCenterId: 'cc4',
         date: receipt.date,
         type: TransactionType.SALE,
-        status: TransactionStatus.CONFIRMADO,
+        status: TransactionStatus.PENDENTE,
         description: `${receipt.description} - ${receipt.customerName}`,
         category: 'Venda Calcário Moído Granel',
         amount: remainingReceipt,
-        paidAmount: remainingReceipt,
+        paidAmount: 0,
         customerId: receipt.customerId,
         orderId: receipt.orderId || order.id,
-        receiptId: receipt.id,
-        paymentMethod: receipt.paymentMethod,
-        notes: receipt.notes,
         companyId: activeCompanyId,
-        payments: [{
-          id: newId('pmt'),
-          transactionId: '',
-          amount: remainingReceipt,
-          paymentDate: receipt.date,
-          accountId: accId,
-          paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
-        }]
+        origin: 'order',
+        payments: []
       };
-      tx.payments![0].transactionId = tx.id;
-      persistCloud('transactions', tx);
-      return [tx, ...updatedTransactions];
+      const paymentLine = paymentFromReceipt({ ...receipt, accountId: accId }, tx.id, remainingReceipt);
+      const settled = syncPaidAmount({ ...tx, payments: [paymentLine] });
+      persistCloud('transactions', settled);
+      return [settled, ...updatedTransactions];
     });
   };
 
@@ -754,7 +826,9 @@ const App: React.FC = () => {
     persistCloud('sales_orders', tagged);
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
       finalizeSale(tagged, tagged.payments || []);
-      (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+      if (!isHomologFinanceSkip(tagged)) {
+        (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+      }
     }
   };
 
@@ -777,6 +851,8 @@ const App: React.FC = () => {
     setMaintenances([]);
     setFuelRecords([]);
     setFuelPurchases([]);
+    setEmployees([]);
+    setRecurringBills([]);
     setAccounts([{ id: 'acc-1', name: 'Conta Principal / Caixa Geral', type: AccountType.BANCO, initialBalance: 0, bankName: 'Banco Principal', accountNumber: '0001-0' }]);
     setInventory([
       { id: 'moido', name: 'Calcário Agrícola Moído (Granel)', unit: 'Ton', quantity: 0, minStock: 200, unitPrice: 180 },
@@ -963,6 +1039,8 @@ const App: React.FC = () => {
               orders={orders}
               accounts={accounts}
               transfers={transfers}
+              recurringBills={recurringBills}
+              employees={employees}
               user={currentUser}
               onNavigate={setCurrentView} 
               onOpenOnboardingModal={() => setShowOnboardingModal(true)}
@@ -1045,6 +1123,7 @@ const App: React.FC = () => {
                   contactName: details.supplier,
                   paymentMethod: details.paymentMethod,
                   notes: details.notes,
+                  origin: 'purchase',
                   payments: paidAmount > 0 ? [{
                     id: newId('pmt'),
                     transactionId: '',
@@ -1066,7 +1145,7 @@ const App: React.FC = () => {
                 shipping: 0, 
                 status: OrderStatus.FINALIZED, 
                 items: [{ productId: 'moido', productCode: 'CALC-MOI', productName: 'Calcário Agrícola Moído (Granel)', unit: 'Ton', quantity: q, unitPrice: p, discount: 0, total: q * p }], 
-                payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: new Date().toISOString().split('T')[0], status: TransactionStatus.CONFIRMADO, accountId: accounts[0]?.id || 'acc-1', description: 'Venda Direta de Pátio' }] 
+                payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: 0, date: new Date().toISOString().split('T')[0], status: TransactionStatus.PENDENTE, accountId: accounts[0]?.id || 'acc-1', description: 'Venda Direta de Pátio' }] 
               })} 
               onAddProduct={handleAddInventoryItem} 
               onUpdateProduct={handleUpdateInventoryItem}
@@ -1103,6 +1182,55 @@ const App: React.FC = () => {
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 
               onVerifyDeletionPassword={verifyCurrentUserPassword}
+            />
+          )}
+          {currentView === 'receivable' && (
+            <ReceivablePayable
+              mode="receber"
+              transactions={transactions}
+              accounts={accounts}
+              company={operatingCompany}
+              onUpdateTransaction={handleUpdateTransaction}
+            />
+          )}
+          {currentView === 'payable' && (
+            <ReceivablePayable
+              mode="pagar"
+              transactions={transactions}
+              accounts={accounts}
+              company={operatingCompany}
+              onUpdateTransaction={handleUpdateTransaction}
+            />
+          )}
+          {currentView === 'recurring' && (
+            <RecurringBillsPage
+              bills={recurringBills}
+              categories={categories}
+              costCenters={costCenters}
+              accounts={accounts}
+              onSave={(bill) => {
+                const tagged = { ...bill, id: bill.id || newId('rec'), companyId: activeCompanyId };
+                setRecurringBills((prev) => [...prev.filter((b) => b.id !== tagged.id), tagged]);
+                persistCloud('recurring_bills', tagged);
+              }}
+              onDelete={(id) => {
+                setRecurringBills((prev) => prev.filter((b) => b.id !== id));
+                persistDelete('recurring_bills', id);
+              }}
+            />
+          )}
+          {currentView === 'payroll' && (
+            <EmployeesPayrollPage
+              employees={employees}
+              onSave={(employee) => {
+                const tagged = { ...employee, id: employee.id || newId('emp'), companyId: activeCompanyId };
+                setEmployees((prev) => [...prev.filter((e) => e.id !== tagged.id), tagged]);
+                persistCloud('employees', tagged);
+              }}
+              onDelete={(id) => {
+                setEmployees((prev) => prev.filter((e) => e.id !== id));
+                persistDelete('employees', id);
+              }}
             />
           )}
           {currentView === 'customers' && (

@@ -360,6 +360,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           nfeInfCpl: infCpl,
           nfePayload: payloadSent,
           nfeRawResponse: result.rawResponse,
+          nfeAmbiente: currentConfig.environment === 'production' && currentConfig.modoEmissao !== 'sandbox_local' ? 'production' : 'sandbox',
         });
 
         const sourceKeepItems: SaleOrder = {
@@ -371,8 +372,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           isAvulsa ? sourceKeepItems : { ...sourceKeepItems, items: order.items, subtotal: order.subtotal, discount: order.discount, shipping: order.shipping, total: order.total, frete: orderWithEdits.frete },
           linked
         );
+        const tagged = {
+          ...updatedOrder,
+          nfeAmbiente: linked.nfeAmbiente || updatedOrder.nfeAmbiente,
+        };
 
-        onSuccess(updatedOrder);
+        onSuccess(tagged);
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e pela SEFAZ.');
       }

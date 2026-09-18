@@ -313,9 +313,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       id: `pay-${Date.now()}`,
       amount: total,
       date: new Date().toISOString().split('T')[0],
-      status: TransactionStatus.PAGO,
+      status: TransactionStatus.PENDENTE,
       accountId: 'acc-1',
-      description: 'Pagamento NF-e Avulsa'
+      description: 'Título em aberto da NF-e avulsa'
     }],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
@@ -355,7 +355,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           nfeErro: result.nfeErro,
           nfeNaturezaOperacao: result.naturezaOperacao,
           nfePayload: payloadSent,
-          nfeRawResponse: result.rawResponse
+          nfeRawResponse: result.rawResponse,
+          nfeAmbiente: config.environment === 'production' && config.modoEmissao !== 'sandbox_local' ? 'production' : 'sandbox',
         };
 
         let saved = createdOrder;
