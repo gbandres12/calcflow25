@@ -92,10 +92,10 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
 };
 
 const SalesOrders: React.FC<SalesOrdersProps> = ({ 
-  orders, 
-  customers, 
-  inventory, 
-  accounts, 
+  orders: rawOrders, 
+  customers: rawCustomers, 
+  inventory: rawInventory, 
+  accounts: rawAccounts, 
   company,
   companyId,
   onAddOrder, 
@@ -109,6 +109,68 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onPaymentReceived,
   mode = 'orders'
 }) => {
+  // Dados legados podem conter registros parciais ou nulos. Normalizar aqui evita
+  // que um único cadastro inválido derrube toda a tela de vendas.
+  const customers = useMemo<Customer[]>(() => {
+    if (!Array.isArray(rawCustomers)) return [];
+    return rawCustomers
+      .filter((item): item is Customer => Boolean(item && typeof item === 'object' && item.id))
+      .map(item => ({
+        ...item,
+        id: String(item.id),
+        name: String(item.name || 'Cliente sem nome'),
+        document: String(item.document || ''),
+        email: String(item.email || ''),
+        phone: String(item.phone || ''),
+        totalSpent: Number(item.totalSpent) || 0
+      }));
+  }, [rawCustomers]);
+
+  const inventory = useMemo<InventoryItem[]>(() => {
+    if (!Array.isArray(rawInventory)) return [];
+    return rawInventory.filter((item): item is InventoryItem => Boolean(item && typeof item === 'object' && item.id));
+  }, [rawInventory]);
+
+  const accounts = useMemo<FinancialAccount[]>(() => {
+    if (!Array.isArray(rawAccounts)) return [];
+    return rawAccounts.filter((item): item is FinancialAccount => Boolean(item && typeof item === 'object' && item.id));
+  }, [rawAccounts]);
+
+  const orders = useMemo<SaleOrder[]>(() => {
+    if (!Array.isArray(rawOrders)) return [];
+    return rawOrders
+      .filter((item): item is SaleOrder => Boolean(item && typeof item === 'object' && item.id))
+      .map(item => ({
+        ...item,
+        id: String(item.id),
+        reference: String(item.reference || `PED-${String(item.id).slice(-6)}`),
+        customerId: String(item.customerId || ''),
+        sellerName: String(item.sellerName || ''),
+        date: String(item.date || new Date().toISOString().split('T')[0]),
+        subtotal: Number(item.subtotal) || 0,
+        discount: Number(item.discount) || 0,
+        shipping: Number(item.shipping) || 0,
+        total: Number(item.total) || 0,
+        status: item.status || OrderStatus.BUDGET,
+        items: (Array.isArray(item.items) ? item.items : [])
+          .filter(Boolean)
+          .map((row, index) => ({
+            ...row,
+            productId: String(row.productId || `produto-${index + 1}`),
+            productCode: String(row.productCode || ''),
+            productName: String(row.productName || 'Produto sem nome'),
+            unit: String(row.unit || 'TON'),
+            quantity: Number(row.quantity) || 0,
+            unitPrice: Number(row.unitPrice) || 0,
+            discount: Number(row.discount) || 0,
+            total: Number(row.total) || 0
+          })),
+        payments: Array.isArray(item.payments) ? item.payments.filter(Boolean) : [],
+        receipts: Array.isArray(item.receipts) ? item.receipts.filter(Boolean) : [],
+        withdrawals: Array.isArray(item.withdrawals) ? item.withdrawals.filter(Boolean) : []
+      }));
+  }, [rawOrders]);
+
   const isQuotesView = mode === 'quotes';
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>(
     isQuotesView ? 'BUDGET' : 'ALL'

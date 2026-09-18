@@ -19,6 +19,7 @@ import { FiscalManagement } from './components/FiscalManagement';
 import { FiscalConfigView } from './components/FiscalConfigView';
 import TransferManagement from './components/TransferManagement';
 import Transportadores from './components/Transportadores';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -886,27 +887,29 @@ const App: React.FC = () => {
             />
           )}
           {(currentView === 'orders' || currentView === 'quotes') && (
-            <SalesOrders 
-              orders={orders} 
-              customers={customers} 
-              inventory={inventory} 
-              accounts={accounts} 
-              company={operatingCompany}
-              companyId={activeCompanyId}
-              onAddOrder={handleAddOrder} 
-              onAddCustomer={handleAddCustomer}
-              transportadores={transportadores}
-              onAddTransportador={handleAddTransportador}
-              onUpdateOrder={handleUpdateOrder} 
-              onDeleteOrder={handleDeleteOrder}
-              onVerifyDeletionPassword={verifyCurrentUserPassword}
-              onFinalizeOrder={(oid, p) => {
-                const order = orders.find(o => o.id === oid);
-                if (order) finalizeSale(order, p);
-              }} 
-              onPaymentReceived={handlePaymentReceived}
-              mode={currentView === 'quotes' ? 'quotes' : 'orders'}
-            />
+            <ErrorBoundary label="vendas">
+              <SalesOrders 
+                orders={orders} 
+                customers={customers} 
+                inventory={inventory} 
+                accounts={accounts} 
+                company={operatingCompany}
+                companyId={activeCompanyId}
+                onAddOrder={handleAddOrder} 
+                onAddCustomer={handleAddCustomer}
+                transportadores={transportadores}
+                onAddTransportador={handleAddTransportador}
+                onUpdateOrder={handleUpdateOrder} 
+                onDeleteOrder={handleDeleteOrder}
+                onVerifyDeletionPassword={verifyCurrentUserPassword}
+                onFinalizeOrder={(oid, p) => {
+                  const order = orders.find(o => o.id === oid);
+                  if (order) finalizeSale(order, p);
+                }} 
+                onPaymentReceived={handlePaymentReceived}
+                mode={currentView === 'quotes' ? 'quotes' : 'orders'}
+              />
+            </ErrorBoundary>
           )}
           {currentView === 'fiscal' && (
             <FiscalManagement 
