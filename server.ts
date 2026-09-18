@@ -5,6 +5,8 @@ import emitirNfe from "./api/nfe/emitir";
 import consultarNfe from "./api/nfe/consultar";
 import cancelarNfe from "./api/nfe/cancelar";
 import statusNfe from "./api/nfe/status";
+import danfeNfe from "./api/nfe/danfe";
+import xmlNfe from "./api/nfe/xml";
 import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
 
@@ -19,6 +21,8 @@ async function startServer() {
   app.post("/api/nfe/cancelar", (req, res) => cancelarNfe(req, res));
   app.post("/api/nfe/status", (req, res) => statusNfe(req, res));
   app.get("/api/nfe/status", (req, res) => statusNfe(req, res));
+  app.post("/api/nfe/danfe", (req, res) => danfeNfe(req, res));
+  app.post("/api/nfe/xml", (req, res) => xmlNfe(req, res));
   app.post("/api/webhooks/notaas", (req, res) => notaasWebhook(req, res));
   app.get("/api/webhooks/notaas", (req, res) => notaasWebhook(req, res));
   app.post("/api/users/invite", (req, res) => inviteUser(req, res));

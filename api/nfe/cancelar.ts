@@ -1,5 +1,7 @@
-import { proxyToFiscal, setCors } from '../_lib/fiscalProxy';
-import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin';
+import { proxyToFiscal, setCors } from '../_lib/fiscalProxy.js';
+import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin.js';
+
+export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 export default async function handler(req: any, res: any) {
   setCors(res);

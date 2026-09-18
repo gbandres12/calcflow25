@@ -64,7 +64,11 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       if (invoice.nfeStatus === 'rejeitada') {
         setPdfError(invoice.nfeErro || 'A SEFAZ rejeitou a nota. Não há DANFE oficial para nota negada.');
       } else if (invoice.nfeStatus === 'processando') {
-        setPdfError('A nota ainda está em processamento na SEFAZ. O DANFE sai assim que for autorizada.');
+        setPdfError(
+          invoice.nfeErro
+            ? `Não foi possível atualizar o status na NotaAs: ${invoice.nfeErro}`
+            : 'A nota ainda está em processamento na SEFAZ. O DANFE sai assim que for autorizada.'
+        );
       } else if (!invoiceId) {
         setPdfError('Esta nota não tem o identificador da NotaAs. Atualize o status ou emita de novo.');
       } else {

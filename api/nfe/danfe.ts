@@ -1,4 +1,4 @@
-import { fetchNotaasBinary, resolveNotaasAuth, setDocCors } from '../_lib/notaasBinary';
+import { fetchNotaasBinary, resolveNotaasAuth, setDocCors } from '../_lib/notaasBinary.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 

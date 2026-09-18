@@ -1,4 +1,4 @@
-import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin';
+import { getFiscalConfigForCompany } from '../_lib/supabaseAdmin.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
@@ -20,8 +20,10 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const body = req.body || {};
-    const id = body.invoiceId || body.nfeIdOrChave;
+    const body = typeof req.body === 'string'
+      ? JSON.parse(req.body || '{}')
+      : (req.body || {});
+    const id = String(body.invoiceId || body.nfeIdOrChave || '').trim();
     let key = String(body.apiKey || process.env.NOTAAS_API_KEY || '').trim();
     let base = String(body.apiBaseUrl || 'https://platform.notaas.com.br/api/v1').replace(/\/$/, '');
     const companyId = String(body.companyId || '').trim();
@@ -53,7 +55,10 @@ export default async function handler(req: any, res: any) {
       ? await response.json().catch(() => ({}))
       : { error: `Resposta não-JSON da NotaAs (HTTP ${response.status}).` };
 
-    return res.status(response.status).json(data);
+    const payload = data && typeof data === 'object' && data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+      ? { ...data, ...data.data }
+      : data;
+    return res.status(response.status).json(payload);
   } catch (error: any) {
     console.error('Erro no proxy NF-e consultar:', error);
     return res.status(502).json({
