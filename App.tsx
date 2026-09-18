@@ -55,6 +55,7 @@ import {
 import { financeService, userService, inventoryService, orderService, db } from './services/dataService';
 import { toPublicUser } from './services/authLogic';
 import { newId, nextOrderReference } from './services/ids';
+import { hasAuthorizedFiscalDocument } from './services/saleNfe';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -675,7 +676,7 @@ const App: React.FC = () => {
     const order = orders.find(item => item.id === orderId);
     if (!order) return;
 
-    if (order.nfeStatus === 'autorizada') {
+    if (hasAuthorizedFiscalDocument(order)) {
       window.alert('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.');
       return;
     }

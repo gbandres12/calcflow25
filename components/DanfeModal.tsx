@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
+import { commitLinkedNfeSync, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
 import {
   X, Printer, Download, FileCheck, AlertTriangle, Ban, RefreshCw, FileX
 } from 'lucide-react';
@@ -12,6 +13,7 @@ interface DanfeModalProps {
   company: Company;
   onClose: () => void;
   onOrderUpdated: (updatedOrder: SaleOrder) => void;
+  linkedNfeId?: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -28,9 +30,14 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   config,
   company: _company,
   onClose,
-  onOrderUpdated
+  onOrderUpdated,
+  linkedNfeId
 }) => {
-  const [current, setCurrent] = useState<SaleOrder>(order);
+  const invoiceView = (() => {
+    const linked = findLinkedNfe(order, linkedNfeId);
+    return linked ? overlayNfeFields(order, linked) : order;
+  })();
+  const [current, setCurrent] = useState<SaleOrder>(invoiceView);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -89,9 +96,12 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
         ...config,
         companyId: current.companyId || config.companyId,
       });
-      setCurrent(updated);
-      onOrderUpdated(updated);
-      await loadPdf(updated);
+      const committed = commitLinkedNfeSync(order, updated, linkedNfeId);
+      const linked = findLinkedNfe(committed, linkedNfeId);
+      const view = linked ? overlayNfeFields(committed, linked) : committed;
+      setCurrent(view);
+      onOrderUpdated(committed);
+      await loadPdf(view);
     } finally {
       setLoadingStatus(false);
     }
@@ -101,7 +111,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     refreshFromSefaz(true);
     return () => revokeBlob();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order.id, order.nfeId]);
+  }, [order.id, order.nfeId, linkedNfeId]);
 
   const handlePrintDanfe = () => {
     if (!pdfUrl) return;
@@ -160,8 +170,11 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           nfeStatus: 'cancelada' as const,
         };
         const synced = await fiscalService.sincronizarPedidoComSefaz(updated, config);
-        setCurrent(synced);
-        onOrderUpdated(synced);
+        const committed = commitLinkedNfeSync(order, synced, linkedNfeId);
+        const linked = findLinkedNfe(committed, linkedNfeId);
+        const view = linked ? overlayNfeFields(committed, linked) : committed;
+        setCurrent(view);
+        onOrderUpdated(committed);
         setIsCanceling(false);
         await loadPdf(synced);
       } else {

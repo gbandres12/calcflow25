@@ -1,4 +1,5 @@
 import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin';
+import { applyNfeStatusPatch } from '../../services/saleNfe';
 
 const STATUS_MAP: Record<string, string> = {
   'invoice.authorized': 'autorizada',
@@ -141,7 +142,11 @@ export default async function handler(req: any, res: any) {
     if (nfeErro) patch.nfeErro = nfeErro;
     else if (nfeStatus === 'autorizada') patch.nfeErro = '';
 
-    const updated = await patchSalesOrder(found, patch);
+    const nextData = applyNfeStatusPatch(found.data || {}, patch, {
+      invoiceId: invoiceId || undefined,
+      reference: reference || undefined,
+    });
+    const updated = await patchSalesOrder(found, nextData, 'replace');
 
     return res.status(200).json({
       received: true,

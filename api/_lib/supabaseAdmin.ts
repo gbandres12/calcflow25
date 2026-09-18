@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { baseOrderReference } from '../../services/saleNfe';
 
 let cached: SupabaseClient | null | undefined;
 
@@ -99,18 +100,51 @@ export async function findSalesOrder(opts: {
   if (opts.invoiceId) {
     const byInvoice = await run('data->>nfeId', opts.invoiceId, opts.companyId);
     if (byInvoice) return byInvoice;
+    const nested = await findOrderByNestedNfeId(supabase, opts.invoiceId, opts.companyId);
+    if (nested) return nested;
   }
   if (opts.reference) {
     const byRef = await run('data->>reference', opts.reference, opts.companyId);
     if (byRef) return byRef;
+    const base = baseOrderReference(opts.reference);
+    if (base && base !== opts.reference) {
+      const byBase = await run('data->>reference', base, opts.companyId);
+      if (byBase) return byBase;
+    }
   }
   return null;
 }
 
-export async function patchSalesOrder(row: OrderRow, patch: Record<string, any>): Promise<boolean> {
+async function findOrderByNestedNfeId(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  companyId?: string
+): Promise<OrderRow | null> {
+  let q = supabase
+    .from('app_records')
+    .select('id, company_id, data')
+    .eq('table_name', 'sales_orders')
+    .filter('data->nfes', 'cs', JSON.stringify([{ nfeId: invoiceId }]))
+    .limit(5);
+  if (companyId) q = q.eq('company_id', companyId);
+  const { data, error } = await q;
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+  const hit = data.find((r: any) => r?.data && r.id !== '__seed__') || data[0];
+  if (!hit) return null;
+  return { id: hit.id, company_id: hit.company_id, data: hit.data };
+}
+
+export async function patchSalesOrder(
+  row: OrderRow,
+  patch: Record<string, any>,
+  mode: 'merge' | 'replace' = 'merge'
+): Promise<boolean> {
   const supabase = getAdminSupabase();
   if (!supabase) return false;
-  const next = { ...(row.data || {}), ...patch, id: row.id, companyId: row.data?.companyId || row.company_id };
+  const next =
+    mode === 'replace'
+      ? { ...patch, id: row.id, companyId: patch?.companyId || row.data?.companyId || row.company_id }
+      : { ...(row.data || {}), ...patch, id: row.id, companyId: row.data?.companyId || row.company_id };
   const { error } = await supabase.from('app_records').upsert(
     {
       id: row.id,
