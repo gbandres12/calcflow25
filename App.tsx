@@ -160,7 +160,21 @@ const App: React.FC = () => {
 
         setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
         setInventory(Array.isArray(savedInv) ? savedInv : []);
-        setCustomers(Array.isArray(savedCust) ? savedCust.filter(c => c && typeof c === 'object') : []);
+        setCustomers(
+          Array.isArray(savedCust)
+            ? savedCust
+                .filter((c): c is Customer => Boolean(c && typeof c === 'object' && (c as Customer).id))
+                .map(c => ({
+                  ...c,
+                  id: String(c.id),
+                  name: String(c.name || 'Cliente sem nome'),
+                  document: String(c.document ?? ''),
+                  email: String(c.email ?? ''),
+                  phone: String(c.phone ?? ''),
+                  totalSpent: Number(c.totalSpent) || 0
+                }))
+            : []
+        );
         setOrders(Array.isArray(savedOrders) ? savedOrders : []);
         setMachines(Array.isArray(savedMachines) ? savedMachines : []);
         setStoreItems(Array.isArray(savedStore) ? savedStore : []);
@@ -518,7 +532,10 @@ const App: React.FC = () => {
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    order.items.forEach(item => processStockChange(item.productId, -item.quantity));
+    (Array.isArray(order.items) ? order.items : []).forEach(item => {
+      if (!item?.productId) return;
+      processStockChange(String(item.productId), -(Number(item.quantity) || 0));
+    });
     const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
     const financialSchedule: SalePayment[] = [
@@ -568,18 +585,20 @@ const App: React.FC = () => {
       });
     });
     setCustomers(prev => {
-      const updatedList = prev.map(c => {
-        if (c.id === order.customerId) {
-          const updatedCustomer = { 
-            ...c, 
-            totalSpent: Number(c.totalSpent || 0) + order.total,
-            status: 'Ativo' as const
-          };
-          persistCloud('customers', updatedCustomer);
-          return updatedCustomer;
-        }
-        return c;
-      });
+      const updatedList = prev
+        .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
+        .map(c => {
+          if (c.id === order.customerId) {
+            const updatedCustomer = {
+              ...c,
+              totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
+              status: 'Ativo' as const
+            };
+            persistCloud('customers', updatedCustomer);
+            return updatedCustomer;
+          }
+          return c;
+        });
       return updatedList;
     });
     const finalizedOrder = { ...order, payments: financialSchedule, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };

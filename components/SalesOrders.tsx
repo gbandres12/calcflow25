@@ -304,24 +304,36 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   useEffect(() => {
     if (editingOrder) {
-      setSelectedCustomerId(editingOrder.customerId);
+      setSelectedCustomerId(String(editingOrder.customerId || ''));
       const cust = customers.find(c => c.id === editingOrder.customerId);
       setCustomerSearch(cust?.name || '');
-      const firstItem = editingOrder.items[0];
-      setQuantity(firstItem ? firstItem.quantity.toString() : '');
-      setUnitPrice(firstItem ? firstItem.unitPrice.toString() : '180');
-      setDiscount(editingOrder.discount.toString());
-      setShipping(editingOrder.shipping.toString());
+      const firstItem = (Array.isArray(editingOrder.items) ? editingOrder.items : [])[0];
+      setQuantity(firstItem != null ? String(Number(firstItem.quantity) || 0) : '');
+      setUnitPrice(firstItem != null ? String(Number(firstItem.unitPrice) || 0) : '180');
+      setDiscount(String(Number(editingOrder.discount) || 0));
+      setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
-      setNotes(editingOrder.notes || '');
-      setPayments(editingOrder.payments || []);
+      setNotes(String(editingOrder.notes || ''));
+      setPayments(
+        (Array.isArray(editingOrder.payments) ? editingOrder.payments : [])
+          .filter((p): p is SalePayment => Boolean(p && typeof p === 'object' && p.id))
+          .map(p => ({
+            ...p,
+            id: String(p.id),
+            amount: Number(p.amount) || 0,
+            paidAmount: Number(p.paidAmount) || 0,
+            date: String(p.date || new Date().toISOString().split('T')[0]),
+            accountId: String(p.accountId || accounts[0]?.id || ''),
+            description: String(p.description || '')
+          }))
+      );
       setDownPayment('0');
       setIsModalOpen(true);
     } else {
       setPayments([]);
       setDownPayment('0');
     }
-  }, [editingOrder, customers]);
+  }, [editingOrder, customers, accounts]);
 
   const addPaymentRow = () => {
     const newPayment: SalePayment = {
@@ -355,8 +367,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     }));
   };
 
-  const handleCreateOrUpdateOrder = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateOrUpdateOrder = (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault?.();
     if (!selectedCustomerId) {
       alert("Por favor, selecione um cliente da lista.");
       return;
@@ -1154,6 +1166,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
       {/* Modal Criar / Editar Pedido em Etapas (Stepper) */}
       {isModalOpen && (
+        <ErrorBoundary label="novo pedido de venda">
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 print:hidden">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
             
@@ -1167,7 +1180,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   <h3 className="text-base font-bold text-slate-900 tracking-tight">
                     {editingOrder ? `Editar Pedido (${editingOrder.reference})` : (isBudget ? 'Novo Orçamento Comercial' : 'Novo Pedido de Venda')}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">{company.name} • Unidade de Faturamento</p>
+                  <p className="text-[11px] text-slate-500 font-medium">{company?.name || 'Empresa'} • Unidade de Faturamento</p>
                 </div>
               </div>
               <button 
@@ -1665,7 +1678,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </div>
                         ) : (
                           <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                            {payments.map((p, idx) => (
+                            {payments.filter(p => p && p.id).map((p, idx) => (
                               <div key={p.id} className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center gap-3 shadow-sm">
                                 <span className="text-[11px] font-bold text-slate-400 w-6 text-center">#{idx + 1}</span>
                                 <div className="flex-1 grid grid-cols-2 gap-2">
@@ -1858,6 +1871,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           </div>
         </div>
+        </ErrorBoundary>
       )}
 
       {/* Modal de Histórico de Recibos & Retiradas do Pedido */}
