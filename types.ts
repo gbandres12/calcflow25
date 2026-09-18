@@ -323,7 +323,7 @@ export interface Transaction {
   payments?: TransactionPayment[];
 }
 
-export type NfeStatus = 'nao_emitida' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
+export type NfeStatus = 'nao_emitida' | 'rascunho' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
 
 export type SaleNfeTipo = 'pedido' | 'avulsa' | 'devolucao' | 'transferencia';
 

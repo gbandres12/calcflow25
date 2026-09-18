@@ -44,7 +44,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const moido = stockOf(inventory, ['moido', 'moído', 'moido']);
   const britado = stockOf(inventory, ['britado']);
   const pendingNfe = orders.filter((o) =>
-    o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando')
+    o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando' || o.nfeStatus === 'rascunho')
   ).slice(0, 5);
   const rejectedNfe = orders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
   const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);

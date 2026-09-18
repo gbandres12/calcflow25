@@ -750,9 +750,15 @@ const App: React.FC = () => {
   const handleUpdateOrder = (updatedOrder: SaleOrder) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
+    if (!originalOrder) {
+      // Upsert: permite persistir rascunho de NF-e avulsa sem baixar estoque
+      setOrders(prev => [...prev, tagged]);
+      persistCloud('sales_orders', tagged);
+      return;
+    }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     persistCloud('sales_orders', tagged);
-    if (originalOrder && originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
+    if (originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   SaleOrder, 
+  SaleOrderLinkedNfe,
   Customer, 
   InventoryItem, 
   OrderStatus, 
@@ -29,7 +30,7 @@ import { QuickCustomerModal } from './QuickCustomerModal';
 import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
-import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity } from '../services/saleNfe';
+import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes } from '../services/saleNfe';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
 import {
   DEFAULT_PRODUCT_SHEET,
@@ -213,12 +214,37 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   // NF-e Modals
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
+  const [draftToResume, setDraftToResume] = useState<SaleOrderLinkedNfe | undefined>(undefined);
+  const [emitInitialStep, setEmitInitialStep] = useState<'edit' | 'preview'>('edit');
   const [emitAvulsa, setEmitAvulsa] = useState(false);
   const [devolutionChave, setDevolutionChave] = useState<string | undefined>(undefined);
   const [emitTransferencia, setEmitTransferencia] = useState(false);
   const [orderToViewDanfe, setOrderToViewDanfe] = useState<SaleOrder | null>(null);
   const [danfeLinkedNfeId, setDanfeLinkedNfeId] = useState<string | undefined>(undefined);
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>(DEFAULT_FISCAL_CONFIG);
+
+  const openEmitNfe = (
+    order: SaleOrder,
+    opts?: { avulsa?: boolean; transferencia?: boolean; devolution?: string; draft?: SaleOrderLinkedNfe; step?: 'edit' | 'preview' }
+  ) => {
+    const tipo = opts?.devolution ? 'devolucao' : opts?.transferencia ? 'transferencia' : opts?.avulsa ? 'avulsa' : 'pedido';
+    const draft = opts?.draft || (!opts?.devolution ? findDraftNfe(order, tipo) : undefined);
+    setEmitAvulsa(Boolean(opts?.avulsa));
+    setEmitTransferencia(Boolean(opts?.transferencia));
+    setDevolutionChave(opts?.devolution);
+    setDraftToResume(draft);
+    setEmitInitialStep(opts?.step || (draft ? 'preview' : 'edit'));
+    setOrderToEmitNfe(order);
+  };
+
+  const closeEmitNfe = () => {
+    setOrderToEmitNfe(null);
+    setDevolutionChave(undefined);
+    setEmitTransferencia(false);
+    setEmitAvulsa(false);
+    setDraftToResume(undefined);
+    setEmitInitialStep('edit');
+  };
 
   useEffect(() => {
     fiscalService.getConfig(companyId).then(cfg => setFiscalConfig(cfg));
@@ -953,6 +979,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {order.status === OrderStatus.FINALIZED && (() => {
                       const nfes = listOrderNfes(order);
                       const remainingQty = totalRemainingQuantity(order);
+                      const drafts = listDraftNfes(order);
                       const pedidoNfe = nfes.find((n) => n.tipo === 'pedido') || (order.nfeStatus && order.nfeStatus !== 'nao_emitida' && nfes.length === 0 ? {
                         id: order.nfeId || order.id,
                         tipo: 'pedido' as const,
@@ -960,10 +987,33 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         nfeNumero: order.nfeNumero,
                         nfeChave: order.nfeChave,
                       } : undefined);
-                      const avulsas = nfes.filter((n) => n.tipo === 'avulsa');
+                      const avulsas = nfes.filter((n) => n.tipo === 'avulsa' && !isDraftNfe(n));
+                      const pedidoIsDraft = Boolean(pedidoNfe && isDraftNfe(pedidoNfe as SaleOrderLinkedNfe));
+                      const pedidoBlocksEmit = Boolean(
+                        pedidoNfe &&
+                        pedidoNfe.nfeStatus &&
+                        pedidoNfe.nfeStatus !== 'nao_emitida' &&
+                        pedidoNfe.nfeStatus !== 'cancelada' &&
+                        pedidoNfe.nfeStatus !== 'rascunho'
+                      );
                       return (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {pedidoNfe && pedidoNfe.nfeStatus && pedidoNfe.nfeStatus !== 'nao_emitida' && (
+                          {drafts.map((draft) => (
+                            <button
+                              key={draft.id}
+                              onClick={() => openEmitNfe(order, {
+                                avulsa: draft.tipo === 'avulsa',
+                                transferencia: draft.tipo === 'transferencia',
+                                draft,
+                                step: 'preview',
+                              })}
+                              className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+                              title="Revisar prévia e emitir a partir do rascunho"
+                            >
+                              <FileText size={12} /> Rascunho {draft.tipo === 'avulsa' ? 'avulsa' : draft.tipo === 'transferencia' ? 'transf.' : 'NF-e'}
+                            </button>
+                          ))}
+                          {pedidoNfe && pedidoNfe.nfeStatus && pedidoNfe.nfeStatus !== 'nao_emitida' && !pedidoIsDraft && (
                             <>
                               <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 ${
                                 pedidoNfe.nfeStatus === 'autorizada' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
@@ -984,11 +1034,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               </button>
                               {pedidoNfe.nfeStatus === 'autorizada' && pedidoNfe.nfeChave && (
                                 <button
-                                  onClick={() => {
-                                    setEmitAvulsa(false);
-                                    setDevolutionChave(pedidoNfe.nfeChave || '');
-                                    setOrderToEmitNfe(order);
-                                  }}
+                                  onClick={() => openEmitNfe(order, { devolution: pedidoNfe.nfeChave || '' })}
                                   className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
                                   title="Emitir NF-e de devolução"
                                 >
@@ -997,12 +1043,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               )}
                               {pedidoNfe.nfeStatus === 'rejeitada' && (
                                 <button
-                                  onClick={() => {
-                                    setEmitAvulsa(false);
-                                    setEmitTransferencia(false);
-                                    setDevolutionChave(undefined);
-                                    setOrderToEmitNfe(order);
-                                  }}
+                                  onClick={() => openEmitNfe(order)}
                                   className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm"
                                 >
                                   <Send size={12} /> Reenviar
@@ -1033,26 +1074,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                           {remainingQty > 0 && (
                             <>
-                              {!(pedidoNfe && pedidoNfe.nfeStatus && pedidoNfe.nfeStatus !== 'nao_emitida' && pedidoNfe.nfeStatus !== 'cancelada') && (
+                              {!pedidoBlocksEmit && !drafts.some((d) => d.tipo === 'pedido') && (
                                 <>
                                   <button
-                                    onClick={() => {
-                                      setEmitAvulsa(false);
-                                      setEmitTransferencia(false);
-                                      setDevolutionChave(undefined);
-                                      setOrderToEmitNfe(order);
-                                    }}
+                                    onClick={() => openEmitNfe(order)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm transition-all"
                                   >
                                     <Send size={12} /> Emitir NF-e
                                   </button>
                                   <button
-                                    onClick={() => {
-                                      setEmitAvulsa(false);
-                                      setEmitTransferencia(true);
-                                      setDevolutionChave(undefined);
-                                      setOrderToEmitNfe(order);
-                                    }}
+                                    onClick={() => openEmitNfe(order, { transferencia: true })}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-[10px] font-black transition-all"
                                     title="NF-e de transferência de estoque (CFOP 5152/6152)"
                                   >
@@ -1061,12 +1092,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 </>
                               )}
                               <button
-                                onClick={() => {
-                                  setEmitAvulsa(true);
-                                  setEmitTransferencia(false);
-                                  setDevolutionChave(undefined);
-                                  setOrderToEmitNfe(order);
-                                }}
+                                onClick={() => openEmitNfe(order, { avulsa: true })}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-purple-800 border border-purple-300 rounded-xl text-[10px] font-black transition-all"
                                 title="Emitir NF-e avulsa com quantidade parcial desta venda"
                               >
@@ -2343,21 +2369,26 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           devolutionChave={devolutionChave}
           transferencia={emitTransferencia}
           modo={emitAvulsa ? 'avulsa' : 'pedido'}
-          onClose={() => {
-            setOrderToEmitNfe(null);
-            setDevolutionChave(undefined);
-            setEmitTransferencia(false);
-            setEmitAvulsa(false);
+          draftNfe={draftToResume}
+          initialStep={emitInitialStep}
+          onClose={closeEmitNfe}
+          onDraftSaved={(updatedOrder) => {
+            onUpdateOrder(updatedOrder);
+            setOrderToEmitNfe(updatedOrder);
+            const draft = listDraftNfes(updatedOrder).find((n) =>
+              draftToResume ? n.id === draftToResume.id : true
+            ) || listDraftNfes(updatedOrder)[0];
+            if (draft) setDraftToResume(draft);
           }}
           onSuccess={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
-            setOrderToEmitNfe(null);
-            setDevolutionChave(undefined);
-            setEmitTransferencia(false);
-            setEmitAvulsa(false);
-            const last = listOrderNfes(updatedOrder).slice(-1)[0];
-            setDanfeLinkedNfeId(last?.id);
-            setOrderToViewDanfe(updatedOrder);
+            closeEmitNfe();
+            const last = listOrderNfes(updatedOrder).filter((n) => !isDraftNfe(n)).slice(-1)[0]
+              || listOrderNfes(updatedOrder).slice(-1)[0];
+            if (last && !isDraftNfe(last)) {
+              setDanfeLinkedNfeId(last.id);
+              setOrderToViewDanfe(updatedOrder);
+            }
           }}
         />
         </ErrorBoundary>

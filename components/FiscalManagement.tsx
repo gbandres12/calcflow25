@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
+import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
-import { listOrderNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe } from '../services/saleNfe';
+import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe } from '../services/saleNfe';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
-  Copy, ArrowRightLeft, AlertTriangle, Plus
+  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
@@ -46,10 +46,12 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [selectedDanfeOrder, setSelectedDanfeOrder] = useState<SaleOrder | null>(null);
   const [selectedDanfeLinkedNfeId, setSelectedDanfeLinkedNfeId] = useState<string | undefined>(undefined);
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
+  const [draftToResume, setDraftToResume] = useState<SaleOrderLinkedNfe | undefined>(undefined);
+  const [emitInitialStep, setEmitInitialStep] = useState<'edit' | 'preview'>('edit');
   const [isTransferenciaEmit, setIsTransferenciaEmit] = useState(false);
   const [isAvulsaEmit, setIsAvulsaEmit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao'>('notas_emitidas');
+  const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao' | 'rascunhos'>('notas_emitidas');
   const [showAvulsaModal, setShowAvulsaModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -87,7 +89,29 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     if (status === 'rejeitada') return 'Rejeitada';
     if (status === 'cancelada') return 'Cancelada';
     if (status === 'processando') return 'Processando';
+    if (status === 'rascunho') return 'Rascunho';
     return status || 'Não emitida';
+  };
+
+  const openEmitFromOrder = (
+    order: SaleOrder,
+    opts?: { avulsa?: boolean; transferencia?: boolean; draft?: SaleOrderLinkedNfe; step?: 'edit' | 'preview' }
+  ) => {
+    const tipo = opts?.transferencia ? 'transferencia' : opts?.avulsa ? 'avulsa' : 'pedido';
+    const draft = opts?.draft || findDraftNfe(order, tipo as any);
+    setIsAvulsaEmit(Boolean(opts?.avulsa));
+    setIsTransferenciaEmit(Boolean(opts?.transferencia));
+    setDraftToResume(draft);
+    setEmitInitialStep(opts?.step || (draft ? 'preview' : 'edit'));
+    setOrderToEmitNfe(order);
+  };
+
+  const closeEmitModal = () => {
+    setOrderToEmitNfe(null);
+    setIsTransferenciaEmit(false);
+    setIsAvulsaEmit(false);
+    setDraftToResume(undefined);
+    setEmitInitialStep('edit');
   };
 
   const syncFromSefaz = async (order: SaleOrder, linkedNfeId?: string) => {
@@ -112,7 +136,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       overlay: overlayNfeFields(order, nfe),
     }))
   );
-  const emittedOrders = nfeRows;
+  const emittedOrders = nfeRows.filter((r) => !isDraftNfe(r.nfe));
+  const draftRows = nfeRows.filter((r) => isDraftNfe(r.nfe));
   const pendingEmissionOrders = safeOrders.filter(
     (o) => totalRemainingQuantity(o) > 0.0001
   );
@@ -202,15 +227,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           <p className="text-2xl font-black text-amber-600">{pendingEmissionOrders.length} Vendas</p>
           <p className="text-xs text-slate-400">{formatBRL(totalValorPendente)}</p>
         </div>
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Última NF-e</span>
-          <p className="text-2xl font-black text-slate-800">
-            {emittedOrders[0]?.nfe.nfeNumero ? `Nº ${emittedOrders[0].nfe.nfeNumero}` : '—'}
-          </p>
+        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1 cursor-pointer hover:border-amber-300 transition-colors" onClick={() => setActiveTab('rascunhos')}>
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rascunhos</span>
+          <p className="text-2xl font-black text-amber-700">{draftRows.length} Notas</p>
+          <p className="text-xs text-slate-400">Salvas para revisar e emitir</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 flex-wrap">
         <button
           onClick={() => setActiveTab('notas_emitidas')}
           className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'notas_emitidas' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border'}`}
@@ -222,6 +246,12 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'fila_emissao' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border'}`}
         >
           Fila ({pendingEmissionOrders.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('rascunhos')}
+          className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'rascunhos' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border'}`}
+        >
+          Rascunhos ({draftRows.length})
         </button>
       </div>
 
@@ -320,13 +350,13 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                       <p className="text-base font-black">{formatBRL(order.total)}</p>
                       <div className="flex justify-end gap-2 flex-wrap">
                         <button
-                          onClick={() => { setIsAvulsaEmit(false); setIsTransferenciaEmit(false); setOrderToEmitNfe(order); }}
+                          onClick={() => openEmitFromOrder(order)}
                           className="px-4 py-2 bg-purple-600 text-white rounded-2xl text-xs font-black"
                         >
                           Emitir NF-e
                         </button>
                         <button
-                          onClick={() => { setIsAvulsaEmit(true); setIsTransferenciaEmit(false); setOrderToEmitNfe(order); }}
+                          onClick={() => openEmitFromOrder(order, { avulsa: true })}
                           className="px-4 py-2 bg-white border border-purple-300 text-purple-800 rounded-2xl text-xs font-black"
                         >
                           NF avulsa
@@ -348,6 +378,65 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         </div>
       )}
 
+      {activeTab === 'rascunhos' && (
+        <div className="bg-white rounded-[2.5rem] border border-slate-200/80 p-6 space-y-3">
+          {draftRows.length === 0 ? (
+            <p className="text-sm font-bold text-slate-500 py-10 text-center">
+              Nenhum rascunho de NF-e. Ao emitir, use &quot;Salvar rascunho&quot; para guardar e revisar depois.
+            </p>
+          ) : (
+            draftRows.map((row) => {
+              const customer = safeCustomers.find((c) => c.id === row.order.customerId);
+              return (
+                <div key={`${row.order.id}-${row.nfe.id}`} className="p-5 bg-amber-50/60 border border-amber-200 rounded-3xl space-y-3">
+                  <div className="flex justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-black text-slate-900 text-sm">Pedido {row.order.reference}</p>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[9px] font-black rounded-full uppercase border border-amber-200">
+                          Rascunho · {row.nfe.tipo}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-700">Cliente: {customer?.name || 'Não identificado'}</p>
+                      <p className="text-[11px] text-slate-500 font-medium mt-1">
+                        {row.nfe.nfeNaturezaOperacao || 'Natureza não informada'} · {row.nfe.items?.length || 0} item(ns)
+                      </p>
+                    </div>
+                    <div className="text-right space-y-2">
+                      <p className="text-base font-black">{formatBRL(row.nfe.total)}</p>
+                      <div className="flex justify-end gap-2 flex-wrap">
+                        <button
+                          onClick={() => openEmitFromOrder(row.order, {
+                            avulsa: row.nfe.tipo === 'avulsa',
+                            transferencia: row.nfe.tipo === 'transferencia',
+                            draft: row.nfe,
+                            step: 'edit',
+                          })}
+                          className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-2xl text-xs font-black flex items-center gap-1.5"
+                        >
+                          <FileEdit size={13} /> Editar
+                        </button>
+                        <button
+                          onClick={() => openEmitFromOrder(row.order, {
+                            avulsa: row.nfe.tipo === 'avulsa',
+                            transferencia: row.nfe.tipo === 'transferencia',
+                            draft: row.nfe,
+                            step: 'preview',
+                          })}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-xs font-black flex items-center gap-1.5"
+                        >
+                          <Eye size={13} /> Revisar e emitir
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {/* Modal de Emissão Avulsa / Direta */}
       {showAvulsaModal && (
         <EmitirNfeAvulsaModal
@@ -360,13 +449,26 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           onAddTransportador={onAddTransportador}
           onClose={() => setShowAvulsaModal(false)}
           onSuccess={(newOrder) => {
-            if (onAddOrder) {
+            const isDraft =
+              newOrder.nfeStatus === 'rascunho' ||
+              listDraftNfes(newOrder).length > 0;
+            const exists = safeOrders.some((o) => o.id === newOrder.id);
+            if (isDraft || exists) {
+              onUpdateOrder(newOrder);
+            } else if (onAddOrder) {
               onAddOrder(newOrder);
             } else {
               onUpdateOrder(newOrder);
             }
             setShowAvulsaModal(false);
-            setSelectedDanfeOrder(newOrder);
+            if (!isDraft) {
+              setSelectedDanfeOrder(newOrder);
+            } else {
+              setActiveTab('rascunhos');
+            }
+          }}
+          onDraftSaved={(draftOrder) => {
+            onUpdateOrder(draftOrder);
           }}
         />
       )}
@@ -383,15 +485,26 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           onAddTransportador={onAddTransportador}
           transferencia={isTransferenciaEmit}
           modo={isAvulsaEmit ? 'avulsa' : 'pedido'}
-          onClose={() => { setOrderToEmitNfe(null); setIsTransferenciaEmit(false); setIsAvulsaEmit(false); }}
+          draftNfe={draftToResume}
+          initialStep={emitInitialStep}
+          onClose={closeEmitModal}
+          onDraftSaved={(updatedOrder) => {
+            onUpdateOrder(updatedOrder);
+            setOrderToEmitNfe(updatedOrder);
+            const draft = listDraftNfes(updatedOrder).find((n) =>
+              draftToResume ? n.id === draftToResume.id : true
+            ) || listDraftNfes(updatedOrder)[0];
+            if (draft) setDraftToResume(draft);
+          }}
           onSuccess={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
-            setOrderToEmitNfe(null);
-            setIsTransferenciaEmit(false);
-            setIsAvulsaEmit(false);
-            const last = listOrderNfes(updatedOrder).slice(-1)[0];
-            setSelectedDanfeLinkedNfeId(last?.id);
-            setSelectedDanfeOrder(updatedOrder);
+            closeEmitModal();
+            const last = listOrderNfes(updatedOrder).filter((n) => !isDraftNfe(n)).slice(-1)[0]
+              || listOrderNfes(updatedOrder).slice(-1)[0];
+            if (last && !isDraftNfe(last)) {
+              setSelectedDanfeLinkedNfeId(last.id);
+              setSelectedDanfeOrder(updatedOrder);
+            }
           }}
         />
         </ErrorBoundary>

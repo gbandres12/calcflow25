@@ -1,11 +1,13 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
+import { buildLinkedNfe, upsertLinkedNfe } from '../services/saleNfe';
+import { newId } from '../services/ids';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
-  CreditCard, Info, HelpCircle
+  CreditCard, Info, HelpCircle, Save, Eye, RefreshCw
 } from 'lucide-react';
 
 interface EmitirNfeAvulsaModalProps {
@@ -16,6 +18,8 @@ interface EmitirNfeAvulsaModalProps {
   currentUser?: User;
   onClose: () => void;
   onSuccess: (newOrder: SaleOrder) => void;
+  /** Persiste rascunho sem fechar / sem abrir DANFE. */
+  onDraftSaved?: (draftOrder: SaleOrder) => void;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
 }
@@ -48,11 +52,18 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   currentUser,
   onClose,
   onSuccess,
+  onDraftSaved,
   transportadores = [],
   onAddTransportador
 }) => {
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [draftSavedMsg, setDraftSavedMsg] = useState<string | null>(null);
+  const [step, setStep] = useState<'edit' | 'preview'>('edit');
+  const [draftOrderId] = useState(() => `order_avulsa_${Date.now()}`);
+  const [draftReference] = useState(() => `NFA-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [draftLinkedId, setDraftLinkedId] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
 
   // Destinatário
@@ -278,8 +289,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
-    id: `order_avulsa_${Date.now()}`,
-    reference: `NFA-${Math.floor(1000 + Math.random() * 9000)}`,
+    id: draftOrderId,
+    reference: draftReference,
     customerId: activeCustomer.id,
     sellerName: currentUser?.name || 'Emissão Fiscal Direta',
     date: new Date().toISOString().split('T')[0],
@@ -319,10 +330,79 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     }],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
+  }), [draftOrderId, draftReference, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
 
   const validation = fiscalService.validarDadosFiscais(syntheticOrder, activeCustomer);
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const isPreview = step === 'preview';
+
+  const buildDraftOrder = (): SaleOrder | null => {
+    if (!items.length || items.every((it) => !(Number(it.quantity) > 0))) {
+      setErrorMsg('Adicione ao menos um item com quantidade para salvar o rascunho.');
+      return null;
+    }
+    const linkedId = draftLinkedId || newId('nfa');
+    let payloadSent: any;
+    try {
+      payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config);
+    } catch {
+      payloadSent = undefined;
+    }
+    const linked = buildLinkedNfe({
+      id: linkedId,
+      tipo: 'avulsa',
+      reference: syntheticOrder.reference,
+      order: syntheticOrder,
+      items: syntheticOrder.items,
+      subtotal,
+      discount: 0,
+      shipping: shippingVal,
+      total,
+      nfeStatus: 'rascunho',
+      nfeNaturezaOperacao: naturezaOperacao,
+      nfeInfCpl: resolvedInfCpl,
+      nfePayload: payloadSent,
+    });
+    setDraftLinkedId(linkedId);
+    return upsertLinkedNfe(
+      {
+        ...syntheticOrder,
+        companyId: company.id,
+        status: OrderStatus.BUDGET,
+        nfeStatus: 'rascunho',
+        nfeNaturezaOperacao: naturezaOperacao,
+        nfeInfCpl: resolvedInfCpl,
+        nfePayload: payloadSent,
+      },
+      linked
+    );
+  };
+
+  const handleSalvarRascunho = () => {
+    if (savingDraft || loading) return;
+    setSavingDraft(true);
+    setErrorMsg(null);
+    setDraftSavedMsg(null);
+    try {
+      const draft = buildDraftOrder();
+      if (!draft) return;
+      if (onDraftSaved) onDraftSaved(draft);
+      else onSuccess(draft);
+      setDraftSavedMsg('Rascunho salvo. Revise a prévia e emita quando estiver pronto.');
+      setTimeout(() => setDraftSavedMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Não foi possível salvar o rascunho.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleIrParaPrevia = () => {
+    const draft = buildDraftOrder();
+    if (!draft) return;
+    if (onDraftSaved) onDraftSaved(draft);
+    setStep('preview');
+  };
 
   // Emissão Direta à SEFAZ
   const handleEmitirAvulsa = async () => {
@@ -341,8 +421,11 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       const result = await fiscalService.emitirNFe(syntheticOrder, activeCustomer, config, company.id);
 
       if (result.success || result.nfeId) {
-        const createdOrder: SaleOrder = {
+        const linkedId = draftLinkedId || newId('nfa');
+        let createdOrder: SaleOrder = {
           ...syntheticOrder,
+          companyId: company.id,
+          status: OrderStatus.FINALIZED,
           nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
           nfeChave: result.nfeChave,
@@ -358,15 +441,40 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           nfeRawResponse: result.rawResponse
         };
 
-        let saved = createdOrder;
         if (result.nfeId) {
           const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 8, 2500);
           if (pollResult.status && pollResult.status !== 'nao_emitida') {
-            saved = mergeNfeConsulta(saved, pollResult);
+            createdOrder = mergeNfeConsulta(createdOrder, pollResult);
           }
         }
 
-        onSuccess(saved);
+        const linked = buildLinkedNfe({
+          id: linkedId,
+          tipo: 'avulsa',
+          reference: syntheticOrder.reference,
+          order: createdOrder,
+          items: createdOrder.items,
+          subtotal,
+          discount: 0,
+          shipping: shippingVal,
+          total,
+          nfeStatus: (createdOrder.nfeStatus || 'processando') as NfeStatus,
+          nfeId: createdOrder.nfeId,
+          nfeChave: createdOrder.nfeChave,
+          nfeNumero: createdOrder.nfeNumero,
+          nfeSerie: createdOrder.nfeSerie,
+          nfeProtocolo: createdOrder.nfeProtocolo,
+          nfeDanfeUrl: createdOrder.nfeDanfeUrl,
+          nfeXmlUrl: createdOrder.nfeXmlUrl,
+          nfeEmissao: createdOrder.nfeEmissao,
+          nfeErro: createdOrder.nfeErro,
+          nfeNaturezaOperacao: createdOrder.nfeNaturezaOperacao,
+          nfeInfCpl: resolvedInfCpl,
+          nfePayload: payloadSent,
+          nfeRawResponse: createdOrder.nfeRawResponse,
+        });
+
+        onSuccess(upsertLinkedNfe(createdOrder, linked));
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e.');
       }
@@ -802,6 +910,24 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
             </div>
           )}
 
+          {draftSavedMsg && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold flex items-center gap-2">
+              <Save size={14} className="text-amber-600 shrink-0" /> {draftSavedMsg}
+            </div>
+          )}
+
+          {isPreview && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 space-y-2">
+              <p className="font-black uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                <Eye size={14} /> Prévia do rascunho — revise antes de transmitir
+              </p>
+              <p className="text-slate-700">
+                Destinatário: <b>{activeCustomer.name}</b> · {items.length} item(ns) · Total {formatBRL(total)}
+              </p>
+              <p className="text-slate-600">{naturezaOperacao} · {resolvedInfCpl ? 'Com informações complementares' : 'Sem infCpl'}</p>
+            </div>
+          )}
+
         </div>
 
         {/* Footer */}
@@ -813,22 +939,79 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
             Cancelar
           </button>
 
-          <button
-            disabled={loading || !validation.valid}
-            onClick={handleEmitirAvulsa}
-            className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-          >
-            {loading ? (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            {isPreview ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Transmitindo NF-e Avulsa à SEFAZ...
+                <button
+                  type="button"
+                  onClick={() => setStep('edit')}
+                  disabled={loading}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-700 font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl"
+                >
+                  Editar rascunho
+                </button>
+                <button
+                  disabled={loading || !validation.valid}
+                  onClick={handleEmitirAvulsa}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Transmitindo...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} /> Confirmar e emitir
+                    </>
+                  )}
+                </button>
               </>
             ) : (
               <>
-                <Send size={16} /> Transmitir e Emitir NF-e Avulsa
+                <button
+                  type="button"
+                  onClick={handleSalvarRascunho}
+                  disabled={loading || savingDraft || items.length === 0}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-white border border-amber-300 text-amber-900 font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl disabled:opacity-50"
+                >
+                  {savingDraft ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} /> Salvar rascunho
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleIrParaPrevia}
+                  disabled={loading || savingDraft || items.length === 0}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-slate-800 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl disabled:opacity-50"
+                >
+                  <Eye size={15} /> Revisar prévia
+                </button>
+                <button
+                  disabled={loading || !validation.valid}
+                  onClick={handleEmitirAvulsa}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Transmitindo NF-e Avulsa à SEFAZ...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} /> Transmitir e Emitir NF-e Avulsa
+                    </>
+                  )}
+                </button>
               </>
             )}
-          </button>
+          </div>
         </div>
 
       </div>
