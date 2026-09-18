@@ -91,6 +91,20 @@ assert.equal(payload.items[0].infAdProd, 'Linha dolomítico editada');
 assert.ok(payload.infCpl?.startsWith('Texto editado no modal prevalece'));
 assert.ok(!payload.infCpl?.includes(doloClause), 'não deve concatenar de novo a cláusula do produto se o modal já definiu o infCpl');
 
+assert.equal(payload.transporte?.modalidadeFrete, 9);
+assert.equal(payload.transporte?.volumes, undefined);
+
+const withFreight = fiscalService.montarPayloadNotaAs(
+  { ...order, shipping: 800 } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(withFreight.transporte?.modalidadeFrete, 0);
+assert.equal(withFreight.transporte?.volumes?.[0]?.quantidade, 1);
+assert.equal(withFreight.transporte?.volumes?.[0]?.especie, 'GRANEL');
+assert.equal(withFreight.transporte?.volumes?.[0]?.pesoLiquido, 7500);
+assert.ok(Number.isInteger(withFreight.transporte?.volumes?.[0]?.quantidade));
+
 const numericNcmOrder = {
   ...order,
   items: [{

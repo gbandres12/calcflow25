@@ -70,8 +70,18 @@ export interface NotaAsPagamento {
   valor: number;
 }
 
+export interface NotaAsVolume {
+  quantidade: number;
+  especie?: string;
+  marca?: string;
+  numeracao?: string;
+  pesoLiquido?: number;
+  pesoBruto?: number;
+}
+
 export interface NotaAsTransporte {
   modalidadeFrete: number;
+  volumes?: NotaAsVolume[];
 }
 
 /**
@@ -486,6 +496,21 @@ export const fiscalService = {
       isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
     ]);
 
+    const totalItemQty = (order.items || []).reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+    const temFrete = Boolean(order.shipping && !semPagamento);
+    // qVol no XSD da SEFAZ é inteiro [0-9]{1,15}. Não usar toneladas (8.5) nem tag vazia.
+    const pesoKg = Math.round(totalItemQty * 1000 * 1000) / 1000;
+    const transporte: NotaAsTransporte = temFrete
+      ? {
+          modalidadeFrete: 0,
+          volumes: [{
+            quantidade: 1,
+            especie: 'GRANEL',
+            ...(pesoKg > 0 ? { pesoLiquido: pesoKg, pesoBruto: pesoKg } : {})
+          }]
+        }
+      : { modalidadeFrete: 9 };
+
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
       naturezaOperacao: isDevolucao
@@ -496,7 +521,7 @@ export const fiscalService = {
       dest,
       items,
       pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],
-      transporte: { modalidadeFrete: order.shipping && !semPagamento ? 0 : 9 },
+      transporte,
       tipoOperacao: 1,
       finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
