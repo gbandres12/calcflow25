@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus } from '../types';
 import { fiscalService } from '../services/fiscalService';
+import { assembleAutoInfCpl } from '../services/nfeComplementares';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
@@ -35,6 +36,7 @@ interface AvulsaItem {
   aliquotaCbs?: number;
   aliquotaIs?: number;
   informacoesComplementares?: string;
+  infAdProd?: string;
 }
 
 export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
@@ -95,7 +97,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIbs: inventory[0]?.aliquotaIbs,
       aliquotaCbs: inventory[0]?.aliquotaCbs,
       aliquotaIs: inventory[0]?.aliquotaIs,
-      informacoesComplementares: inventory[0]?.informacoesComplementares
+      informacoesComplementares: inventory[0]?.informacoesComplementares,
+      infAdProd: inventory[0]?.infAdProd
     }
   ]);
 
@@ -188,7 +191,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIbs: firstProd?.aliquotaIbs,
       aliquotaCbs: firstProd?.aliquotaCbs,
       aliquotaIs: firstProd?.aliquotaIs,
-      informacoesComplementares: firstProd?.informacoesComplementares
+      informacoesComplementares: firstProd?.informacoesComplementares,
+      infAdProd: firstProd?.infAdProd
     };
     setItems([...items, newItem]);
   };
@@ -227,6 +231,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           updated.aliquotaCbs = prod.aliquotaCbs;
           updated.aliquotaIs = prod.aliquotaIs;
           updated.informacoesComplementares = prod.informacoesComplementares;
+          updated.infAdProd = prod.infAdProd;
           updated.total = (updated.quantity * updated.unitPrice) - updated.discount;
         }
       }
@@ -240,19 +245,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const total = subtotal + shippingVal;
 
   // Informações complementares reunidas
-  const productComplementares = useMemo(() => {
-    return items
-      .map(it => it.informacoesComplementares)
-      .filter((txt): txt is string => Boolean(txt && txt.trim()));
-  }, [items]);
-
   const resolvedInfCpl = useMemo(() => {
     if (infCplCustom.trim()) return infCplCustom;
-    return [
-      config.observacoesFiscaisPadrao,
-      ...Array.from(new Set(productComplementares))
-    ].filter(Boolean).join(' | ');
-  }, [infCplCustom, config.observacoesFiscaisPadrao, productComplementares]);
+    return assembleAutoInfCpl(config.observacoesFiscaisPadrao, items);
+  }, [infCplCustom, config.observacoesFiscaisPadrao, items]);
 
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
@@ -278,7 +274,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIbs: it.aliquotaIbs,
       aliquotaCbs: it.aliquotaCbs,
       aliquotaIs: it.aliquotaIs,
-      informacoesComplementares: it.informacoesComplementares
+      informacoesComplementares: it.informacoesComplementares,
+      infAdProd: it.infAdProd
     })),
     subtotal,
     discount: 0,

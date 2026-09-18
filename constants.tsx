@@ -204,7 +204,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     ncm: '2517.10.00',
     cfop: '5101',
     origem: '0',
-    unidadeTributavel: 'TON'
+    unidadeTributavel: 'TON',
+    informacoesComplementares: 'Matéria-prima de calcário britado. Operação de industrialização interna.',
+    infAdProd: 'Calcário britado grosso. Matéria-prima.'
   },
   { 
     id: 'moido', 
@@ -216,7 +218,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     ncm: '2517.10.00',
     cfop: '5101',
     origem: '0',
-    unidadeTributavel: 'TON'
+    unidadeTributavel: 'TON',
+    informacoesComplementares: 'Isenção de ICMS para uso agrícola conforme Convênio ICMS 100/97. Produto calcítico moído.',
+    infAdProd: 'Destinado exclusivamente à agricultura. PRNT > 85%.'
   },
   { 
     id: 'dolomitico', 
@@ -228,7 +232,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     ncm: '2518.10.00',
     cfop: '5101',
     origem: '0',
-    unidadeTributavel: 'TON'
+    unidadeTributavel: 'TON',
+    informacoesComplementares: 'ICMS Diferido conforme art. 40 do RICMS/PA para operações internas com calcário dolomítico agrícola.',
+    infAdProd: 'Calcário dolomítico. Destinado exclusivamente à agricultura.'
   },
   { 
     id: 'ensacado', 
@@ -240,7 +246,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     ncm: '2517.10.00',
     cfop: '5101',
     origem: '0',
-    unidadeTributavel: 'UN'
+    unidadeTributavel: 'UN',
+    informacoesComplementares: 'Produto destinado ao uso exclusivo na agricultura com isenção conforme Convênio ICMS 100/97. Embalagem 50 kg.',
+    infAdProd: 'Filler super fino. Saco 50 kg.'
   }
 ];
 

@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
+import { SaleOrder, Customer, FiscalConfig, Company, InventoryItem } from '../types';
 import { fiscalService } from '../services/fiscalService';
+import {
+  assembleAutoInfCpl,
+  applyCatalogProductToItem,
+  hydrateSaleItemsFromCatalog,
+  INF_ADPROD_MAX,
+  INF_CPL_MAX
+} from '../services/nfeComplementares';
 import { db } from '../services/dataService';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
@@ -16,6 +23,7 @@ interface EmitirNfeModalProps {
   customer: Customer;
   config: FiscalConfig;
   company: Company;
+  inventory?: InventoryItem[];
   onClose: () => void;
   onSuccess: (updatedOrder: SaleOrder) => void;
   devolutionChave?: string;
@@ -27,6 +35,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   customer,
   config,
   company,
+  inventory = [],
   onClose,
   onSuccess,
   devolutionChave,
@@ -56,33 +65,61 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       ? (isInterestadual ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152'))
       : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
 
-  // Itens com CFOP e CST editáveis
-  const [items, setItems] = useState(order.items.map(it => ({
-    ...it,
-    cfop: it.cfop || cfopSugerido,
-    cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
-  })));
+  // Itens com quantidade, preço, CFOP, CST e demais campos típicos de item de NF editáveis
+  const [items, setItems] = useState(() => hydrateSaleItemsFromCatalog(
+    order.items,
+    inventory,
+    { cfop: cfopSugerido, cst: config.cstIcmsPadrao || '40' }
+  ));
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
     order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
 
-  // Informações Complementares pré-definidas do produto + padrão
-  const productComplementares = order.items
-    .map(it => it.informacoesComplementares)
-    .filter((txt): txt is string => Boolean(txt && txt.trim()));
-  const initialInfCpl = order.nfeInfCpl || [
-    config.observacoesFiscaisPadrao,
-    ...Array.from(new Set(productComplementares))
-  ].filter(Boolean).join(' | ');
-
-  const [infCpl, setInfCpl] = useState(initialInfCpl);
+  const [infCplTouched, setInfCplTouched] = useState(Boolean((order.nfeInfCpl || '').trim()));
+  const [infCplDraft, setInfCplDraft] = useState(
+    order.nfeInfCpl || assembleAutoInfCpl(config.observacoesFiscaisPadrao, order.items)
+  );
+  const infCpl = infCplTouched ? infCplDraft : assembleAutoInfCpl(config.observacoesFiscaisPadrao, items);
 
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const validation = fiscalService.validarDadosFiscais({ ...order, items }, activeCustomer);
+  const itemsSubtotal = items.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
+  const noteTotal = Math.max(0, itemsSubtotal - (order.discount || 0) + (order.shipping || 0));
+  const editedOrder = { ...order, items, subtotal: itemsSubtotal, total: noteTotal, nfeInfCpl: infCpl, nfeNaturezaOperacao: naturezaOperacao };
+  const validation = fiscalService.validarDadosFiscais(editedOrder, activeCustomer);
+  const payloadPreview = fiscalService.montarPayloadNotaAs(
+    editedOrder,
+    activeCustomer,
+    currentConfig,
+    isDevolucao
+      ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+      : isTransferencia
+        ? { transferencia: true }
+        : undefined
+  );
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
-    setItems(prev => prev.map((item, idx) => idx === index ? { ...item, [field]: value } : item));
+    setItems(prev => prev.map((item, idx) => {
+      if (idx !== index) return item;
+      if (field === 'productId') {
+        const prod = inventory.find(p => p.id === value);
+        return applyCatalogProductToItem(item, prod, { cfop: cfopSugerido, cst: currentConfig.cstIcmsPadrao || '40' });
+      }
+      const updated = { ...item, [field]: value };
+      if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
+        const q = field === 'quantity' ? parseFloat(value) || 0 : item.quantity;
+        const p = field === 'unitPrice' ? parseFloat(value) || 0 : item.unitPrice;
+        const d = field === 'discount' ? parseFloat(value) || 0 : (item.discount || 0);
+        updated.quantity = q;
+        updated.unitPrice = p;
+        updated.discount = d;
+        updated.total = Math.max(0, q * p - d);
+      }
+      if (field === 'infAdProd') {
+        updated.infAdProd = String(value || '').slice(0, INF_ADPROD_MAX);
+      }
+      return updated;
+    }));
   };
 
   // Safety unlock in case of unforeseen lockups
@@ -177,8 +214,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       const orderWithEdits: SaleOrder = {
         ...order,
         items,
+        subtotal: itemsSubtotal,
+        total: noteTotal,
         nfeNaturezaOperacao: naturezaOperacao,
-        nfeInfCpl: infCpl
+        nfeInfCpl: infCpl.slice(0, INF_CPL_MAX)
       };
 
       const opts = isDevolucao
@@ -558,65 +597,129 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
           )}
 
-          {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
+          {/* Itens da nota — emissão ampla, não travada pelo pedido */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                <FileText size={12} /> Itens & Enquadramento Fiscal (CFOP e CST Editáveis)
+                <FileText size={12} /> Itens da NF-e (quantidade, CFOP, CST e demais campos editáveis)
               </span>
-              <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                Altere o CFOP ou CST diretamente na tabela
+              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                A nota não fica presa aos valores do pedido
               </span>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs">
+            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
+              <table className="w-full text-left text-xs min-w-[720px]">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
                   <tr>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-3 py-3 w-28">NCM</th>
-                    <th className="px-3 py-3 w-28 text-purple-700">CFOP *</th>
-                    <th className="px-3 py-3 w-24 text-blue-700">CST *</th>
-                    <th className="px-3 py-3 text-center w-24">Qtd</th>
-                    <th className="px-4 py-3 text-right w-28">Total</th>
+                    <th className="px-3 py-3">Produto</th>
+                    <th className="px-2 py-3 w-24">NCM</th>
+                    <th className="px-2 py-3 w-20 text-purple-700">CFOP *</th>
+                    <th className="px-2 py-3 w-16 text-blue-700">CST *</th>
+                    <th className="px-2 py-3 w-20 text-center">Qtd *</th>
+                    <th className="px-2 py-3 w-16">Un</th>
+                    <th className="px-2 py-3 w-24">V. unit.</th>
+                    <th className="px-3 py-3 text-right w-24">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((it, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-slate-800">{it.productName}</p>
-                        <p className="text-[10px] text-slate-400">{it.productCode}</p>
-                      </td>
-                      <td className="px-3 py-3 font-mono text-slate-600">
-                        <input 
-                          type="text"
-                          value={it.ncm || '25171000'}
-                          onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)}
-                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
-                          value={it.cfop || ''}
-                          onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)}
-                          placeholder="CFOP"
-                          className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
-                          value={it.cst || ''}
-                          onChange={e => handleUpdateItem(idx, 'cst', e.target.value)}
-                          placeholder="CST"
-                          className="w-20 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">{it.quantity} {it.unit}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
-                    </tr>
+                    <React.Fragment key={`${it.productId}-${idx}`}>
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="px-3 py-3">
+                          {inventory.length > 0 ? (
+                            <select
+                              value={it.productId}
+                              onChange={e => handleUpdateItem(idx, 'productId', e.target.value)}
+                              className="w-full max-w-[220px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-emerald-500"
+                            >
+                              {!inventory.some(p => p.id === it.productId) && (
+                                <option value={it.productId}>{it.productName}</option>
+                              )}
+                              {inventory.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <p className="font-bold text-slate-800">{it.productName}</p>
+                          )}
+                          <p className="text-[10px] text-slate-400 mt-0.5">{it.productCode}</p>
+                        </td>
+                        <td className="px-2 py-3 font-mono text-slate-600">
+                          <input
+                            type="text"
+                            value={it.ncm || ''}
+                            onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)}
+                            className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-emerald-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="text"
+                            value={it.cfop || ''}
+                            onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)}
+                            placeholder="CFOP"
+                            className="w-20 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="text"
+                            value={it.cst || ''}
+                            onChange={e => handleUpdateItem(idx, 'cst', e.target.value)}
+                            placeholder="CST"
+                            className="w-16 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            value={it.quantity}
+                            onChange={e => handleUpdateItem(idx, 'quantity', e.target.value)}
+                            className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center outline-none focus:border-emerald-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="text"
+                            value={it.unit || ''}
+                            onChange={e => handleUpdateItem(idx, 'unit', e.target.value)}
+                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={it.unitPrice}
+                            onChange={e => handleUpdateItem(idx, 'unitPrice', e.target.value)}
+                            className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-emerald-500"
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-right font-black text-slate-800">{formatBRL(it.total)}</td>
+                      </tr>
+                      <tr className="bg-slate-50/80">
+                        <td colSpan={8} className="px-3 pb-3 pt-0">
+                          <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                            Inf. adicional do item (infAdProd) — SKU {it.productId}
+                          </label>
+                          <input
+                            type="text"
+                            value={it.infAdProd || ''}
+                            maxLength={INF_ADPROD_MAX}
+                            onChange={e => handleUpdateItem(idx, 'infAdProd', e.target.value)}
+                            placeholder="Texto curto deste item (granulometria, uso agrícola…)"
+                            className="mt-1 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] outline-none focus:border-emerald-500"
+                          />
+                          <p className="text-[9px] text-slate-400 mt-0.5 text-right">
+                            {(it.infAdProd || '').length}/{INF_ADPROD_MAX}
+                          </p>
+                        </td>
+                      </tr>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -625,30 +728,61 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           {/* Informações Complementares Pré-definidas e Editáveis */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Informações Complementares da Nota (infCpl)
+                Informações complementares da nota (infCpl)
               </label>
               <span className="text-[9px] font-bold text-slate-400">
-                Padrão da empresa + Cláusulas pré-definidas dos produtos
+                Padrão da empresa + cláusulas de cada produto da linha
               </span>
             </div>
-            <textarea 
+            <textarea
               rows={3}
               value={infCpl}
-              onChange={e => setInfCpl(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-700 outline-none focus:border-purple-500 resize-none"
+              maxLength={INF_CPL_MAX}
+              onChange={e => {
+                setInfCplTouched(true);
+                setInfCplDraft(e.target.value);
+              }}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-700 outline-none focus:border-emerald-500 resize-none"
               placeholder="Informações complementares fiscais..."
             />
+            <p className={`text-[9px] text-right font-bold ${infCpl.length > INF_CPL_MAX - 200 ? 'text-amber-700' : 'text-slate-400'}`}>
+              {infCpl.length}/{INF_CPL_MAX} caracteres
+            </p>
           </div>
+
+          <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <summary className="text-[10px] font-black uppercase tracking-wider text-slate-500 cursor-pointer">
+              Prévia do payload que será transmitido
+            </summary>
+            <pre className="mt-2 max-h-40 overflow-auto text-[10px] font-mono text-slate-700 whitespace-pre-wrap break-all">
+              {JSON.stringify({
+                naturezaOperacao: payloadPreview.naturezaOperacao,
+                infCpl: payloadPreview.infCpl,
+                items: payloadPreview.items.map(row => ({
+                  codigo: row.codigo,
+                  descricao: row.descricao,
+                  ncm: row.ncm,
+                  cfop: row.cfop,
+                  cst: row.cst,
+                  quantidade: row.quantidade,
+                  unidade: row.unidade,
+                  valorUnitario: row.valorUnitario,
+                  valorTotal: row.valorTotal,
+                  infAdProd: row.infAdProd
+                }))
+              }, null, 2)}
+            </pre>
+          </details>
 
           {/* Totais do Documento */}
           <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
             <div className="space-y-0.5">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total da Nota Fiscal (NF-e)</span>
-              <p className="text-xs text-slate-400">Produtos: {formatBRL(order.subtotal)} | Frete: {formatBRL(order.shipping || 0)}</p>
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total da nota fiscal (NF-e)</span>
+              <p className="text-xs text-slate-400">Produtos: {formatBRL(itemsSubtotal)} | Frete: {formatBRL(order.shipping || 0)}</p>
             </div>
-            <p className="text-xl font-black text-emerald-400">{formatBRL(order.total)}</p>
+            <p className="text-xl font-black text-emerald-400">{formatBRL(noteTotal)}</p>
           </div>
 
           {errorMsg && (

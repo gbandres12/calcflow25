@@ -1,5 +1,6 @@
 import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
+import { appendOperationalInfCpl, INF_ADPROD_MAX } from './nfeComplementares';
 import { db, resolveCompanyKey } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -55,6 +56,7 @@ export interface NotaAsItemPayload {
   aliquotaIcms?: number;
   aliquotaPis?: number;
   aliquotaCofins?: number;
+  infAdProd?: string;
   nfeReferenciada?: NotaAsNfeReferenciada;
 }
 
@@ -428,9 +430,7 @@ export const fiscalService = {
       const cleanNcm = onlyDigits(it.ncm);
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
       const cleanCfop = onlyDigits(it.cfop);
-      const safeCfop = (isDevolucao || isTransferencia) 
-        ? onlyDigits(cfopPadrao) 
-        : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao));
+      const safeCfop = cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao);
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
       const itemCst = (it.cst || it.csosn || cstIcmsPadrao).trim();
@@ -455,6 +455,9 @@ export const fiscalService = {
         if (aliq != null) row.aliquotaIcms = aliq;
       }
 
+      const infAdProd = (it.infAdProd || '').trim().slice(0, INF_ADPROD_MAX);
+      if (infAdProd) row.infAdProd = infAdProd;
+
       if (isDevolucao && opts?.devolucao?.chaveAcesso) {
         row.nfeReferenciada = {
           chaveAcesso: onlyDigits(opts.devolucao.chaveAcesso),
@@ -469,22 +472,19 @@ export const fiscalService = {
       ? '90'
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
 
-    // Recolher informações complementares pré-definidas dos produtos incluídos
-    const productComplementares = (order.items || [])
-      .map(it => it.informacoesComplementares)
-      .filter((txt): txt is string => Boolean(txt && txt.trim()));
-    const uniqueProductComplementares = Array.from(new Set(productComplementares));
-
-    // Montar observações fiscais e complementares da nota
-    const infParts = [
-      order.nfeInfCpl, // Informação complementar editada/customizada da nota
+    // infCpl editado no modal prevalece. Sem edição, usa padrão da empresa + cláusulas de cada SKU.
+    const productComplementares = (order.items || []).map(it => it.informacoesComplementares);
+    const userInfCpl = (order.nfeInfCpl || '').trim();
+    const legalInfCpl = userInfCpl || appendOperationalInfCpl('', [
       config.observacoesFiscaisPadrao,
-      ...uniqueProductComplementares,
+      ...productComplementares
+    ]);
+    const infCpl = appendOperationalInfCpl(legalInfCpl, [
       order.reference ? (order.isAvulsa ? `Emissão Avulsa: ${order.reference}` : `Pedido: ${order.reference}`) : '',
       order.sellerName ? `Vendedor: ${order.sellerName}` : '',
       isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
       isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
-    ].filter(Boolean);
+    ]);
 
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
@@ -501,7 +501,7 @@ export const fiscalService = {
       finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
-      infCpl: infParts.join(' | ').trim(),
+      infCpl,
       referenciaExterna: order.reference || `ORDER-${order.id}`
     };
 

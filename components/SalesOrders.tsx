@@ -144,6 +144,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('180');
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(isQuotesView);
@@ -223,6 +224,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     customers.find(c => c.id === selectedCustomerId), 
   [customers, selectedCustomerId]);
 
+  const sellableInventory = useMemo(
+    () => inventory.filter(i => i.id !== 'britado'),
+    [inventory]
+  );
+
+  const selectedProduct = useMemo(
+    () => inventory.find(i => i.id === selectedProductId) || sellableInventory[0] || inventory[0],
+    [inventory, selectedProductId, sellableInventory]
+  );
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
@@ -241,6 +252,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       const firstItem = editingOrder.items[0];
       setQuantity(firstItem ? firstItem.quantity.toString() : '');
       setUnitPrice(firstItem ? firstItem.unitPrice.toString() : '180');
+      setSelectedProductId(firstItem?.productId || '');
       setDiscount(editingOrder.discount.toString());
       setShipping(editingOrder.shipping.toString());
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
@@ -298,25 +310,26 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
-    const moidoProd = inventory.find(i => i.id === 'moido');
+    const prod = selectedProduct || inventory.find(i => i.id === 'moido');
     const isInter = selectedCustomer?.state && selectedCustomer.state !== 'PA';
     const itemData = {
-      productId: 'moido',
-      productCode: moidoProd?.code || '001',
-      productName: moidoProd?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
-      unit: moidoProd?.unit || 'TON',
+      productId: prod?.id || 'moido',
+      productCode: prod?.code || '001',
+      productName: prod?.name || 'Calcário Agrícola Moído (PRNT > 85%)',
+      unit: prod?.unit || 'TON',
       quantity: parseFloat(quantity) || 1,
       unitPrice: parseFloat(unitPrice) || 0,
       discount: 0,
       total: subtotalValue,
-      ncm: moidoProd?.ncm || '2517.10.00',
-      cfop: moidoProd?.cfop || (isInter ? '6101' : '5101'),
-      cst: moidoProd?.cst || '102',
-      cClassTrib: moidoProd?.cClassTrib,
-      aliquotaIbs: moidoProd?.aliquotaIbs,
-      aliquotaCbs: moidoProd?.aliquotaCbs,
-      aliquotaIs: moidoProd?.aliquotaIs,
-      informacoesComplementares: moidoProd?.informacoesComplementares
+      ncm: prod?.ncm || '2517.10.00',
+      cfop: prod?.cfop || (isInter ? '6101' : '5101'),
+      cst: prod?.cst || '102',
+      cClassTrib: prod?.cClassTrib,
+      aliquotaIbs: prod?.aliquotaIbs,
+      aliquotaCbs: prod?.aliquotaCbs,
+      aliquotaIs: prod?.aliquotaIs,
+      informacoesComplementares: prod?.informacoesComplementares,
+      infAdProd: prod?.infAdProd
     };
 
     // Cria recibo de entrada se houver valor de entrada
@@ -400,7 +413,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setSelectedCustomerId('');
     setCustomerSearch('');
     setQuantity('');
-    setUnitPrice('180');
+    setUnitPrice(selectedProduct?.unitPrice?.toString() || '180');
+    setSelectedProductId(sellableInventory[0]?.id || inventory[0]?.id || '');
     setDiscount('0');
     setShipping('0');
     setIsBudget(isQuotesView);
@@ -1327,11 +1341,35 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                   {/* Volume e Preço Unitário */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center gap-2 flex-wrap">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                         <Package size={14} /> Especificação do Produto & Quantidade
                       </span>
-                      <span className="text-[11px] text-slate-500 font-medium">Calcário Agrícola Granel (PRNT &gt; 85%)</span>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Produto *</label>
+                      <select
+                        value={selectedProductId || selectedProduct?.id || ''}
+                        onChange={e => {
+                          const id = e.target.value;
+                          setSelectedProductId(id);
+                          const prod = inventory.find(p => p.id === id);
+                          if (prod) {
+                            setUnitPrice(String(prod.unitPrice || 0));
+                          }
+                        }}
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm"
+                      >
+                        {(sellableInventory.length ? sellableInventory : inventory).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {selectedProduct?.informacoesComplementares && (
+                        <p className="text-[10px] text-slate-500 mt-1.5 line-clamp-2">
+                          Cláusula fiscal: {selectedProduct.informacoesComplementares}
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1947,6 +1985,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
           config={fiscalConfig}
           company={company}
+          inventory={inventory}
           devolutionChave={devolutionChave}
           transferencia={emitTransferencia}
           onClose={() => {

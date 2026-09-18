@@ -163,6 +163,7 @@ export const Inventory: React.FC<InventoryProps> = ({
     unidadeTributavel: 'TON',
     observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
     informacoesComplementares: 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+    infAdProd: '',
     
     // Reforma Tributária (RTC)
     cClassTrib: 'AGRO_60',
@@ -247,6 +248,7 @@ export const Inventory: React.FC<InventoryProps> = ({
       unidadeTributavel: 'TON',
       observacoesFiscais: 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
       informacoesComplementares: 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+      infAdProd: '',
       cClassTrib: 'AGRO_60',
       cstIbsCbs: '02',
       aliquotaIbs: '0.10',
@@ -284,6 +286,7 @@ export const Inventory: React.FC<InventoryProps> = ({
       unidadeTributavel: item.unidadeTributavel || 'TON',
       observacoesFiscais: item.observacoesFiscais || 'Isento de ICMS para uso agrícola conforme Convênio ICMS 100/97.',
       informacoesComplementares: item.informacoesComplementares || 'Produto destinado ao uso exclusivo na agricultura com isenção/redução conforme Convênio ICMS 100/97 e art. 9º da EC 132/2023 (Reforma Tributária - Insumos Agropecuários).',
+      infAdProd: item.infAdProd || '',
       cClassTrib: item.cClassTrib || 'AGRO_60',
       cstIbsCbs: item.cstIbsCbs || '02',
       aliquotaIbs: item.aliquotaIbs !== undefined ? item.aliquotaIbs.toString() : '0.10',
@@ -379,6 +382,7 @@ export const Inventory: React.FC<InventoryProps> = ({
       unidadeTributavel: formData.unidadeTributavel,
       observacoesFiscais: formData.observacoesFiscais,
       informacoesComplementares: formData.informacoesComplementares,
+      infAdProd: formData.infAdProd,
       cClassTrib: formData.cClassTrib,
       cstIbsCbs: formData.cstIbsCbs,
       aliquotaIbs: parseFloat(formData.aliquotaIbs || '0'),
@@ -1242,6 +1246,24 @@ export const Inventory: React.FC<InventoryProps> = ({
                       className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-medium text-xs outline-none focus:border-purple-500 resize-none" 
                       placeholder="Insira as cláusulas legais, convênios ou informações adicionais deste produto..." 
                     />
+
+                    <div className="pt-2 space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
+                        Informação adicional do item (tag infAdProd)
+                      </label>
+                      <p className="text-[10px] text-slate-500">
+                        Texto curto por item na NF-e (até 500 caracteres). Não substitui o infCpl da nota.
+                      </p>
+                      <textarea
+                        rows={2}
+                        maxLength={500}
+                        value={formData.infAdProd}
+                        onChange={e => setFormData({ ...formData, infAdProd: e.target.value })}
+                        className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-medium text-xs outline-none focus:border-purple-500 resize-none"
+                        placeholder="Ex: Destinado exclusivamente à agricultura. PRNT &gt; 85%."
+                      />
+                      <p className="text-[9px] text-slate-400 text-right font-bold">{(formData.infAdProd || '').length}/500</p>
+                    </div>
                   </div>
                 </div>
               )}

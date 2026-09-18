@@ -311,6 +311,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           customer={safeCustomers.find((c) => c.id === orderToEmitNfe.customerId) as Customer}
           config={config}
           company={company}
+          inventory={inventory}
           transferencia={isTransferenciaEmit}
           onClose={() => { setOrderToEmitNfe(null); setIsTransferenciaEmit(false); }}
           onSuccess={(updatedOrder) => {
