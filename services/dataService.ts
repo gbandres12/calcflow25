@@ -38,7 +38,63 @@ const storage = {
     } catch (e) {
       console.warn('[localStorage] Falha ao gravar cache:', key, e);
     }
+  },
+  remove(key: string) {
+    try {
+      localStorage.removeItem(`calcarioflow_${key}`);
+    } catch (e) {
+      console.warn('[localStorage] Falha ao remover cache:', key, e);
+    }
   }
+};
+
+const pendingStorageKey = (tableStorageKey: string) => `${tableStorageKey}__pending_upserts`;
+
+const getPendingUpserts = (tableStorageKey: string): any[] =>
+  stripSeedDocs(storage.get(pendingStorageKey(tableStorageKey)) || []);
+
+const serializeRecord = (value: any): string => {
+  if (Array.isArray(value)) return `[${value.map(serializeRecord).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${serializeRecord(value[key])}`
+    ).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const mergeRecordsById = (remoteRecords: any[], localRecords: any[]): any[] => {
+  const merged = new Map<string, any>();
+  stripSeedDocs(remoteRecords).forEach((record) => {
+    if (record?.id) merged.set(String(record.id), record);
+  });
+  stripSeedDocs(localRecords).forEach((record) => {
+    if (record?.id) {
+      const id = String(record.id);
+      merged.set(id, { ...(merged.get(id) || {}), ...record, id });
+    }
+  });
+  return Array.from(merged.values());
+};
+
+const queuePendingUpserts = (tableStorageKey: string, records: any[]) => {
+  const pending = mergeRecordsById(getPendingUpserts(tableStorageKey), records);
+  storage.set(pendingStorageKey(tableStorageKey), pending);
+};
+
+const confirmPendingUpserts = (tableStorageKey: string, sentRecords: any[]) => {
+  const sentById = new Map(sentRecords.map((record) => [String(record.id), serializeRecord(record)]));
+  const remaining = getPendingUpserts(tableStorageKey).filter((record) => {
+    const sentVersion = sentById.get(String(record.id));
+    return !sentVersion || serializeRecord(record) !== sentVersion;
+  });
+  storage.set(pendingStorageKey(tableStorageKey), remaining);
+};
+
+const removePendingUpsert = (tableStorageKey: string, id: string) => {
+  const remaining = getPendingUpserts(tableStorageKey)
+    .filter((record) => String(record.id) !== String(id));
+  storage.set(pendingStorageKey(tableStorageKey), remaining);
 };
 
 const DEMO_TABLE_DATA: Record<string, any[]> = {
@@ -120,6 +176,32 @@ const getStorageKey = (tableName: string, companyId?: string) => {
 const stripSeedDocs = (rows: any[]) =>
   (rows || []).filter((row) => row && row.id !== SEED_DOC_ID && !row.__isSeedMeta);
 
+const createSupabaseRows = (tableName: string, companyId: string, records: any[]) =>
+  records.map((record) => ({
+    id: String(record.id),
+    table_name: tableName,
+    company_id: companyId,
+    data: record,
+    updated_at: new Date().toISOString()
+  }));
+
+const persistPendingUpserts = async (
+  tableName: string,
+  companyId: string,
+  records: any[]
+) => {
+  const supabase = getSupabase();
+  if (!supabase || records.length === 0) return;
+
+  const { error } = await supabase
+    .from('app_records')
+    .upsert(createSupabaseRows(tableName, companyId, records), {
+      onConflict: 'table_name,company_id,id'
+    });
+
+  if (error) throw new Error(error.message);
+};
+
 // ========================================================
 // REPOSITÓRIO UNIFICADO: SUPABASE (PRIORIDADE) + FIRESTORE + LOCALSTORAGE
 // ========================================================
@@ -132,6 +214,9 @@ export const db = {
     const compKey = resolveCompanyKey(companyId);
     const storageKey = getStorageKey(tableName, compKey);
     const demo = isDemoCompany(compKey);
+    // Capturar antes da leitura evita que uma resposta iniciada antes da gravação
+    // remova um registro que acabou de ser confirmado enquanto a consulta estava em voo.
+    const pendingAtReadStart = getPendingUpserts(storageKey);
 
     // 1. Tentar ler do Supabase se configurado
     const supabase = getSupabase();
@@ -146,11 +231,30 @@ export const db = {
         if (!error && Array.isArray(data)) {
           if (data.length > 0) {
             const records = data
-              .map((row: any) => row.data || row)
+              .map((row: any) => ({ ...(row.data || row), id: String(row.data?.id || row.id) }))
               .filter(Boolean);
             const cleanRecords = stripSeedDocs(records);
-            storage.set(storageKey, cleanRecords);
-            return cleanRecords;
+            const pending = mergeRecordsById(pendingAtReadStart, getPendingUpserts(storageKey));
+            const safeRecords = mergeRecordsById(cleanRecords, pending);
+            storage.set(storageKey, safeRecords);
+
+            if (pending.length > 0) {
+              const remoteById = new Map(cleanRecords.map((record) => [
+                String(record.id),
+                serializeRecord(record)
+              ]));
+              const confirmed = pending.filter((record) =>
+                remoteById.get(String(record.id)) === serializeRecord(record)
+              );
+              confirmPendingUpserts(storageKey, confirmed);
+              const unconfirmed = pending.filter((record) =>
+                remoteById.get(String(record.id)) !== serializeRecord(record)
+              );
+              persistPendingUpserts(tableName, compKey, unconfirmed).catch((err) =>
+                console.warn(`[Supabase] Reenvio pendente de '${tableName}' falhou:`, err)
+              );
+            }
+            return safeRecords;
           }
 
           // Se a tabela no Supabase estiver vazia para esta empresa, verificar se já temos dados locais para enviar
@@ -193,8 +297,12 @@ export const db = {
         });
 
         if (remoteData.length > 0) {
-          storage.set(storageKey, remoteData);
-          return remoteData;
+          const safeRecords = mergeRecordsById(
+            remoteData,
+            mergeRecordsById(pendingAtReadStart, getPendingUpserts(storageKey))
+          );
+          storage.set(storageKey, safeRecords);
+          return safeRecords;
         }
       } catch (e) {
         console.warn(`[Firestore] Falha ao consultar '${tableName}':`, e);
@@ -225,50 +333,26 @@ export const db = {
 
     // 1. Atualizar cache local imediatamente para resposta instantânea
     const current = stripSeedDocs(storage.get(storageKey) || []);
-    const updated = [...current];
-
-    records.forEach((newRec) => {
-      const tagged = { 
+    const normalizedRecords = records.map((newRec) => {
+      return {
         ...newRec, 
         id: String(newRec.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
         companyId: newRec.companyId || compKey 
       };
-      const idx = updated.findIndex((r) => r.id === tagged.id);
-      if (idx >= 0) {
-        updated[idx] = { ...updated[idx], ...tagged };
-      } else {
-        updated.push(tagged);
-      }
     });
-
+    const updated = mergeRecordsById(current, normalizedRecords);
     storage.set(storageKey, updated);
 
     // 2. Persistir no Supabase
     const supabase = getSupabase();
+    let supabaseError: unknown = null;
     if (supabase) {
+      queuePendingUpserts(storageKey, normalizedRecords);
       try {
-        const rowsToUpsert = records.map((item) => {
-          const docId = String(item.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
-          const tagged = { ...item, id: docId, companyId: item.companyId || compKey };
-          return {
-            id: docId,
-            table_name: tableName,
-            company_id: compKey,
-            data: tagged,
-            updated_at: new Date().toISOString()
-          };
-        });
-
-        const { error } = await supabase
-          .from('app_records')
-          .upsert(rowsToUpsert, { onConflict: 'table_name,company_id,id' });
-
-        if (error) {
-          console.warn(`[Supabase] Erro ao gravar '${tableName}':`, error.message);
-          // Não interrompe com throw para não travar a interface do usuário
-        }
+        await persistPendingUpserts(tableName, compKey, normalizedRecords);
       } catch (err) {
         console.warn(`[Supabase] Falha de comunicação ao gravar '${tableName}':`, err);
+        supabaseError = err;
       }
     }
 
@@ -276,14 +360,16 @@ export const db = {
     if (firestoreDb) {
       try {
         const colName = `${tableName}_${compKey}`;
-        for (const item of records) {
-          const docId = String(item.id || `doc-${Date.now()}`);
-          const tagged = { ...item, id: docId, companyId: item.companyId || compKey };
-          await setDoc(doc(firestoreDb, colName, docId), tagged, { merge: true });
+        for (const item of normalizedRecords) {
+          await setDoc(doc(firestoreDb, colName, item.id), item, { merge: true });
         }
       } catch (e) {
         console.warn(`[Firestore] Erro ao gravar '${tableName}':`, e);
       }
+    }
+
+    if (supabaseError) {
+      throw supabaseError;
     }
 
     return updated;
@@ -298,6 +384,7 @@ export const db = {
     const current = storage.get(storageKey) || [];
     const updated = current.filter((r: any) => r.id !== id);
     storage.set(storageKey, updated);
+    removePendingUpsert(storageKey, id);
 
     // Deletar no Supabase
     const supabase = getSupabase();
@@ -340,7 +427,9 @@ export const db = {
 
     for (const t of ALL_TABLES.filter((name) => name !== 'users')) {
       const cleanData = getCleanStarterData(t);
-      storage.set(getStorageKey(t, compKey), cleanData);
+      const storageKey = getStorageKey(t, compKey);
+      storage.set(storageKey, cleanData);
+      storage.remove(pendingStorageKey(storageKey));
 
       const supabase = getSupabase();
       if (supabase) {
