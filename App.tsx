@@ -17,7 +17,6 @@ import UserManagement from './components/UserManagement';
 import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
 import { FiscalConfigView } from './components/FiscalConfigView';
-import TransferManagement from './components/TransferManagement';
 import Transportadores from './components/Transportadores';
 import ErrorBoundary from './components/ErrorBoundary';
 import TransfersPage from './components/TransfersPage';
