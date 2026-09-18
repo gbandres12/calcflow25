@@ -481,10 +481,13 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
               <label className={labelCls}>Qtd. volumes</label>
               <input
                 type="number"
-                min="0"
+                min="1"
                 step="1"
                 value={value.volumes?.quantidade ?? ''}
-                onChange={(e) => update({ volumes: { ...(value.volumes || {}), quantidade: parseFloat(e.target.value) || undefined } })}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  update({ volumes: { ...(value.volumes || {}), quantidade: Number.isFinite(n) && n >= 1 ? n : undefined } });
+                }}
                 className={`${inputCls} text-center`}
                 placeholder="1"
               />

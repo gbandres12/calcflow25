@@ -101,6 +101,13 @@ export interface NotaAsTransporte {
   pesoBruto?: number;
 }
 
+/** qVol no XSD da SEFAZ é inteiro [0-9]{1,15}. Peso fica em pesoL/pesoB — nunca em quantidade. */
+export function nfeQVol(raw?: number | string | null): number {
+  const n = Math.trunc(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return n;
+}
+
 /**
  * Payload oficial POST /api/v1/nfe/emitir (modelo 55).
  * Não envia emitente, ambiente, serie, numero, total, destinatario ou itens (nomes antigos).
@@ -547,8 +554,9 @@ export const fiscalService = {
     }
     const vol = order.frete?.volumes;
     if (vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0 || vol.especie?.trim())) {
+      // Sempre envia quantidade inteira ≥ 1: omitir qVol (tag vazia) ou mandar decimal (ex.: 8.5 t) gera cStat 225.
       transporte.volumes = [{
-        ...(vol.quantidade ? { quantidade: Number(vol.quantidade) } : {}),
+        quantidade: nfeQVol(vol.quantidade),
         ...(vol.especie?.trim() ? { especie: vol.especie.trim().toUpperCase() } : {}),
         ...(vol.marca?.trim() ? { marca: vol.marca.trim() } : {}),
         ...(vol.pesoLiquido ? { pesoLiquido: Number(vol.pesoLiquido) } : {}),
@@ -1174,7 +1182,7 @@ export const fiscalService = {
       : '';
     const vol = order.frete?.volumes;
     const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)
-      ? `<vol><qVol>${vol.quantidade || 1}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`
+      ? `<vol><qVol>${nfeQVol(vol.quantidade)}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`
       : '';
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
