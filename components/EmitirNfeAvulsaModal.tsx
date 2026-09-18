@@ -7,6 +7,7 @@ import {
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
   CreditCard, Info, HelpCircle
 } from 'lucide-react';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -379,42 +380,38 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[160] flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
-      <div className="bg-white w-full max-w-5xl rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col h-[100dvh] sm:h-auto sm:max-h-[92vh]">
-        
-        {/* Header */}
-        <div className="p-3.5 sm:p-6 border-b border-slate-100 bg-slate-50 flex items-start sm:items-center justify-between gap-2 shrink-0">
-          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="hidden sm:block p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-200">
-              <FileText size={24} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight w-full sm:w-auto">
-                  Emissão de Nota Fiscal Avulsa (NF-e Direta)
-                </h3>
-                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                  Sem Pedido Prévio
-                </span>
-                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  config?.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {config?.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
-                Próximo Nº NF-e: <b>{config?.proxNumeroNFe || 1042}</b> (Série {config?.serieNFe || 1}) | Emitente: <b>{config?.razaoSocial || ''}</b>
-              </p>
-            </div>
+    <FlowSheet
+      wide
+      zIndexClass="z-[160]"
+      title="NF-e avulsa"
+      subtitle={`Nº ${config?.proxNumeroNFe || 1042} · série ${config?.serieNFe || 1} · ${config?.environment === 'production' ? 'Produção' : 'Homologação'}`}
+      onClose={onClose}
+      footer={(
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+            <p className="text-base font-black text-slate-900 leading-none">{formatBRL(total)}</p>
           </div>
-
-          <button onClick={onClose} aria-label="Fechar" className="p-2 -mt-1 -mr-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500 shrink-0">
-            <X size={20} />
+          <button
+            disabled={loading || !validation.valid}
+            onClick={handleEmitirAvulsa}
+            className="min-h-12 px-4 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm rounded-2xl disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Enviando…
+              </>
+            ) : (
+              <>
+                <Send size={16} /> Transmitir
+              </>
+            )}
           </button>
         </div>
-
-        {/* Formulário Principal */}
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
+      )}
+    >
+        <div className="space-y-4">
           
           {/* Status de Validação SEFAZ */}
           <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
@@ -803,35 +800,6 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           )}
 
         </div>
-
-        {/* Footer */}
-        <div className="p-3 sm:p-6 border-t border-slate-100 bg-white sm:bg-slate-50/50 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 sm:py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
-          >
-            Cancelar
-          </button>
-
-          <button
-            disabled={loading || !validation.valid}
-            onClick={handleEmitirAvulsa}
-            className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Transmitindo NF-e Avulsa à SEFAZ...
-              </>
-            ) : (
-              <>
-                <Send size={16} /> Transmitir e Emitir NF-e Avulsa
-              </>
-            )}
-          </button>
-        </div>
-
-      </div>
-    </div>
+    </FlowSheet>
   );
 };

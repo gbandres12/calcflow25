@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
+import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
 
@@ -385,97 +386,89 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   };
 
   const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
+  const nfeTitle = isDevolucao
+    ? 'Devolução NF-e'
+    : isTransferencia
+      ? 'Transferência NF-e'
+      : isAvulsa
+        ? 'NF-e avulsa'
+        : 'Emitir NF-e';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
-      <div className="bg-white w-full max-w-4xl rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col h-[100dvh] sm:h-auto sm:max-h-[92vh]">
-        
-        {/* Header */}
-        <div className="p-3.5 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-start sm:items-center justify-between gap-2 shrink-0">
-          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="hidden sm:block p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-100 shrink-0">
-              <Send size={22} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight">
-                  {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : isAvulsa ? 'NF-e avulsa desta venda' : 'Emissão de NF-e Eletrônica'}
-                </h3>
-                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {currentConfig.environment === 'production' ? 'Produção SEFAZ' : 'Homologação SEFAZ'}
-                </span>
-                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                  Transmissão Real ({(currentConfig.apiProvider || 'notaas').toUpperCase()})
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
-                Pedido <b>{order.reference}</b>
-                {isAvulsa ? ' · parcial, sem substituir a NF-e do pedido completo' : ''}
-                {' '}| Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
-              </p>
-            </div>
+    <FlowSheet
+      wide
+      zIndexClass="z-[150]"
+      title={nfeTitle}
+      subtitle={
+        <>
+          {order.reference} · Nº {currentConfig.proxNumeroNFe || 1042} / série {currentConfig.serieNFe || 1}
+          {' · '}
+          {currentConfig.environment === 'production' ? 'Produção' : 'Homologação'}
+        </>
+      }
+      onClose={onClose}
+      footer={(
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+            <p className="text-base font-black text-slate-900 leading-none">{formatBRL(totalComFrete)}</p>
           </div>
-          <button onClick={onClose} aria-label="Fechar" className="p-2 -mt-1 -mr-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500 shrink-0">
-            <X size={20} />
+          <button
+            disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
+            onClick={handleEmitir}
+            className="min-h-12 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Enviando…
+              </>
+            ) : (
+              <>
+                <Send size={16} /> Transmitir
+              </>
+            )}
           </button>
         </div>
-
-        {/* Conteúdo com Scroll */}
-        <div className="p-3 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto overscroll-contain flex-1 min-h-0">
-          
-          {/* Alerta se Chave de API Não Estiver Configurada */}
+      )}
+    >
           {!hasApiKey && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs text-amber-900">
-              <div className="flex items-start gap-2.5">
-                <Key size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-black uppercase tracking-wider text-[10px]">Chave de API NotaAs Obrigatória</p>
-                  <p className="text-slate-700">
-                    Insira sua <strong>Project Key da NotaAs</strong> (iniciada com <code>ntaas_</code>) para que o sistema possa assinar digitalmente e transmitir a nota à SEFAZ.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 text-xs text-amber-900 mb-3">
+              <p className="font-bold">Project Key da NotaAs obrigatória</p>
+              <div className="flex flex-col gap-2">
                 <input
                   type="password"
-                  placeholder="Cole sua chave ntaas_..."
+                  placeholder="Cole a chave ntaas_..."
                   value={quickApiKey}
                   onChange={(e) => setQuickApiKey(e.target.value)}
-                  className="w-full flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2.5 text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                  className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleSaveApiKey}
                   disabled={isSavingKey || !quickApiKey.trim()}
-                  className="w-full sm:w-auto justify-center px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition-all disabled:opacity-50"
+                  className="min-h-11 px-3 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-50"
                 >
                   {isSavingKey ? <RefreshCw size={13} className="animate-spin" /> : keySavedSuccess ? <Check size={13} /> : <Save size={13} />}
-                  <span>{keySavedSuccess ? 'Salvo!' : 'Salvar Chave'}</span>
+                  <span>{keySavedSuccess ? 'Salvo' : 'Salvar chave'}</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Status de Validação e Avisos */}
-          <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
+          <div className={`mb-3 p-3 rounded-2xl border flex items-start gap-2.5 ${
             validation.valid ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
           }`}>
             {validation.valid ? (
-              <CheckCircle2 className="text-emerald-600 mt-0.5 shrink-0" size={18} />
+              <CheckCircle2 className="text-emerald-600 mt-0.5 shrink-0" size={16} />
             ) : (
-              <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={18} />
+              <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={16} />
             )}
-            <div className="text-xs space-y-1 flex-1">
-              <p className="font-black uppercase tracking-wider text-[10px]">
-                {validation.valid ? 'Validação Fiscal Pronta para Emissão' : 'Pendências que Impedem a Emissão'}
+            <div className="text-xs space-y-1 flex-1 min-w-0">
+              <p className="font-bold">
+                {validation.valid ? 'Pronto para transmitir' : 'Falta dado fiscal'}
               </p>
-              {validation.valid ? (
-                <p className="text-slate-600">
-                  Os dados do emitente, destinatário, NCM, CFOP e tributação estão prontos para envio à SEFAZ via API NotaAs.
-                </p>
-              ) : (
+              {!validation.valid && (
                 <ul className="list-disc pl-4 space-y-0.5 text-rose-700 font-medium">
                   {validation.errors.map((err, idx) => (
                     <li key={idx}>{err}</li>
@@ -483,443 +476,295 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 </ul>
               )}
               {validation.warnings && validation.warnings.length > 0 && (
-                <div className="pt-1 text-[11px] text-amber-800 space-y-0.5">
-                  <span className="font-bold uppercase text-[9px]">Ajustes Automáticos Aplicados:</span>
-                  <ul className="list-disc pl-4">
-                    {validation.warnings.map((w, idx) => (
-                      <li key={`w-${idx}`}>{w}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="list-disc pl-4 text-[11px] text-amber-800">
+                  {validation.warnings.map((w, idx) => (
+                    <li key={`w-${idx}`}>{w}</li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
 
-          {/* Cards Emitente e Destinatário */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Emitente */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
+          <div className="space-y-2.5">
+            <FlowSection
+              title="Emitente"
+              summary={currentConfig.razaoSocial || company.name}
+              defaultOpen={false}
+            >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                  <Building size={12} /> Emitente
-                </span>
+                <p className="text-xs font-bold text-slate-800">{currentConfig.razaoSocial || company.name}</p>
                 <button
                   type="button"
                   onClick={() => setShowCompanyModal(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold uppercase"
                 >
                   <Settings size={11} /> Configurar
                 </button>
               </div>
-              <p className="text-xs font-bold text-slate-800">{currentConfig.razaoSocial || company.name}</p>
-              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente || company.cnpj}</b> | IE: <b>{currentConfig.inscricaoEstadual || company.stateRegistration || 'Não informada'}</b></p>
-              <p className="text-[10px] text-slate-500">
-                {currentConfig.logradouroEmitente 
-                  ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} - ${currentConfig.bairroEmitente || ''}, ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
-                  : 'Rodovia Mineral BR-163, Km 42 - Santarém/PA'}
+              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente || company.cnpj}</b> · IE: <b>{currentConfig.inscricaoEstadual || company.stateRegistration || '—'}</b></p>
+              <p className="text-[11px] text-slate-500">
+                {currentConfig.logradouroEmitente
+                  ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} — ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
+                  : 'Santarém/PA'}
               </p>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 border-t border-slate-200/60 text-[10px] text-slate-500">
-                <span>Regime: <strong className="text-slate-700">{currentConfig.regimeTributario === '1' ? 'Simples Nacional' : currentConfig.regimeTributario === '2' ? 'Simples Sublimite' : 'Regime Normal'}</strong></span>
-                <span>•</span>
-                <span>Série {currentConfig.serieNFe || 1}</span>
-                <span>•</span>
-                <span>Nº {currentConfig.proxNumeroNFe || 1042}</span>
-              </div>
-            </div>
+            </FlowSection>
 
-            {/* Destinatário com Botão de Edição Rápida */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
-              <div className="flex items-start sm:items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                  <User size={12} /> Destinatário
-                </span>
+            <FlowSection
+              title="Destinatário"
+              summary={activeCustomer.name}
+              defaultOpen={!validation.valid}
+              badge={
                 <button
                   type="button"
-                  onClick={() => setIsEditingCustomer(!isEditingCustomer)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs shrink-0"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsEditingCustomer((v) => !v);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold uppercase"
                 >
-                  <Edit3 size={11} /> {isEditingCustomer ? 'Fechar Edição' : 'Editar Dados Fiscais'}
+                  <Edit3 size={11} /> {isEditingCustomer ? 'Fechar' : 'Editar'}
                 </button>
-              </div>
-
+              }
+            >
               {!isEditingCustomer ? (
                 <>
                   <p className="text-xs font-bold text-slate-800">{activeCustomer.name}</p>
-                  <p className="text-[11px] text-slate-600">Doc: <b>{activeCustomer.document || 'Não informado'}</b> | IE: <b>{activeCustomer.isentoIE ? 'Isento' : (activeCustomer.ie || 'Não informada')}</b></p>
-                  <p className="text-[10px] text-slate-500">
-                    {activeCustomer.street || 'Zona Rural / Rodovia'}, {activeCustomer.number || 'SN'} - {activeCustomer.neighborhood || 'Zona Rural'}, {activeCustomer.city || 'Santarém'}/{activeCustomer.state || 'PA'}
+                  <p className="text-[11px] text-slate-600">Doc: <b>{activeCustomer.document || '—'}</b> · IE: <b>{activeCustomer.isentoIE ? 'Isento' : (activeCustomer.ie || '—')}</b></p>
+                  <p className="text-[11px] text-slate-500">
+                    {activeCustomer.street || 'Zona Rural'}, {activeCustomer.number || 'SN'} — {activeCustomer.city || 'Santarém'}/{activeCustomer.state || 'PA'}
                   </p>
-                  <p className="text-[10px] text-slate-500 font-mono">CEP: {activeCustomer.zipCode || '68000-000'} · IBGE: {activeCustomer.ibgeCode || '1506807'}</p>
                 </>
               ) : (
-                <div className="pt-2 space-y-2.5 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[9px] font-black uppercase text-slate-400">CPF / CNPJ</label>
                       <input
                         type="text"
                         value={activeCustomer.document}
                         onChange={(e) => setActiveCustomer(prev => ({ ...prev, document: e.target.value }))}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                        placeholder="CPF ou CNPJ"
+                        className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono font-bold"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">Inscrição Estadual</label>
+                      <label className="text-[9px] font-black uppercase text-slate-400">IE</label>
                       <input
                         type="text"
                         disabled={activeCustomer.isentoIE}
                         value={activeCustomer.isentoIE ? 'ISENTO' : (activeCustomer.ie || '')}
                         onChange={(e) => setActiveCustomer(prev => ({ ...prev, ie: e.target.value }))}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold disabled:opacity-60"
-                        placeholder="IE ou Isento"
+                        className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold disabled:opacity-60"
                       />
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">CEP</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="text"
-                          value={activeCustomer.zipCode || ''}
-                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, zipCode: e.target.value }))}
-                          onBlur={(e) => {
-                            if (e.target.value.replace(/\D/g, '').length === 8) handleCepLookup(e.target.value);
-                          }}
-                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold"
-                          placeholder="68000-000"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleCepLookup(activeCustomer.zipCode || '')}
-                          disabled={isLoadingCep}
-                          className="p-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg"
-                          title="Buscar endereço por CEP"
-                        >
-                          <Search size={12} className={isLoadingCep ? 'animate-spin' : ''} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="text-[9px] font-black uppercase text-slate-400">Logradouro / Endereço</label>
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400">CEP</label>
+                    <div className="flex gap-1">
                       <input
                         type="text"
-                        value={activeCustomer.street || ''}
-                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, street: e.target.value }))}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                        placeholder="Rua / Rodovia / Fazenda"
+                        inputMode="numeric"
+                        value={activeCustomer.zipCode || ''}
+                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, zipCode: e.target.value }))}
+                        onBlur={(e) => {
+                          if (e.target.value.replace(/\D/g, '').length === 8) handleCepLookup(e.target.value);
+                        }}
+                        className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono font-bold"
                       />
+                      <button type="button" onClick={() => handleCepLookup(activeCustomer.zipCode || '')} disabled={isLoadingCep} className="p-2 bg-slate-200 rounded-lg min-w-11">
+                        <Search size={14} className={isLoadingCep ? 'animate-spin' : ''} />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400">Endereço</label>
+                    <input
+                      type="text"
+                      value={activeCustomer.street || ''}
+                      onChange={(e) => setActiveCustomer(prev => ({ ...prev, street: e.target.value }))}
+                      className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">Número</label>
-                      <input
-                        type="text"
-                        value={activeCustomer.number || ''}
-                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, number: e.target.value }))}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                        placeholder="SN"
-                      />
+                      <label className="text-[9px] font-black uppercase text-slate-400">Nº</label>
+                      <input type="text" value={activeCustomer.number || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, number: e.target.value }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold" />
                     </div>
                     <div>
                       <label className="text-[9px] font-black uppercase text-slate-400">Bairro</label>
-                      <input
-                        type="text"
-                        value={activeCustomer.neighborhood || ''}
-                        onChange={(e) => setActiveCustomer(prev => ({ ...prev, neighborhood: e.target.value }))}
-                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                        placeholder="Zona Rural"
-                      />
+                      <input type="text" value={activeCustomer.neighborhood || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, neighborhood: e.target.value }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold" />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">Município / UF</label>
-                      <div className="flex gap-1">
-                        <input
-                          type="text"
-                          value={activeCustomer.city || ''}
-                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, city: e.target.value }))}
-                          className="w-2/3 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                          placeholder="Santarém"
-                        />
-                        <input
-                          type="text"
-                          maxLength={2}
-                          value={activeCustomer.state || ''}
-                          onChange={(e) => setActiveCustomer(prev => ({ ...prev, state: e.target.value.toUpperCase() }))}
-                          className="w-1/3 px-1 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
-                          placeholder="PA"
-                        />
-                      </div>
+                      <label className="text-[9px] font-black uppercase text-slate-400">UF</label>
+                      <input type="text" maxLength={2} value={activeCustomer.state || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, state: e.target.value.toUpperCase() }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-center" />
                     </div>
                   </div>
-
-                  {cepFeedback && (
-                    <p className="text-[10px] text-purple-700 font-bold">{cepFeedback}</p>
-                  )}
-
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={handleSaveCustomerFiscalData}
-                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black flex items-center gap-1"
-                    >
-                      <Save size={12} /> Salvar Alterações
-                    </button>
-                  </div>
+                  {cepFeedback && <p className="text-[10px] text-emerald-700 font-bold">{cepFeedback}</p>}
+                  <button type="button" onClick={handleSaveCustomerFiscalData} className="w-full min-h-11 px-3 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                    <Save size={12} /> Salvar destinatário
+                  </button>
                 </div>
               )}
-            </div>
+            </FlowSection>
 
-          </div>
-
-          {/* Natureza da Operação */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Natureza da Operação</label>
-            <input 
-              type="text"
-              value={naturezaOperacao}
-              onChange={e => setNaturezaOperacao(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500"
-            />
-          </div>
-
-          {isAvulsa && (
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl text-xs text-purple-950">
-              <p className="font-black uppercase tracking-wider text-[10px] mb-1">Nota avulsa / parcial</p>
-              <p>
-                Esta emissão usa só as quantidades abaixo e fica ligada a esta venda. Não é a NF-e do pedido completo.
-                O saldo ainda não faturado continua disponível para novas notas.
-              </p>
-            </div>
-          )}
-
-          {isTransferencia && (
-            <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-900">
-              <p className="font-black uppercase tracking-wider text-[10px] mb-1">Transferência entre estabelecimentos</p>
-              <p>CFOP { (activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152') } · finalidade 1 · sem cobrança financeira.</p>
-            </div>
-          )}
-
-          {isDevolucao && (
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Chave da NF-e original (44 dígitos)</label>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Natureza da operação</label>
               <input
                 type="text"
-                value={chaveDevolucao}
-                onChange={(e) => setChaveDevolucao(e.target.value)}
-                placeholder="Chave de acesso da nota a devolver"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                value={naturezaOperacao}
+                onChange={e => setNaturezaOperacao(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-emerald-600"
               />
-              <p className="text-[10px] text-slate-400">Finalidade 4 · CFOP 5202/6202 · sem cobrança financeira.</p>
-            </div>
-          )}
-
-          {/* Frete / Transporte — sem frete, CIF, FOB */}
-          {!isDevolucao && !isTransferencia ? (
-            <FreteNfeSection
-              value={frete}
-              onChange={setFrete}
-              totalQuantidade={totalQuantidade}
-              transportadores={transportadores}
-              onAddTransportador={onAddTransportador}
-            />
-          ) : (
-            <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-500 flex items-center gap-2">
-              <Truck size={16} className="text-slate-400 shrink-0" />
-              <span>Devolução e transferência saem <b>sem frete (modFrete 9)</b>, conforme regra SEFAZ.</span>
-            </div>
-          )}
-
-          {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
-          <div className="space-y-2">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
-                <FileText size={12} /> Itens & Enquadramento Fiscal (CFOP e CST Editáveis)
-              </span>
-              <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                Altere o CFOP ou CST diretamente na tabela
-              </span>
             </div>
 
-            <p className="sm:hidden text-[9px] text-slate-400 font-medium">Deslize a tabela para o lado para ver todos os campos.</p>
-            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
-              <table className="w-full min-w-[720px] text-left text-xs">
-                <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
-                  <tr>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-3 py-3 w-28">NCM</th>
-                    <th className="px-3 py-3 w-28 text-purple-700">CFOP *</th>
-                    <th className="px-3 py-3 w-24 text-blue-700">CST *</th>
-                    <th className="px-3 py-3 text-center w-28">Qtd</th>
-                    <th className="px-4 py-3 text-right w-28">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {items.map((it, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-slate-800">{it.productName}</p>
-                        <p className="text-[10px] text-slate-400">{it.productCode}</p>
-                      </td>
-                      <td className="px-3 py-3 font-mono text-slate-600">
-                        <input 
-                          type="text"
-                          value={it.ncm || '25171000'}
-                          onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)}
-                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none focus:border-purple-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
-                          value={it.cfop || ''}
-                          onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)}
-                          placeholder="CFOP"
-                          className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black text-purple-900 outline-none focus:border-purple-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3">
-                        <input 
-                          type="text"
-                          value={it.cst || ''}
-                          onChange={e => handleUpdateItem(idx, 'cst', e.target.value)}
-                          placeholder="CST"
-                          className="w-20 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900 outline-none focus:border-blue-500"
-                        />
-                      </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">
-                        {isAvulsa ? (
-                          <div className="space-y-1">
-                            <input
-                              type="number"
-                              min={0}
-                              max={it.maxQuantity}
-                              step="0.01"
-                              value={it.quantity}
-                              onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)}
-                              className="w-24 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-black text-center outline-none focus:border-purple-500"
-                            />
-                            <p className="text-[9px] text-slate-400 font-bold">Saldo {it.maxQuantity} {it.unit}</p>
-                          </div>
-                        ) : (
-                          <>{it.quantity} {it.unit}</>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-black text-slate-800">
-                        <div className="flex items-center justify-end gap-2">
-                          <span>{formatBRL(it.total)}</span>
-                          {isAvulsa && items.length > 1 && (
-                            <button type="button" onClick={() => handleRemoveItem(idx)} className="text-[10px] text-rose-600 font-black">
-                              Tirar
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Informações Complementares Pré-definidas e Editáveis */}
-          <div className="space-y-1.5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Informações Complementares da Nota (infCpl)
-              </label>
-              <span className="text-[9px] font-bold text-slate-400">
-                Padrão da empresa + Cláusulas pré-definidas dos produtos
-              </span>
-            </div>
-            <textarea 
-              rows={3}
-              value={infCpl}
-              onChange={e => setInfCpl(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-700 outline-none focus:border-purple-500 resize-none"
-              placeholder="Informações complementares fiscais..."
-            />
-          </div>
-
-          {/* Totais do Documento */}
-          <div className="p-4 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                Total da Nota Fiscal (NF-e) · Frete {FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.sigla || 'Sem frete'}
-              </span>
-              <p className="text-xs text-slate-400">
-                Produtos: {formatBRL(itemsSubtotal)} | Frete: {formatBRL(freteValorEfetivo)}{discountEfetivo ? ` | Desc: ${formatBRL(discountEfetivo)}` : ''}
+            {isAvulsa && (
+              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                Parcial desta venda — o saldo não faturado continua no pedido.
               </p>
-            </div>
-            <p className="text-xl font-black text-emerald-400 self-end sm:self-auto">{formatBRL(totalComFrete)}</p>
+            )}
+            {isTransferencia && (
+              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                Transferência · CFOP {(activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152')} · sem cobrança.
+              </p>
+            )}
+            {isDevolucao && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Chave da NF-e original</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={chaveDevolucao}
+                  onChange={(e) => setChaveDevolucao(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold"
+                />
+              </div>
+            )}
+
+            {!isDevolucao && !isTransferencia ? (
+              <FlowSection
+                title="Frete"
+                summary={FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.label || 'Sem frete'}
+                defaultOpen={Number(frete.modalidade ?? 9) !== 9}
+              >
+                <FreteNfeSection
+                  compact
+                  value={frete}
+                  onChange={setFrete}
+                  totalQuantidade={totalQuantidade}
+                  transportadores={transportadores}
+                  onAddTransportador={onAddTransportador}
+                />
+              </FlowSection>
+            ) : (
+              <p className="text-[11px] text-slate-500 px-1">Sem frete (modFrete 9).</p>
+            )}
+
+            <FlowSection
+              title={`Itens (${items.length})`}
+              summary={items.map(it => `${it.productName} ${it.quantity}${it.unit ? ' ' + it.unit : ''}`).join(' · ')}
+              defaultOpen
+            >
+              <div className="space-y-2 sm:hidden">
+                {items.map((it, idx) => (
+                  <div key={idx} className="rounded-xl border border-slate-200 p-3 space-y-2">
+                    <div className="flex justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-800 leading-tight">{it.productName}</p>
+                        <p className="text-[11px] text-slate-400">{it.productCode}</p>
+                      </div>
+                      <p className="text-sm font-black text-slate-900 shrink-0">{formatBRL(it.total)}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500">NCM</label>
+                        <input type="text" inputMode="numeric" value={it.ncm || '25171000'} onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500">Qtd {it.unit || ''}</label>
+                        {isAvulsa ? (
+                          <input type="number" inputMode="decimal" min={0} max={it.maxQuantity} step="0.01" value={it.quantity} onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" />
+                        ) : (
+                          <p className="px-2 py-2 text-sm font-bold">{it.quantity}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-purple-700">CFOP</label>
+                        <input type="text" inputMode="numeric" value={it.cfop || ''} onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)} className="w-full px-2 py-2 bg-purple-50 border border-purple-200 rounded-lg text-sm font-mono font-black" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-blue-700">CST</label>
+                        <input type="text" value={it.cst || ''} onChange={e => handleUpdateItem(idx, 'cst', e.target.value)} className="w-full px-2 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm font-mono font-bold" />
+                      </div>
+                    </div>
+                    {isAvulsa && items.length > 1 && (
+                      <button type="button" onClick={() => handleRemoveItem(idx)} className="text-[11px] text-rose-600 font-bold">Remover item</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
+                    <tr>
+                      <th className="px-3 py-2">Item</th>
+                      <th className="px-3 py-2">NCM</th>
+                      <th className="px-3 py-2">CFOP</th>
+                      <th className="px-3 py-2">CST</th>
+                      <th className="px-3 py-2 text-center">Qtd</th>
+                      <th className="px-3 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {items.map((it, idx) => (
+                      <tr key={idx}>
+                        <td className="px-3 py-2">
+                          <p className="font-bold text-slate-800">{it.productName}</p>
+                          <p className="text-[10px] text-slate-400">{it.productCode}</p>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="text" value={it.ncm || '25171000'} onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)} className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="text" value={it.cfop || ''} onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)} className="w-20 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-mono font-black" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="text" value={it.cst || ''} onChange={e => handleUpdateItem(idx, 'cst', e.target.value)} className="w-16 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono font-bold" />
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold">
+                          {isAvulsa ? (
+                            <input type="number" min={0} max={it.maxQuantity} step="0.01" value={it.quantity} onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)} className="w-20 px-2 py-1 bg-purple-50 border border-purple-200 rounded-lg text-xs font-black text-center" />
+                          ) : (
+                            <>{it.quantity} {it.unit}</>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right font-black">{formatBRL(it.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </FlowSection>
+
+            <FlowSection title="Informações complementares" summary={infCpl ? infCpl.slice(0, 72) : 'Vazio'} defaultOpen={false}>
+              <textarea
+                rows={3}
+                value={infCpl}
+                onChange={e => setInfCpl(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none resize-none"
+              />
+            </FlowSection>
           </div>
 
           {errorMsg && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2.5 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold text-rose-900 text-sm">A emissão da NF-e NÃO foi autorizada</p>
-                  <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-[11px] text-rose-800 font-semibold break-words">
-                    {errorMsg}
-                  </p>
-                  <p className="text-[11px] text-rose-600 font-normal leading-relaxed">
-                    O pedido <b>permanece como não emitido</b>. Corrija o motivo apontado acima (ex: Project Key, dados do cliente/NCM/CFOP ou certificado digital) e tente transmitir novamente.
-                  </p>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-rose-200/60 flex items-center justify-between flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDatabaseModal(true)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
-                >
-                  <Database size={13} className="text-emerald-600" />
-                  Verificar Status do Supabase
-                </button>
-              </div>
+            <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2">
+              <p className="font-bold text-rose-900">A SEFAZ não autorizou</p>
+              <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-[11px] break-words">{errorMsg}</p>
+              <button type="button" onClick={() => setShowDatabaseModal(true)} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5">
+                <Database size={13} /> Status do banco
+              </button>
             </div>
           )}
 
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 sm:p-6 border-t border-slate-100 bg-white sm:bg-slate-50/50 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <button
-            onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 sm:py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
-          >
-            Fechar
-          </button>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
-              onClick={handleEmitir}
-              className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Transmitindo para a SEFAZ...
-                </>
-              ) : (
-                <>
-                  <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : isAvulsa ? 'Transmitir NF-e Avulsa' : 'Transmitir e Emitir NF-e'}
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Modal de Configuração da Empresa Emitente */}
       <CompanyFiscalSettingsModal
         isOpen={showCompanyModal}
         onClose={() => setShowCompanyModal(false)}
@@ -930,11 +775,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         }}
       />
 
-      {/* Modal de Diagnóstico do Supabase */}
       <DatabaseStatusModal
         isOpen={showDatabaseModal}
         onClose={() => setShowDatabaseModal(false)}
       />
-    </div>
+    </FlowSheet>
   );
 };

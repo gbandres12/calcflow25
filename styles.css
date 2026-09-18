@@ -813,3 +813,18 @@ textarea:focus-visible {
 .border-purple-500\/40 { border-color: #c8ddd0 !important; }
 .ring-purple-500 { --tw-ring-color: rgba(15, 89, 72, 0.24) !important; }
 .font-black { font-weight: 800; }
+
+/* Formulários fluidos no celular: evita zoom do iOS e deixa o sheet respirar. */
+.flow-sheet input,
+.flow-sheet select,
+.flow-sheet textarea {
+  max-width: 100%;
+}
+
+@media (max-width: 639px) {
+  .flow-sheet input,
+  .flow-sheet select,
+  .flow-sheet textarea {
+    font-size: 16px;
+  }
+}
