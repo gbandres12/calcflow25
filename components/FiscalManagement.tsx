@@ -9,6 +9,7 @@ import {
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
+import { ErrorBoundary } from './ErrorBoundary';
 
 interface FiscalManagementProps {
   orders: SaleOrder[];
@@ -285,23 +286,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {/* Modal de Emissão Avulsa / Direta */}
       {showAvulsaModal && (
-        <EmitirNfeAvulsaModal
-          customers={safeCustomers}
-          inventory={inventory}
-          config={config}
-          company={company}
-          currentUser={currentUser}
-          onClose={() => setShowAvulsaModal(false)}
-          onSuccess={(newOrder) => {
-            if (onAddOrder) {
-              onAddOrder(newOrder);
-            } else {
-              onUpdateOrder(newOrder);
-            }
-            setShowAvulsaModal(false);
-            setSelectedDanfeOrder(newOrder);
-          }}
-        />
+        <ErrorBoundary label="emissão avulsa">
+          <EmitirNfeAvulsaModal
+            customers={safeCustomers}
+            inventory={inventory}
+            config={config}
+            company={company}
+            currentUser={currentUser}
+            onClose={() => setShowAvulsaModal(false)}
+            onSuccess={(newOrder) => {
+              if (onAddOrder) {
+                onAddOrder(newOrder);
+              } else {
+                onUpdateOrder(newOrder);
+              }
+              setShowAvulsaModal(false);
+              setSelectedDanfeOrder(newOrder);
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Modal de Emissão Direta de Pedido Existente */}

@@ -91,4 +91,17 @@ assert.equal(payload.items[0].infAdProd, 'Linha dolomítico editada');
 assert.ok(payload.infCpl?.startsWith('Texto editado no modal prevalece'));
 assert.ok(!payload.infCpl?.includes(doloClause), 'não deve concatenar de novo a cláusula do produto se o modal já definiu o infCpl');
 
+const numericNcmOrder = {
+  ...order,
+  items: [{
+    ...order.items[0],
+    ncm: 25181000 as unknown as string,
+    cfop: 5101 as unknown as string,
+    cst: 40 as unknown as string
+  }]
+} as SaleOrder;
+const numericPayload = fiscalService.montarPayloadNotaAs(numericNcmOrder, customer, DEFAULT_FISCAL_CONFIG);
+assert.equal(numericPayload.items[0].ncm, '25181000');
+assert.equal(numericPayload.items[0].cfop, '5101');
+
 console.log('nfeComplementares tests ok');

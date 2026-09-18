@@ -473,7 +473,7 @@ const App: React.FC = () => {
     };
     setOrders(prev => [...prev, newOrder]);
     persistCloud('sales_orders', newOrder);
-    if (newOrder.status === OrderStatus.FINALIZED) {
+    if (newOrder.status === OrderStatus.FINALIZED && !newOrder.isAvulsa) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }

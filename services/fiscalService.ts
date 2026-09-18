@@ -204,8 +204,8 @@ async function fiscalApiFetch(path: string, init: RequestInit): Promise<{ ok: bo
   }
 }
 
-function onlyDigits(value?: string): string {
-  return (value || '').replace(/\D/g, '');
+function onlyDigits(value?: string | number | null): string {
+  return String(value ?? '').replace(/\D/g, '');
 }
 
 export const fiscalService = {
@@ -425,7 +425,7 @@ export const fiscalService = {
       dest.ie = onlyDigits(customer.ie);
     }
 
-    const cstIcmsPadrao = (config.cstIcmsPadrao || '40').trim();
+    const cstIcmsPadrao = String(config.cstIcmsPadrao || '40').trim();
     const items: NotaAsItemPayload[] = (order.items || []).map((it, idx) => {
       const cleanNcm = onlyDigits(it.ncm);
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
@@ -433,7 +433,7 @@ export const fiscalService = {
       const safeCfop = cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao);
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
-      const itemCst = (it.cst || it.csosn || cstIcmsPadrao).trim();
+      const itemCst = String(it.cst || it.csosn || cstIcmsPadrao).trim();
 
       const row: NotaAsItemPayload = {
         descricao: it.productName || 'Calcário Agrícola Corretivo',
@@ -455,7 +455,7 @@ export const fiscalService = {
         if (aliq != null) row.aliquotaIcms = aliq;
       }
 
-      const infAdProd = (it.infAdProd || '').trim().slice(0, INF_ADPROD_MAX);
+      const infAdProd = String(it.infAdProd || '').trim().slice(0, INF_ADPROD_MAX);
       if (infAdProd) row.infAdProd = infAdProd;
 
       if (isDevolucao && opts?.devolucao?.chaveAcesso) {
