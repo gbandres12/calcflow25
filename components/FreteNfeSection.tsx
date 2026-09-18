@@ -158,7 +158,8 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   const labelCls = 'text-[10px] font-black uppercase text-slate-400 tracking-wide';
 
   return (
-    <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100 min-w-0">
+    <div className={`space-y-3 min-w-0 ${compact ? 'p-0 bg-transparent border-0' : 'p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100'}`}>
+      {!compact && (
       <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
         <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
           <Truck size={16} className="text-purple-600" /> Frete & Transporte
@@ -172,6 +173,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           {FRETE_MODALIDADES.find(m => m.value === mod)?.sigla || 'Sem frete'}
         </span>
       </div>
+      )}
 
       {/* Modalidades em cards clicáveis — melhor UX que select puro */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">

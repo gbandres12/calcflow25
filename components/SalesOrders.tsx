@@ -27,6 +27,7 @@ import { RegisterPaymentModal } from './RegisterPaymentModal';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
 import { SalesOrderPdfModal } from './SalesOrderPdfModal';
+import { FlowSheet } from './ui/FlowSheet';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity } from '../services/saleNfe';
@@ -1299,33 +1300,53 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Modal Criar / Editar Pedido em Etapas (Stepper) */}
       {isModalOpen && (
         <ErrorBoundary label="novo pedido de venda">
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 print:hidden">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
-            
-            {/* Topo do Modal com Título e Fechamento */}
-            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-slate-900 text-white rounded-xl shadow-sm">
-                  {editingOrder ? <Pencil size={18} /> : <ShoppingCart size={18} />}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 tracking-tight">
-                    {editingOrder ? `Editar Pedido (${editingOrder.reference})` : (isBudget ? 'Novo Orçamento Comercial' : 'Novo Pedido de Venda')}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">{company?.name || 'Empresa'} • Unidade de Faturamento</p>
-                </div>
-              </div>
-              <button 
-                onClick={handleCloseModal} 
-                className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-400 hover:text-slate-700"
-                title="Fechar"
-              >
-                <X size={20} />
-              </button>
+        <FlowSheet
+          zIndexClass="z-[100]"
+          title={editingOrder ? `Editar ${editingOrder.reference}` : (isBudget ? 'Novo orçamento' : 'Novo pedido')}
+          subtitle={`${company?.name || 'Empresa'} · ${currentStep}/3`}
+          onClose={handleCloseModal}
+          footer={(
+            <div className="flex items-center gap-2">
+              {currentStep === 1 ? (
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-3 py-3 text-xs font-bold text-slate-500 hover:text-slate-800 rounded-xl min-h-11"
+                >
+                  Fechar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handlePrevStep}
+                  className="px-3 py-3 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl min-h-11"
+                >
+                  Voltar
+                </button>
+              )}
+              {currentStep < 3 ? (
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  className="flex-1 min-h-12 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-sm font-bold shadow-sm"
+                >
+                  {currentStep === 1 ? 'Continuar' : 'Revisar pedido'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCreateOrUpdateOrder}
+                  className={`flex-1 min-h-12 px-4 py-3 rounded-2xl text-sm font-bold text-white shadow-sm ${
+                    isBudget ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'
+                  }`}
+                >
+                  {editingOrder ? 'Salvar' : (isBudget ? 'Emitir orçamento' : 'Emitir pedido')}
+                </button>
+              )}
             </div>
-
-            {/* Stepper Progress Bar Sóbria */}
-            <div className="bg-slate-100/80 px-6 py-3 border-b border-slate-200">
+          )}
+        >
+            <div className="mb-3">
               <div className="grid grid-cols-3 gap-2 sm:gap-4">
                 
                 {/* Etapa 1 */}
@@ -1349,9 +1370,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   }`}>
                     {currentStep > 1 ? <Check size={13} /> : '1'}
                   </span>
-                  <div className="min-w-0 hidden sm:block">
-                    <p className="text-xs font-bold leading-tight truncate">Cliente & Itens</p>
-                    <p className="text-[10px] text-slate-400 leading-none">Dados da carga</p>
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Cliente</p>
+                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Dados da carga</p>
                   </div>
                 </button>
 
@@ -1380,9 +1401,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   }`}>
                     {currentStep > 2 ? <Check size={13} /> : '2'}
                   </span>
-                  <div className="min-w-0 hidden sm:block">
-                    <p className="text-xs font-bold leading-tight truncate">Faturamento</p>
-                    <p className="text-[10px] text-slate-400 leading-none">Entrada & Prazos</p>
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Pagamento</p>
+                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Entrada & Prazos</p>
                   </div>
                 </button>
 
@@ -1407,9 +1428,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   }`}>
                     3
                   </span>
-                  <div className="min-w-0 hidden sm:block">
-                    <p className="text-xs font-bold leading-tight truncate">Revisão & Emissão</p>
-                    <p className="text-[10px] text-slate-400 leading-none">Confirmação final</p>
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Revisar</p>
+                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Confirmação final</p>
                   </div>
                 </button>
 
@@ -1417,7 +1438,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             </div>
 
             {/* Conteúdo Dinâmico do Stepper */}
-            <form onSubmit={handleCreateOrUpdateOrder} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 custom-scrollbar">
+            <form onSubmit={handleCreateOrUpdateOrder} className="space-y-4">
               
               {/* ETAPA 1: CLIENTE & ITENS */}
               {currentStep === 1 && (
@@ -1428,20 +1449,22 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsBudget(false)}
-                      className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
+                      className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all min-h-11 ${
                         !isBudget ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Venda Confirmada (Faturamento)
+                      <span className="sm:hidden">Venda</span>
+                      <span className="hidden sm:inline">Venda Confirmada (Faturamento)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsBudget(true)}
-                      className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${
-                        isBudget ? 'bg-white text-amber-800 shadow-sm font-black' : 'text-slate-600 hover:text-slate-900'
+                      className={`flex-1 py-2.5 rounded-lg font-bold text-xs transition-all min-h-11 ${
+                        isBudget ? 'bg-white text-amber-800 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      Orçamento Comercial (Cotação)
+                      <span className="sm:hidden">Orçamento</span>
+                      <span className="hidden sm:inline">Orçamento Comercial (Cotação)</span>
                     </button>
                   </div>
 
@@ -1609,16 +1632,18 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               )}
                             </div>
 
-                            <div>
-                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Descrição no PDF</label>
+                            <details className="group/desc">
+                              <summary className="text-[11px] font-bold text-slate-500 cursor-pointer list-none [&::-webkit-details-marker]:hidden py-1">
+                                Descrição no PDF <span className="text-slate-400 font-medium group-open/desc:hidden">· opcional</span>
+                              </summary>
                               <input
                                 type="text"
                                 value={line.productDescription}
                                 onChange={e => updateLineItem(line.lineId, { productDescription: e.target.value })}
                                 placeholder={lineProd?.name || 'Descrição na tabela impressa'}
-                                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                                className="mt-1 w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
                               />
-                            </div>
+                            </details>
 
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -1652,10 +1677,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       })}
                     </div>
 
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
-                      <p className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
-                        Caixa técnica no PDF (geral do pedido)
-                      </p>
+                    <details className="p-3 bg-white border border-slate-200 rounded-xl">
+                      <summary className="text-[11px] font-bold text-slate-700 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                        Ficha técnica do PDF · opcional
+                      </summary>
+                      <div className="pt-3 space-y-2">
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 block mb-1">Título</label>
                         <input
@@ -1683,7 +1709,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           Usar ficha padrão do 1º item
                         </button>
                       )}
-                    </div>
+                      </div>
+                    </details>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div>
@@ -2078,55 +2105,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               )}
 
             </form>
-
-            {/* Rodapé de Navegação do Stepper */}
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
-              <div>
-                {currentStep === 1 ? (
-                  <button 
-                    type="button" 
-                    onClick={handleCloseModal} 
-                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                ) : (
-                  <button 
-                    type="button" 
-                    onClick={handlePrevStep} 
-                    className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    ← Voltar
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                {currentStep < 3 ? (
-                  <button
-                    type="button"
-                    onClick={handleNextStep}
-                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                  >
-                    {currentStep === 1 ? 'Avançar para Faturamento' : 'Avançar para Revisão'} →
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleCreateOrUpdateOrder}
-                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-sm flex items-center gap-1.5 ${
-                      isBudget ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-700 hover:bg-emerald-800'
-                    }`}
-                  >
-                    <CheckCircle2 size={15} />
-                    {editingOrder ? 'Salvar Alterações' : (isBudget ? 'Emitir Orçamento' : 'Emitir Pedido de Venda')}
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </div>
+        </FlowSheet>
         </ErrorBoundary>
       )}
 
