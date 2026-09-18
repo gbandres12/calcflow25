@@ -28,6 +28,7 @@ import {
 import { TransferShipment, TransferItem, TransferStatus, StoreItem, Company, User } from '../types';
 import { NfImportModal } from './NfImportModal';
 import { nextTransferCode } from '../services/ids';
+import { TransferRomaneioDocument } from './transfer-print/TransferRomaneioDocument';
 
 interface TransferManagementProps {
   transfers: TransferShipment[];
@@ -1608,26 +1609,20 @@ const PrintRomaneioModal: React.FC<PrintRomaneioModalProps> = ({
     window.print();
   };
 
-  const formatBRL = (val?: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const totalQty = (transfer.items || []).reduce((s, it) => s + (Number(it.quantitySent) || 0), 0);
-  const totalCost = (transfer.items || []).reduce((s, it) => s + (Number(it.totalCost) || 0), 0);
-
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 my-auto animate-in zoom-in-95 print:border-none print:shadow-none print:rounded-none">
-        
-        {/* Barra de Ações (oculta na impressão) */}
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
+      <div className="bg-white w-full max-w-[210mm] rounded-3xl shadow-2xl overflow-hidden border border-slate-200 my-auto print:border-none print:shadow-none print:rounded-none print:max-w-none">
         <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center print:hidden">
           <div className="flex items-center gap-2">
-            <Printer size={18} className="text-indigo-400" />
-            <span className="font-bold text-sm">Guia de Remessa e Transferência de Materiais</span>
+            <Printer size={18} className="text-emerald-400" />
+            <span className="font-bold text-sm">Guia de transferência entre filiais</span>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-all"
+              className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-all"
             >
-              <Printer size={15} /> Imprimir Guia / Romaneio
+              <Printer size={15} /> Imprimir / Salvar PDF
             </button>
             <button
               onClick={onClose}
@@ -1638,163 +1633,36 @@ const PrintRomaneioModal: React.FC<PrintRomaneioModalProps> = ({
           </div>
         </div>
 
-        {/* DOCUMENTO DO ROMANEIO IMPRESSO */}
-        <div className="p-8 sm:p-12 space-y-6 text-slate-800 print:p-6 print:space-y-4">
-          
-          {/* Cabeçalho da Empresa */}
-          <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-slate-950 uppercase">
-                {company?.tradeName || company?.corporateName || 'CALCÁRIOFLOW MINERAÇÃO E INDÚSTRIA LTDA'}
-              </h2>
-              <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                {company?.corporateName ? `${company.corporateName} · ` : ''}CNPJ: {company?.cnpj || '10.375.218/0001-50'} · IE: {company?.ie || '15.489.201-9'}
-              </p>
-              <p className="text-xs text-slate-500">
-                Logística Integrada: Santarém (PA) ➔ Fazenda Usina Matriz (Zona Rural / Rodovia)
-              </p>
-            </div>
-
-            <div className="text-right">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">Nº DA GUIA</span>
-              <span className="text-xl font-mono font-black text-slate-900 block">{transfer.code}</span>
-              <span className="text-xs text-slate-500">Data: {new Date(transfer.dateSent).toLocaleDateString('pt-BR')}</span>
-            </div>
-          </div>
-
-          {/* Título do Documento */}
-          <div className="bg-slate-100 p-2.5 rounded-lg text-center font-black uppercase text-xs tracking-wider text-slate-800">
-            GUIA DE REMESSA DE MATERIAIS, PEÇAS E SUPRIMENTOS (TRANSFERÊNCIA INTERNA)
-          </div>
-
-          {/* Dados da Rota e Transporte */}
-          <div className="grid grid-cols-2 gap-4 text-xs border border-slate-200 rounded-xl p-4 bg-slate-50/50">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">LOCAL DE EXPEDIÇÃO (ORIGEM)</span>
-              <span className="font-bold text-slate-900 block mt-0.5">{transfer.originLocation}</span>
-              <span className="text-slate-600 block mt-1">Expedido por: <strong>{transfer.sentBy}</strong></span>
-            </div>
-
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">LOCAL DE DESTINO</span>
-              <span className="font-bold text-slate-900 block mt-0.5">{transfer.destinationLocation}</span>
-              <span className="text-slate-600 block mt-1">
-                Motorista: <strong>{transfer.carrierOrDriver || 'Próprio'}</strong> {transfer.vehiclePlate ? `(Placa: ${transfer.vehiclePlate})` : ''}
-              </span>
-            </div>
-          </div>
-
-          {/* Tabela de Produtos */}
-          <div className="space-y-2">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-700 block">
-              RELAÇÃO DE PRODUTOS E SUPRIMENTOS:
-            </span>
-
-            <table className="w-full text-left text-xs border-collapse border border-slate-300">
-              <thead className="bg-slate-200 text-slate-800 font-bold uppercase text-[10px]">
-                <tr>
-                  <th className="border border-slate-300 px-3 py-2 text-center w-8">#</th>
-                  <th className="border border-slate-300 px-3 py-2">Descrição do Material / Peça</th>
-                  <th className="border border-slate-300 px-3 py-2">Categoria</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Unid.</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Qtde Env.</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Qtde Rec.</th>
-                  <th className="border border-slate-300 px-3 py-2">Fornecedor Santarém / NF</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center w-16">Visto</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(transfer.items || []).map((item, idx) => (
-                  <tr key={item.id} className="border-b border-slate-200">
-                    <td className="border border-slate-300 px-3 py-2 text-center font-bold text-slate-500">{idx + 1}</td>
-                    <td className="border border-slate-300 px-3 py-2 font-bold text-slate-900">{item.productName}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-600">{item.category}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-center font-mono">{item.unit}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-center font-black">{item.quantitySent}</td>
-                    <td className="border border-slate-300 px-3 py-2 text-center font-black">
-                      {transfer.status === 'CONFERIDO_E_RECEBIDO' || transfer.status === 'RECEBIDO_COM_DIVERGENCIA'
-                        ? (item.quantityReceived ?? item.quantitySent)
-                        : ''}
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2 text-slate-600">
-                      {item.supplier || ''} {item.nfCompraNumber ? `(${item.nfCompraNumber})` : ''}
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2 text-center">
-                      {item.conferido ? '✓' : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-slate-100 font-bold">
-                <tr>
-                  <td colSpan={4} className="border border-slate-300 px-3 py-2 text-right">TOTAIS:</td>
-                  <td className="border border-slate-300 px-3 py-2 text-center font-black">{totalQty}</td>
-                  <td colSpan={3} className="border border-slate-300 px-3 py-2 text-right font-mono">
-                    {totalCost > 0 ? `Valor Estimado: ${formatBRL(totalCost)}` : ''}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {transfer.notes && (
-            <div className="text-xs text-slate-600">
-              <strong>Observações da Expedição:</strong> {transfer.notes}
-            </div>
-          )}
-
-          {/* BLOCO DE ASSINATURAS E CONFERÊNCIA */}
-          <div className="pt-8 border-t border-slate-300 grid grid-cols-2 gap-8 text-xs">
-            {/* Assinatura Expedição Santarém */}
-            <div className="space-y-4 text-center">
-              <div className="border-b border-slate-400 pb-1 h-14 flex items-end justify-center">
-                <span className="font-serif italic text-slate-800 text-sm">{transfer.sentBy}</span>
-              </div>
-              <div>
-                <span className="font-bold text-slate-900 block">Expedido em Santarém</span>
-                <span className="text-[10px] text-slate-500 block">Responsável pelas Compras / Despacho</span>
-                <span className="text-[10px] text-slate-500">Data: {new Date(transfer.dateSent).toLocaleDateString('pt-BR')}</span>
-              </div>
-            </div>
-
-            {/* Assinatura Recebimento Fazenda Matriz */}
-            <div className="space-y-4 text-center">
-              <div className="border-b border-slate-400 pb-1 h-14 flex items-end justify-center">
-                {transfer.receiverSignature?.startsWith('data:image') ? (
-                  <img 
-                    src={transfer.receiverSignature} 
-                    alt="Assinatura Digital" 
-                    className="h-12 object-contain"
-                  />
-                ) : transfer.receivedBy ? (
-                  <span className="font-serif italic text-emerald-900 text-sm font-bold">
-                    ✓ Assinado por: {transfer.receivedBy}
-                  </span>
-                ) : (
-                  <span className="text-slate-300 italic text-[11px]">Assinatura e carimbo do recebedor</span>
-                )}
-              </div>
-              <div>
-                <span className="font-bold text-slate-900 block">
-                  {transfer.receivedBy ? `Recebido por: ${transfer.receivedBy}` : 'Recebido e Conferido na Fazenda Matriz'}
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {transfer.receiverRole || 'Encarregado de Almoxarifado / Conferente'}
-                </span>
-                <span className="text-[10px] text-slate-500">
-                  Data de Recebimento: {transfer.receivedDate || '_____/_____/2026'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Rodapé Fiscal / Informativo */}
-          <div className="pt-4 text-center text-[10px] text-slate-400 border-t border-slate-200">
-            Documento emitido internamente para controle de logística e conferência de suprimentos entre as filiais da empresa.
-          </div>
+        <div className="p-6 sm:p-8 print:p-0">
+          <TransferRomaneioDocument transfer={transfer} company={company} />
         </div>
-
       </div>
+
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 11mm; }
+          html, body {
+            background: #fff !important;
+            margin: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body * { visibility: hidden; }
+          #printable-transfer-romaneio, #printable-transfer-romaneio * { visibility: visible; }
+          #printable-transfer-romaneio {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            background: #fff !important;
+          }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+        }
+      `}</style>
     </div>
   );
 };
