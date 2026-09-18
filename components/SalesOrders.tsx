@@ -32,9 +32,15 @@ import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
 import {
   DEFAULT_PRODUCT_SHEET,
-  inventoryProductCode,
+  OrderLineDraft,
+  buildItemsFromDrafts,
+  lineDraftSubtotal,
+  newOrderLineDraft,
+  orderItemsToDrafts,
   productSheetFromInventory,
-  sellableInventoryItems
+  resolveInventoryProduct,
+  sellableInventoryItems,
+  sumLineDrafts
 } from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -222,12 +228,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const customerDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [selectedProductId, setSelectedProductId] = useState('moido');
-  const [productLineDescription, setProductLineDescription] = useState('');
+  const [lineItems, setLineItems] = useState<OrderLineDraft[]>(() => [newOrderLineDraft([])]);
   const [productSheetTitle, setProductSheetTitle] = useState(DEFAULT_PRODUCT_SHEET.title);
   const [productSheetBody, setProductSheetBody] = useState(DEFAULT_PRODUCT_SHEET.body);
-  const [quantity, setQuantity] = useState('');
-  const [unitPrice, setUnitPrice] = useState('180');
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(isQuotesView);
@@ -246,9 +249,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const formatBRL = (val?: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  const subtotalValue = useMemo(() => {
-    return (parseFloat(quantity) || 0) * (parseFloat(unitPrice) || 0);
-  }, [quantity, unitPrice]);
+  const subtotalValue = useMemo(() => sumLineDrafts(lineItems), [lineItems]);
 
   const totalOrderValue = useMemo(() => {
     return subtotalValue - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0);
@@ -307,26 +308,43 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     customers.find(c => c.id === selectedCustomerId), 
   [customers, selectedCustomerId]);
 
-  const selectedProduct = useMemo(
-    () => sellableProducts.find(p => p.id === selectedProductId) || sellableProducts[0],
-    [sellableProducts, selectedProductId]
-  );
+  const updateLineItem = (lineId: string, patch: Partial<OrderLineDraft>) => {
+    setLineItems(prev => prev.map(line => (line.lineId === lineId ? { ...line, ...patch } : line)));
+  };
 
-  const applyProductDefaults = (prod: InventoryItem) => {
+  const handleLineProductChange = (lineId: string, productId: string) => {
+    const prod = resolveInventoryProduct(productId, sellableProducts, inventory);
+    updateLineItem(lineId, {
+      productId,
+      productDescription: prod?.name || '',
+      unitPrice: String(Number(prod?.unitPrice) || 0)
+    });
+  };
+
+  const addLineItem = () => {
+    setLineItems(prev => [...prev, newOrderLineDraft(sellableProducts)]);
+  };
+
+  const removeLineItem = (lineId: string) => {
+    setLineItems(prev => (prev.length <= 1 ? prev : prev.filter(l => l.lineId !== lineId)));
+  };
+
+  const applyProductSheetFromLine = (lineId: string) => {
+    const line = lineItems.find(l => l.lineId === lineId) || lineItems[0];
+    if (!line) return;
+    const prod = resolveInventoryProduct(line.productId, sellableProducts, inventory);
     const sheet = productSheetFromInventory(prod);
     setProductSheetTitle(sheet.title);
     setProductSheetBody(sheet.body);
-    setProductLineDescription(prod.name);
-    if (!quantity || parseFloat(quantity) <= 0) {
-      setUnitPrice(String(Number(prod.unitPrice) || 180));
-    }
   };
 
-  const handleSelectProduct = (productId: string) => {
-    setSelectedProductId(productId);
-    const prod = sellableProducts.find(p => p.id === productId);
-    if (prod) applyProductDefaults(prod);
-  };
+  const hasValidLineItems = useMemo(
+    () =>
+      lineItems.some(
+        l => (parseFloat(l.quantity) || 0) > 0 && (parseFloat(l.unitPrice) || 0) > 0
+      ),
+    [lineItems]
+  );
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -343,16 +361,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setSelectedCustomerId(String(editingOrder.customerId || ''));
       const cust = customers.find(c => c.id === editingOrder.customerId);
       setCustomerSearch(cust?.name || '');
-      const firstItem = (Array.isArray(editingOrder.items) ? editingOrder.items : [])[0];
-      const prodId = firstItem?.productId ? String(firstItem.productId) : 'moido';
-      setSelectedProductId(prodId);
-      setProductLineDescription(
-        firstItem?.productDescription?.trim() || firstItem?.productName || ''
-      );
+      const drafts = orderItemsToDrafts(editingOrder.items);
+      setLineItems(drafts.length ? drafts : [newOrderLineDraft(sellableProducts)]);
       setProductSheetTitle(editingOrder.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title);
       setProductSheetBody(editingOrder.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body);
-      setQuantity(firstItem != null ? String(Number(firstItem.quantity) || 0) : '');
-      setUnitPrice(firstItem != null ? String(Number(firstItem.unitPrice) || 0) : '180');
       setDiscount(String(Number(editingOrder.discount) || 0));
       setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
@@ -376,7 +388,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setPayments([]);
       setDownPayment('0');
     }
-  }, [editingOrder, customers, accounts]);
+  }, [editingOrder, customers, accounts, sellableProducts]);
 
   const addPaymentRow = () => {
     const newPayment: SalePayment = {
@@ -422,32 +434,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
-    const prod =
-      sellableProducts.find(i => i.id === selectedProductId) ||
-      inventory.find(i => i.id === selectedProductId) ||
-      sellableProducts[0];
-    const prodIndex = sellableProducts.findIndex(i => i.id === prod?.id);
-    const isInter = selectedCustomer?.state && selectedCustomer.state !== 'PA';
-    const lineDescription = productLineDescription.trim() || prod?.name || 'Produto';
-    const itemData = {
-      productId: String(prod?.id || selectedProductId || 'moido'),
-      productCode: prod ? inventoryProductCode(prod, prodIndex >= 0 ? prodIndex : 0) : '001',
-      productName: prod?.name || lineDescription,
-      productDescription: lineDescription,
-      unit: (prod?.unit || 'TON').toUpperCase(),
-      quantity: parseFloat(quantity) || 1,
-      unitPrice: parseFloat(unitPrice) || 0,
-      discount: 0,
-      total: subtotalValue,
-      ncm: prod?.ncm || '2517.10.00',
-      cfop: prod?.cfop || (isInter ? '6101' : '5101'),
-      cst: prod?.cst || '102',
-      cClassTrib: prod?.cClassTrib,
-      aliquotaIbs: prod?.aliquotaIbs,
-      aliquotaCbs: prod?.aliquotaCbs,
-      aliquotaIs: prod?.aliquotaIs,
-      informacoesComplementares: prod?.informacoesComplementares
-    };
+    const isInter = Boolean(selectedCustomer?.state && selectedCustomer.state !== 'PA');
+    const builtItems = buildItemsFromDrafts(lineItems, sellableProducts, inventory, isInter);
+    if (!builtItems.length) {
+      alert('Informe ao menos um item com quantidade e preço unitário válidos.');
+      return;
+    }
+    const itemsSubtotal = builtItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
 
     // Cria recibo de entrada se houver valor de entrada
     const generatedReceipts: PaymentReceipt[] = editingOrder?.receipts || [];
@@ -484,16 +477,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       date: editingOrder?.date || new Date().toISOString().split('T')[0],
       deliveryDate: new Date().toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-      subtotal: subtotalValue,
+      subtotal: itemsSubtotal,
       discount: parseFloat(discount) || 0,
       shipping: parseFloat(shipping) || 0,
-      total: totalOrderValue,
+      total: itemsSubtotal - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0),
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
       isBarter: isBarter,
       barterCommodityType: isBarter ? barterCommodityType : undefined,
       cornTons: isBarter ? grainTonsEquivalent : undefined,
       cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
-      items: [itemData],
+      items: builtItems,
       productSheetTitle: productSheetTitle.trim() || DEFAULT_PRODUCT_SHEET.title,
       productSheetBody: productSheetBody.trim() || DEFAULT_PRODUCT_SHEET.body,
       payments: payments,
@@ -531,8 +524,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCurrentStep(1);
     setSelectedCustomerId('');
     setCustomerSearch('');
-    setQuantity('');
-    setUnitPrice('180');
     setDiscount('0');
     setShipping('0');
     setIsBudget(isQuotesView);
@@ -542,19 +533,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setCornPricePerTon('1100');
     setDownPayment('0');
     setPayments([]);
-    const defaultProd = sellableProducts.find(p => p.id === 'moido') || sellableProducts[0];
-    setSelectedProductId(defaultProd?.id || 'moido');
-    if (defaultProd) {
-      const sheet = productSheetFromInventory(defaultProd);
-      setProductSheetTitle(sheet.title);
-      setProductSheetBody(sheet.body);
-      setProductLineDescription(defaultProd.name);
-      setUnitPrice(String(Number(defaultProd.unitPrice) || 180));
-    } else {
-      setProductSheetTitle(DEFAULT_PRODUCT_SHEET.title);
-      setProductSheetBody(DEFAULT_PRODUCT_SHEET.body);
-      setProductLineDescription('');
-    }
+    const defaultLine = newOrderLineDraft(sellableProducts, 'moido');
+    setLineItems([defaultLine]);
+    const defaultProd = resolveInventoryProduct(defaultLine.productId, sellableProducts, inventory);
+    const sheet = productSheetFromInventory(defaultProd);
+    setProductSheetTitle(sheet.title);
+    setProductSheetBody(sheet.body);
   };
 
   const openNewOrder = () => {
@@ -569,12 +553,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         alert("Por favor, selecione um cliente da lista antes de avançar.");
         return;
       }
-      if (!quantity || parseFloat(quantity) <= 0) {
-        alert("Por favor, informe a quantidade de calcário em toneladas.");
-        return;
-      }
-      if (!unitPrice || parseFloat(unitPrice) <= 0) {
-        alert("Por favor, informe o preço unitário por tonelada.");
+      if (!hasValidLineItems) {
+        alert('Adicione ao menos um item com quantidade e preço unitário válidos.');
         return;
       }
       setCurrentStep(2);
@@ -1291,7 +1271,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                    if (selectedCustomerId && hasValidLineItems) {
                       setCurrentStep(2);
                     }
                   }}
@@ -1322,7 +1302,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedCustomerId && parseFloat(quantity) > 0) {
+                    if (selectedCustomerId && hasValidLineItems) {
                       setCurrentStep(3);
                     }
                   }}
@@ -1474,52 +1454,119 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     )}
                   </div>
 
-                  {/* Produto, volume e preço */}
+                  {/* Itens do pedido (multi-produto) */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Package size={14} /> Produto & Quantidade
+                        <Package size={14} /> Itens do pedido ({lineItems.length})
                       </span>
-                      {selectedProduct && (
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          Estoque: {Number(selectedProduct.quantity).toLocaleString('pt-BR')} {selectedProduct.unit || 'TON'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Produto do pedido *</label>
-                      <select
-                        value={selectedProductId}
-                        onChange={e => handleSelectProduct(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm"
+                      <button
+                        type="button"
+                        onClick={addLineItem}
+                        className="text-[11px] font-black text-purple-700 hover:text-purple-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200"
                       >
-                        {sellableProducts.length === 0 ? (
-                          <option value="moido">Calcário (cadastre produtos no estoque)</option>
-                        ) : (
-                          sellableProducts.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} — {formatBRL(p.unitPrice)}/{p.unit || 'TON'}
-                            </option>
-                          ))
-                        )}
-                      </select>
+                        <Plus size={14} /> Adicionar produto
+                      </button>
                     </div>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Descrição na tabela do pedido impresso</label>
-                      <input
-                        type="text"
-                        value={productLineDescription}
-                        onChange={e => setProductLineDescription(e.target.value)}
-                        placeholder={selectedProduct?.name || 'Ex.: Calcário Agrícola Dolomítico (Granel)'}
-                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm"
-                      />
+                    <div className="space-y-3 max-h-[min(42vh,420px)] overflow-y-auto custom-scrollbar pr-1">
+                      {lineItems.map((line, lineIndex) => {
+                        const lineProd = resolveInventoryProduct(line.productId, sellableProducts, inventory);
+                        const lineTotal = lineDraftSubtotal(line);
+                        return (
+                          <div
+                            key={line.lineId}
+                            className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-sm"
+                          >
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Item {String(lineIndex + 1).padStart(2, '0')}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-emerald-700">{formatBRL(lineTotal)}</span>
+                                {lineItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLineItem(line.lineId)}
+                                    className="p-1 text-slate-400 hover:text-rose-600"
+                                    title="Remover item"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Produto *</label>
+                              <select
+                                value={line.productId}
+                                onChange={e => handleLineProductChange(line.lineId, e.target.value)}
+                                className="w-full p-2 bg-white border border-slate-300 rounded-lg outline-none font-bold text-xs"
+                              >
+                                {sellableProducts.length === 0 ? (
+                                  <option value="moido">Cadastre produtos no estoque</option>
+                                ) : (
+                                  sellableProducts.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} — {formatBRL(p.unitPrice)}/{p.unit || 'TON'}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                              {lineProd && (
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  Estoque: {Number(lineProd.quantity).toLocaleString('pt-BR')} {lineProd.unit || 'TON'}
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Descrição no PDF</label>
+                              <input
+                                type="text"
+                                value={line.productDescription}
+                                onChange={e => updateLineItem(line.lineId, { productDescription: e.target.value })}
+                                placeholder={lineProd?.name || 'Descrição na tabela impressa'}
+                                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                  Qtd. ({lineProd?.unit || 'TON'})
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.quantity}
+                                  onChange={e => updateLineItem(line.lineId, { quantity: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                  Preço / {lineProd?.unit || 'TON'}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={line.unitPrice}
+                                  onChange={e => updateLineItem(line.lineId, { unitPrice: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
                       <p className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
-                        Informações do produto no PDF (caixa técnica)
+                        Caixa técnica no PDF (geral do pedido)
                       </p>
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 block mb-1">Título</label>
@@ -1535,51 +1582,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <textarea
                           value={productSheetBody}
                           onChange={e => setProductSheetBody(e.target.value)}
-                          rows={4}
+                          rows={3}
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium resize-y"
-                          placeholder={'PRNT mínimo garantido: 80%\nMgO mínimo garantido: 14%'}
                         />
                       </div>
-                      {selectedProduct && (
+                      {lineItems[0] && (
                         <button
                           type="button"
-                          onClick={() => applyProductDefaults(selectedProduct)}
+                          onClick={() => applyProductSheetFromLine(lineItems[0].lineId)}
                           className="text-[10px] font-bold text-purple-700 hover:text-purple-900"
                         >
-                          Restaurar texto padrão do cadastro de estoque
+                          Usar ficha padrão do 1º item
                         </button>
                       )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          Quantidade ({selectedProduct?.unit || 'TON'}) *
-                        </label>
-                        <input 
-                          required 
-                          type="number" 
-                          step="0.1" 
-                          value={quantity} 
-                          onChange={e => setQuantity(e.target.value)} 
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
-                          placeholder="Ex: 50.0" 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">
-                          Preço unitário (R$ / {selectedProduct?.unit || 'TON'}) *
-                        </label>
-                        <input 
-                          required 
-                          type="number" 
-                          step="0.01" 
-                          value={unitPrice} 
-                          onChange={e => setUnitPrice(e.target.value)} 
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-bold text-sm" 
-                          placeholder="180.00" 
-                        />
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -1671,7 +1686,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center text-xs">
                     <div className="space-y-0.5">
                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Subtotal Líquido</p>
-                      <p className="font-bold">{parseFloat(quantity) || 0} TON @ {formatBRL(parseFloat(unitPrice) || 0)}</p>
+                      <p className="font-bold">{lineItems.length} item(ns) • Subtotal {formatBRL(subtotalValue)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total do Documento</p>
@@ -1891,26 +1906,39 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         Alterar
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                      <div className="sm:col-span-2">
-                        <span className="text-[10px] text-slate-400 font-bold">PRODUTO</span>
-                        <p className="font-bold text-slate-900 text-sm">{productLineDescription || selectedProduct?.name || '—'}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">VOLUME</span>
-                        <p className="font-bold text-slate-900">{quantity} {selectedProduct?.unit || 'TON'}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">PREÇO / {selectedProduct?.unit || 'TON'}</span>
-                        <p className="font-bold text-slate-900">{formatBRL(parseFloat(unitPrice) || 0)}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
-                        <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
-                        <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
+                    <div className="space-y-2 pt-1">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Itens</span>
+                      <ul className="space-y-1.5">
+                        {lineItems.map((line, idx) => {
+                          const prod = resolveInventoryProduct(line.productId, sellableProducts, inventory);
+                          const qty = parseFloat(line.quantity) || 0;
+                          if (qty <= 0) return null;
+                          return (
+                            <li key={line.lineId} className="flex justify-between gap-2 text-[11px] border-b border-slate-100 pb-1">
+                              <span className="font-medium text-slate-800">
+                                {String(idx + 1).padStart(2, '0')} — {line.productDescription || prod?.name || 'Produto'}{' '}
+                                <span className="text-slate-500">
+                                  ({qty} {prod?.unit || 'TON'} × {formatBRL(parseFloat(line.unitPrice) || 0)})
+                                </span>
+                              </span>
+                              <span className="font-bold shrink-0">{formatBRL(lineDraftSubtotal(line))}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">SUBTOTAL</span>
+                          <p className="font-bold text-slate-900">{formatBRL(subtotalValue)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
+                          <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
+                          <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
+                        </div>
                       </div>
                     </div>
                   </div>

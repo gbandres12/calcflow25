@@ -39,8 +39,16 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
   ].filter(Boolean);
   const phones = [brand?.telefoneEmitente, company.phone].filter(Boolean);
   const items = order.items || [];
-  const sheetTitle = order.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title;
-  const sheetLines = (order.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body).split('\n').filter(Boolean);
+  const multiItem = items.length > 1;
+  const sheetTitle =
+    order.productSheetTitle?.trim() ||
+    (multiItem ? 'Informações complementares do pedido' : DEFAULT_PRODUCT_SHEET.title);
+  const sheetLines = (
+    order.productSheetBody?.trim() ||
+    (multiItem ? 'Consulte a tabela de itens acima para descrição de cada produto.' : DEFAULT_PRODUCT_SHEET.body)
+  )
+    .split('\n')
+    .filter(Boolean);
 
   return (
     <article id="printable-sales-order" className="bg-white" style={{ fontFamily: SO.font, color: SO.text }}>
