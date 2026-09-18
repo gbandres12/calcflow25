@@ -6,6 +6,8 @@ import {
   remainingQuantityByProduct,
   saleItemKey,
   upsertLinkedNfe,
+  listDraftNfes,
+  isDraftNfe,
 } from './saleNfe';
 import { OrderStatus, SaleOrder } from '../types';
 
@@ -61,5 +63,24 @@ if (baseOrderReference(avulsaExternalRef('PED-2026-0001', 'nfa-1')) !== 'PED-202
 const patched = applyNfeStatusPatch(withAvulsa, { nfeStatus: 'cancelada', nfeChave: '3510' }, { invoiceId: 'inv-av-1' });
 if (patched.nfes?.[0].nfeStatus !== 'cancelada') throw new Error('Webhook avulsa nao atualizou nfes[]');
 if (patched.nfeStatus === 'cancelada') throw new Error('Webhook avulsa nao pode cancelar o header do pedido');
+
+const withDraft = upsertLinkedNfe(order, {
+  id: 'nfp-draft-1',
+  tipo: 'pedido',
+  reference: order.reference,
+  items: order.items,
+  subtotal: order.subtotal,
+  discount: 0,
+  shipping: 0,
+  total: order.total,
+  nfeStatus: 'rascunho',
+  nfeNaturezaOperacao: 'Venda',
+  createdAt: '2026-09-18T12:00:00.000Z',
+});
+if (!isDraftNfe(withDraft.nfes![0])) throw new Error('Draft nao marcado como rascunho');
+if (listDraftNfes(withDraft).length !== 1) throw new Error('listDraftNfes falhou');
+const draftInvoiced = invoicedQuantityByProduct(withDraft).get(saleItemKey(order.items[0])) || 0;
+if (draftInvoiced !== 0) throw new Error(`Rascunho nao pode faturar qty, veio ${draftInvoiced}`);
+if (withDraft.nfeStatus !== 'rascunho') throw new Error('Header deveria ficar rascunho no pedido');
 
 console.log('saleNfe.selftest ok');

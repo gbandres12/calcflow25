@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { SaleOrder, SaleOrderItem, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
+import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
@@ -14,7 +14,7 @@ import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
   Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings,
-  Edit3, Save, Search, RefreshCw, Key, Check, Database
+  Edit3, Save, Search, RefreshCw, Key, Check, Database, Eye, ArrowLeft
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
@@ -28,6 +28,12 @@ interface EmitirNfeModalProps {
   company: Company;
   onClose: () => void;
   onSuccess: (updatedOrder: SaleOrder) => void;
+  /** Chamado ao salvar rascunho (sem transmitir à SEFAZ). */
+  onDraftSaved?: (updatedOrder: SaleOrder) => void;
+  /** Rascunho existente para reabrir, revisar e emitir. */
+  draftNfe?: SaleOrderLinkedNfe;
+  /** Abre direto na prévia de revisão (ex.: ao continuar um rascunho). */
+  initialStep?: 'edit' | 'preview';
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   devolutionChave?: string;
@@ -42,6 +48,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   company,
   onClose,
   onSuccess,
+  onDraftSaved,
+  draftNfe,
+  initialStep,
   transportadores = [],
   onAddTransportador,
   devolutionChave,
@@ -56,7 +65,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [draftSavedMsg, setDraftSavedMsg] = useState<string | null>(null);
   const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
   const [quickApiKey, setQuickApiKey] = useState(config.apiKey || '');
   const [isSavingKey, setIsSavingKey] = useState(false);
@@ -64,6 +75,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [cepFeedback, setCepFeedback] = useState<string | null>(null);
   const [showDatabaseModal, setShowDatabaseModal] = useState(false);
+  const [step, setStep] = useState<'edit' | 'preview'>(
+    initialStep || (draftNfe?.nfeStatus === 'rascunho' ? 'preview' : 'edit')
+  );
+  const [draftLinkedId, setDraftLinkedId] = useState<string | null>(draftNfe?.id || null);
 
   useEffect(() => {
     setActiveCustomer(normalizeCustomer(customer, order.customerId));
@@ -81,20 +96,26 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
 
   // Itens com CFOP e CST editáveis. Na avulsa, quantidade limitada ao saldo não faturado.
+  // Se houver rascunho, hidrata a partir dele (sem precisar preencher de novo).
   const [items, setItems] = useState<(SaleOrderItem & { maxQuantity?: number })[]>(() => {
     const remaining = remainingQuantityByProduct(order);
     const useRemaining = !isDevolucao && !isTransferencia;
-    return orderItems.map((it) => {
+    const sourceItems = draftNfe?.items?.length ? draftNfe.items : orderItems;
+    return sourceItems.map((it) => {
       const rem = remaining.get(saleItemKey(it));
-      const qty = useRemaining ? (rem ?? it.quantity) : it.quantity;
+      const qty = draftNfe?.items?.length
+        ? Number(it.quantity) || 0
+        : (useRemaining ? (rem ?? it.quantity) : it.quantity);
       const ratio = it.quantity ? qty / it.quantity : 1;
-      const discount = (Number(it.discount) || 0) * ratio;
+      const discount = draftNfe?.items?.length
+        ? (Number(it.discount) || 0)
+        : (Number(it.discount) || 0) * ratio;
       const unitPrice = Number(it.unitPrice) || 0;
       return {
         ...it,
         quantity: qty,
         discount,
-        total: Math.max(0, qty * unitPrice - discount),
+        total: Math.max(0, Number(it.total) || (qty * unitPrice - discount)),
         maxQuantity: rem ?? it.quantity,
         cfop: it.cfop || cfopSugerido,
         cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
@@ -103,13 +124,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   });
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
-    order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
+    draftNfe?.nfeNaturezaOperacao
+      || order.nfeNaturezaOperacao
+      || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
 
   // Frete / transporte (modFrete SEFAZ): sem frete (9) · CIF remetente (0) · FOB destinatário (1) · 2/3/4
   const [frete, setFrete] = useState<FreteInfo>(() => {
+    if (draftNfe?.frete) return { ...draftNfe.frete };
     if (order.frete) return { ...order.frete };
-    const shippingVal = Number(order.shipping) || 0;
+    const shippingVal = Number(draftNfe?.shipping ?? order.shipping) || 0;
     return {
       modalidade: shippingVal > 0 ? 0 : 9,
       valor: shippingVal > 0 ? shippingVal : 0,
@@ -126,11 +150,15 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const itemsSubtotal = useMemo(() => items.reduce((acc, it) => acc + (Number(it.total) || 0), 0), [items]);
   const discountEfetivo = useMemo(() => {
+    if (draftNfe && Number.isFinite(Number(draftNfe.discount))) {
+      // Mantém desconto do rascunho quando a composição dos itens não mudou de forma proporcional óbvia
+      if (isDevolucao || isTransferencia) return Number(draftNfe.discount) || 0;
+    }
     if (isDevolucao || isTransferencia) return Number(order.discount) || 0;
     const origSub = Number(order.subtotal) || 0;
-    if (origSub <= 0) return Number(order.discount) || 0;
+    if (origSub <= 0) return Number(draftNfe?.discount ?? order.discount) || 0;
     return (Number(order.discount) || 0) * (itemsSubtotal / origSub);
-  }, [isDevolucao, isTransferencia, order.discount, order.subtotal, itemsSubtotal]);
+  }, [draftNfe, isDevolucao, isTransferencia, order.discount, order.subtotal, itemsSubtotal]);
 
   const totalComFrete = useMemo(() => {
     return Math.max(0, itemsSubtotal - discountEfetivo + freteValorEfetivo);
@@ -140,7 +168,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const productComplementares = orderItems
     .map(it => it.informacoesComplementares)
     .filter((txt): txt is string => Boolean(txt && txt.trim()));
-  const initialInfCpl = order.nfeInfCpl || [
+  const initialInfCpl = draftNfe?.nfeInfCpl || order.nfeInfCpl || [
     config.observacoesFiscaisPadrao,
     ...Array.from(new Set(productComplementares))
   ].filter(Boolean).join(' | ');
@@ -254,6 +282,127 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     }
   };
 
+  const resolveTipo = (): 'pedido' | 'avulsa' | 'devolucao' | 'transferencia' =>
+    isDevolucao ? 'devolucao' : isTransferencia ? 'transferencia' : isAvulsa ? 'avulsa' : 'pedido';
+
+  const buildOrderWithEdits = (emitItems: SaleOrderItem[], linkedId: string, referenciaExterna: string): SaleOrder => ({
+    ...order,
+    items: emitItems,
+    discount: discountEfetivo,
+    shipping: freteValorEfetivo,
+    total: totalComFrete,
+    subtotal: itemsSubtotal,
+    frete: {
+      ...frete,
+      modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
+      valor: freteValorEfetivo,
+    },
+    nfeNaturezaOperacao: naturezaOperacao,
+    nfeInfCpl: infCpl,
+    nfeReferenciaExterna: referenciaExterna,
+  });
+
+  const persistDraft = (): SaleOrder | null => {
+    const emitItems = items.filter((it) => (Number(it.quantity) || 0) > 0);
+    if (emitItems.length === 0) {
+      setErrorMsg('Informe a quantidade de pelo menos um item para salvar o rascunho.');
+      return null;
+    }
+
+    const tipo = resolveTipo();
+    const linkedId = draftLinkedId || newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
+    const referenciaExterna = isAvulsa
+      ? avulsaExternalRef(order.reference, linkedId)
+      : (order.nfeReferenciaExterna || order.reference);
+    const orderWithEdits = buildOrderWithEdits(emitItems, linkedId, referenciaExterna);
+    let payloadSent: any = undefined;
+    try {
+      const opts = isDevolucao
+        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        : isTransferencia
+          ? { transferencia: true }
+          : undefined;
+      payloadSent = fiscalService.montarPayloadNotaAs(orderWithEdits, activeCustomer, currentConfig, opts);
+    } catch {
+      // Rascunho pode ser salvo mesmo com payload incompleto
+      payloadSent = undefined;
+    }
+
+    const linked = buildLinkedNfe({
+      id: linkedId,
+      tipo,
+      reference: referenciaExterna,
+      order: orderWithEdits,
+      items: emitItems,
+      subtotal: itemsSubtotal,
+      discount: discountEfetivo,
+      shipping: freteValorEfetivo,
+      total: totalComFrete,
+      nfeStatus: 'rascunho',
+      nfeNaturezaOperacao: naturezaOperacao,
+      nfeInfCpl: infCpl,
+      nfePayload: payloadSent,
+      nfeErro: undefined,
+    });
+
+    const sourceKeepItems: SaleOrder = {
+      ...order,
+      nfePayload: isAvulsa ? order.nfePayload : payloadSent,
+    };
+    const updatedOrder = upsertLinkedNfe(
+      isAvulsa
+        ? sourceKeepItems
+        : {
+            ...sourceKeepItems,
+            items: order.items,
+            subtotal: order.subtotal,
+            discount: order.discount,
+            shipping: order.shipping,
+            total: order.total,
+            frete: orderWithEdits.frete,
+          },
+      linked
+    );
+
+    setDraftLinkedId(linkedId);
+    return updatedOrder;
+  };
+
+  const handleSalvarRascunho = async () => {
+    if (savingDraft || loading) return;
+    setSavingDraft(true);
+    setErrorMsg(null);
+    setDraftSavedMsg(null);
+    try {
+      const updated = persistDraft();
+      if (!updated) return;
+      if (onDraftSaved) onDraftSaved(updated);
+      else onSuccess(updated);
+      setDraftSavedMsg('Rascunho salvo. Você pode revisar a prévia e emitir depois sem preencher de novo.');
+      setTimeout(() => setDraftSavedMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Não foi possível salvar o rascunho.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleIrParaPrevia = () => {
+    const emitItems = items.filter((it) => (Number(it.quantity) || 0) > 0);
+    if (emitItems.length === 0) {
+      setErrorMsg('Informe a quantidade de pelo menos um item para revisar a prévia.');
+      return;
+    }
+    setErrorMsg(null);
+    // Persiste automaticamente ao ir para a prévia, sem fechar o modal
+    const updated = persistDraft();
+    if (updated) {
+      if (onDraftSaved) onDraftSaved(updated);
+      else onSuccess(updated);
+    }
+    setStep('preview');
+  };
+
   const handleEmitir = async () => {
     if (isSubmittingRef.current || loading) {
       console.warn('⚠️ [EMISSÃO] Ação em processamento...');
@@ -273,27 +422,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         return;
       }
 
-      const linkedId = newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
+      // Reutiliza o id do rascunho para não criar nota duplicada no pedido
+      const linkedId = draftLinkedId || newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
       const referenciaExterna = isAvulsa
         ? avulsaExternalRef(order.reference, linkedId)
         : (order.nfeReferenciaExterna || order.reference);
 
-      const orderWithEdits: SaleOrder = {
-        ...order,
-        items: emitItems,
-        discount: discountEfetivo,
-        shipping: freteValorEfetivo,
-        total: totalComFrete,
-        subtotal: itemsSubtotal,
-        frete: {
-          ...frete,
-          modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
-          valor: freteValorEfetivo,
-        },
-        nfeNaturezaOperacao: naturezaOperacao,
-        nfeInfCpl: infCpl,
-        nfeReferenciaExterna: referenciaExterna,
-      };
+      const orderWithEdits = buildOrderWithEdits(emitItems, linkedId, referenciaExterna);
 
       const opts = isDevolucao
         ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
@@ -311,7 +446,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       );
 
       if (result.success || result.nfeId) {
-        const tipo = isDevolucao ? 'devolucao' : isTransferencia ? 'transferencia' : isAvulsa ? 'avulsa' : 'pedido';
+        const tipo = resolveTipo();
         let resultFields = {
           nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
@@ -385,6 +520,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   };
 
   const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
+  const isPreview = step === 'preview';
+  const freteLabel = FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.sigla || 'Sem frete';
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
@@ -399,8 +536,15 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight">
-                  {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : isAvulsa ? 'NF-e avulsa desta venda' : 'Emissão de NF-e Eletrônica'}
+                  {isPreview
+                    ? 'Prévia do rascunho da NF-e'
+                    : isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : isAvulsa ? 'NF-e avulsa desta venda' : 'Emissão de NF-e Eletrônica'}
                 </h3>
+                {(draftLinkedId || draftNfe) && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                    Rascunho
+                  </span>
+                )}
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                   currentConfig.environment === 'production' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                 }`}>
@@ -413,6 +557,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
                 Pedido <b>{order.reference}</b>
                 {isAvulsa ? ' · parcial, sem substituir a NF-e do pedido completo' : ''}
+                {isPreview ? ' · revise os dados antes de transmitir' : ''}
                 {' '}| Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
               </p>
             </div>
@@ -424,6 +569,117 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
         {/* Conteúdo com Scroll */}
         <div className="p-3 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto overscroll-contain flex-1 min-h-0">
+
+          {isPreview ? (
+            <>
+              <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                validation.valid ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
+              }`}>
+                {validation.valid ? (
+                  <CheckCircle2 className="text-emerald-600 mt-0.5 shrink-0" size={18} />
+                ) : (
+                  <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={18} />
+                )}
+                <div className="text-xs space-y-1 flex-1">
+                  <p className="font-black uppercase tracking-wider text-[10px]">
+                    {validation.valid ? 'Prévia pronta para transmissão' : 'Pendências na prévia — corrija antes de emitir'}
+                  </p>
+                  {validation.valid ? (
+                    <p className="text-slate-600">
+                      Confira destinatário, itens, CFOP/CST, frete e totais. Ao confirmar, a nota será transmitida à SEFAZ com os dados já salvos no rascunho.
+                    </p>
+                  ) : (
+                    <ul className="list-disc pl-4 space-y-0.5 text-rose-700 font-medium">
+                      {validation.errors.map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <Building size={12} /> Destinatário
+                  </p>
+                  <p className="font-black text-slate-800">{activeCustomer.name}</p>
+                  <p className="text-slate-600 font-mono">{activeCustomer.document}</p>
+                  <p className="text-slate-500">
+                    {[activeCustomer.street, activeCustomer.number, activeCustomer.neighborhood, activeCustomer.city, activeCustomer.state]
+                      .filter(Boolean).join(', ')}
+                  </p>
+                </div>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                    <FileText size={12} /> Operação
+                  </p>
+                  <p className="font-bold text-slate-800">{naturezaOperacao}</p>
+                  <p className="text-slate-600">Frete: <b>{freteLabel}</b> · {formatBRL(freteValorEfetivo)}</p>
+                  {isDevolucao && (
+                    <p className="font-mono text-[10px] text-slate-500 break-all">Chave ref.: {chaveDevolucao || '—'}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
+                    <tr>
+                      <th className="px-4 py-3">Item</th>
+                      <th className="px-3 py-3">NCM</th>
+                      <th className="px-3 py-3">CFOP</th>
+                      <th className="px-3 py-3">CST</th>
+                      <th className="px-3 py-3 text-center">Qtd</th>
+                      <th className="px-4 py-3 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {items.filter((it) => (Number(it.quantity) || 0) > 0).map((it, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-slate-800">{it.productName}</p>
+                          <p className="text-[10px] text-slate-400">{it.productCode}</p>
+                        </td>
+                        <td className="px-3 py-3 font-mono text-slate-600">{it.ncm || '—'}</td>
+                        <td className="px-3 py-3 font-mono font-black text-purple-800">{it.cfop || '—'}</td>
+                        <td className="px-3 py-3 font-mono font-bold text-blue-800">{it.cst || '—'}</td>
+                        <td className="px-3 py-3 text-center font-bold">{it.quantity} {it.unit}</td>
+                        <td className="px-4 py-3 text-right font-black">{formatBRL(it.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {infCpl?.trim() && (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-1">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Informações complementares</p>
+                  <p className="text-slate-700 whitespace-pre-wrap">{infCpl}</p>
+                </div>
+              )}
+
+              <div className="p-4 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Total da prévia · Frete {freteLabel}
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    Produtos: {formatBRL(itemsSubtotal)} | Frete: {formatBRL(freteValorEfetivo)}
+                    {discountEfetivo ? ` | Desc: ${formatBRL(discountEfetivo)}` : ''}
+                  </p>
+                </div>
+                <p className="text-xl font-black text-emerald-400 self-end sm:self-auto">{formatBRL(totalComFrete)}</p>
+              </div>
+
+              {errorMsg && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 font-bold flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" /> {errorMsg}
+                </div>
+              )}
+            </>
+          ) : (
+          <>
           
           {/* Alerta se Chave de API Não Estiver Configurada */}
           {!hasApiKey && (
@@ -886,6 +1142,15 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
           )}
 
+          {draftSavedMsg && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold flex items-center gap-2">
+              <Save size={14} className="text-amber-600 shrink-0" /> {draftSavedMsg}
+            </div>
+          )}
+
+          </>
+          )}
+
         </div>
 
         {/* Footer */}
@@ -897,23 +1162,78 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             Fechar
           </button>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
-              onClick={handleEmitir}
-              className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Transmitindo para a SEFAZ...
-                </>
-              ) : (
-                <>
-                  <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : isAvulsa ? 'Transmitir NF-e Avulsa' : 'Transmitir e Emitir NF-e'}
-                </>
-              )}
-            </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            {isPreview ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStep('edit')}
+                  disabled={loading}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-700 font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl hover:bg-slate-50 transition-all disabled:opacity-50"
+                >
+                  <ArrowLeft size={15} /> Editar rascunho
+                </button>
+                <button
+                  disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
+                  onClick={handleEmitir}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Transmitindo para a SEFAZ...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} /> Confirmar e emitir NF-e
+                    </>
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSalvarRascunho}
+                  disabled={loading || savingDraft || items.length === 0 || totalQuantidade <= 0}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-white border border-amber-300 text-amber-900 font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl hover:bg-amber-50 transition-all disabled:opacity-50"
+                >
+                  {savingDraft ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} /> Salvar rascunho
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleIrParaPrevia}
+                  disabled={loading || savingDraft || items.length === 0 || totalQuantidade <= 0}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-900 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl transition-all disabled:opacity-50"
+                >
+                  <Eye size={15} /> Revisar prévia
+                </button>
+                <button
+                  disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
+                  onClick={handleEmitir}
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Transmitindo para a SEFAZ...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} /> {isDevolucao ? 'Transmitir Devolução' : isTransferencia ? 'Transmitir Transferência' : isAvulsa ? 'Transmitir NF-e Avulsa' : 'Transmitir e Emitir NF-e'}
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
