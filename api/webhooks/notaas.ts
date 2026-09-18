@@ -1,5 +1,7 @@
-import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin';
-import { applyNfeStatusPatch } from '../../services/saleNfe';
+import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin.js';
+import { applyNfeStatusPatch } from '../../services/saleNfe.js';
+
+export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 const STATUS_MAP: Record<string, string> = {
   'invoice.authorized': 'autorizada',

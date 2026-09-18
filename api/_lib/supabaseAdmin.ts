@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { baseOrderReference } from '../../services/saleNfe';
+import { baseOrderReference } from '../../services/saleNfe.js';
 
 let cached: SupabaseClient | null | undefined;
 

@@ -199,11 +199,12 @@ export interface StatusSefazResult {
  */
 
 /** Só marca autorizada se a API fiscal disse issued/autorizada. queued → processando. Nunca mock. */
-export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus {
-  const s = (raw || '').toString().toLowerCase();
-  if (['autorizada', 'issued', 'authorized', 'autorizado'].includes(s)) return 'autorizada';
+export function mapRemoteNfeStatus(raw?: string, httpStatus?: number, cStat?: number): NfeStatus {
+  if (cStat === 100 || cStat === 150) return 'autorizada';
+  const s = (raw || '').toString().toLowerCase().trim();
+  if (['autorizada', 'issued', 'authorized', 'autorizado', 'autorizado_uso'].includes(s)) return 'autorizada';
   if (['cancelada', 'cancelled', 'canceled', 'cancelado'].includes(s)) return 'cancelada';
-  if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao'].includes(s)) return 'rejeitada';
+  if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao', 'inutilized', 'inutilizada'].includes(s)) return 'rejeitada';
   if (
     ['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending', 'queued'].includes(s)
     || httpStatus === 202
@@ -211,17 +212,30 @@ export function mapRemoteNfeStatus(raw?: string, httpStatus?: number): NfeStatus
   return 'rejeitada';
 }
 
-function resolveNfeStatus(rawStatus: string | undefined, httpStatus: number | undefined, _chaveAcesso?: string): NfeStatus {
+function resolveNfeStatus(
+  rawStatus: string | undefined,
+  httpStatus: number | undefined,
+  _chaveAcesso?: string,
+  cStat?: number
+): NfeStatus {
+  if (cStat === 100 || cStat === 150) return 'autorizada';
   if (httpStatus === 202) return 'processando';
-  return mapRemoteNfeStatus(rawStatus, httpStatus);
+  return mapRemoteNfeStatus(rawStatus, httpStatus, cStat);
 }
 
 function unwrapFiscalJson(raw: any): any {
   if (!raw || typeof raw !== 'object') return raw || {};
-  if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
-    return { ...raw, ...raw.data };
+  let next = raw;
+  if (next.data && typeof next.data === 'object' && !Array.isArray(next.data)) {
+    next = { ...next, ...next.data };
   }
-  return raw;
+  if (next.invoice && typeof next.invoice === 'object' && !Array.isArray(next.invoice)) {
+    next = { ...next, ...next.invoice };
+  }
+  if (next.nfe && typeof next.nfe === 'object' && !Array.isArray(next.nfe) && !next.status) {
+    next = { ...next, ...next.nfe };
+  }
+  return next;
 }
 
 export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): SaleOrder {
@@ -272,7 +286,8 @@ export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): 
 function nfeFromStatusPayload(data: any, httpStatus?: number): ConsultarNFeResult {
   const raw = unwrapFiscalJson(data);
   const chaveAcesso = raw.chaveAcesso || raw.chave || raw.nfeKey || '';
-  const st = resolveNfeStatus(raw.status || raw.nfe?.status, httpStatus, chaveAcesso);
+  const cStat = Number(raw.cStat ?? raw.codigoStatus);
+  const st = resolveNfeStatus(raw.status || raw.nfe?.status, httpStatus, chaveAcesso, Number.isFinite(cStat) ? cStat : undefined);
   const invoiceId = raw.invoiceId || raw.id;
   const nNf = raw.nNf ?? raw.numero;
   const nProt = raw.nProt || raw.protocolo || raw.protocol;
@@ -1189,11 +1204,18 @@ export const fiscalService = {
       if (result.status !== 'nao_emitida' || result.nfe) {
         return mergeNfeConsulta(order, result);
       }
+      if (result.error) {
+        return { ...order, nfeErro: result.error };
+      }
     }
-    if (order.reference) {
-      const byRef = await this.consultarPorReferencia(order.reference, config);
+    const ref = (order.nfeReferenciaExterna || order.reference || '').trim();
+    if (ref) {
+      const byRef = await this.consultarPorReferencia(ref, config);
       if (byRef.nfe || (byRef.status && byRef.status !== 'nao_emitida')) {
         return mergeNfeConsulta(order, byRef);
+      }
+      if (byRef.error && !id) {
+        return { ...order, nfeErro: byRef.error };
       }
     }
     return order;

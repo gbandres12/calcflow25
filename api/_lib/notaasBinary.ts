@@ -1,4 +1,4 @@
-import { getFiscalConfigForCompany } from './supabaseAdmin';
+import { getFiscalConfigForCompany } from './supabaseAdmin.js';
 
 export async function resolveNotaasAuth(body: any): Promise<{ key: string; base: string; error?: string }> {
   let key = String(body?.apiKey || process.env.NOTAAS_API_KEY || '').trim();
