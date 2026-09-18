@@ -47,7 +47,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   const labelCls = 'text-[10px] font-black uppercase text-slate-400 tracking-wide';
 
   return (
-    <div className="space-y-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+    <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100 min-w-0">
       <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
         <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
           <Truck size={16} className="text-purple-600" /> Frete & Transporte
@@ -63,7 +63,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
       </div>
 
       {/* Modalidades em cards clicáveis — melhor UX que select puro */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
         {FRETE_MODALIDADES.map((m) => {
           const active = mod === m.value;
           return (
@@ -72,7 +72,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
               type="button"
               onClick={() => update({ modalidade: m.value, valor: m.value === 9 ? 0 : value.valor })}
               title={m.descricao}
-              className={`text-left p-2.5 rounded-2xl border transition-all ${
+              className={`text-left p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all min-w-0 ${
                 active
                   ? 'bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-200'
                   : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50/50'
@@ -145,7 +145,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           <button
             type="button"
             onClick={() => setShowTransportadora(!showTransportadora)}
-            className="w-full flex items-center justify-between text-[11px] font-black uppercase text-slate-600 tracking-wide"
+            className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[10px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
           >
             <span>Transportadora {mod === 0 ? '(contratada pelo remetente — CIF)' : mod === 1 ? '(contratada pelo destinatário — FOB)' : '(opcional)'}</span>
             {showTransportadora ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -240,11 +240,11 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
 
       {/* Veículo + volumes */}
       <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <button
             type="button"
             onClick={() => setShowVolumes(!showVolumes)}
-            className="flex items-center justify-between w-full text-[11px] font-black uppercase text-slate-600 tracking-wide"
+            className="flex items-center justify-between w-full text-left text-[10px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
           >
             <span>Veículo & volumes (pesos)</span>
             {showVolumes ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -254,7 +254,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
               type="button"
               onClick={suggestPeso}
               title="Preencher peso com base na quantidade total dos itens (1 TON = 1000 kg)"
-              className="ml-2 shrink-0 text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg px-2 py-1"
+              className="w-full sm:w-auto sm:ml-2 shrink-0 text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg px-2 py-2 sm:py-1"
             >
               Estimar peso
             </button>
@@ -262,7 +262,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         </div>
 
         {showVolumes && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in fade-in duration-150">
+          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-4 gap-3 animate-in fade-in duration-150">
             <div className="space-y-1">
               <label className={labelCls}>Placa do veículo</label>
               <input
@@ -331,7 +331,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
                 placeholder="0"
               />
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="space-y-1 min-[380px]:col-span-2">
               <label className={labelCls}>Marca / Observação do volume</label>
               <input
                 type="text"

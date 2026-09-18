@@ -272,18 +272,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[150] flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
+      <div className="bg-white w-full max-w-4xl rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col h-[100dvh] sm:h-auto sm:max-h-[92vh]">
         
         {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-100 shrink-0">
+        <div className="p-3.5 sm:p-6 border-b border-slate-100 bg-slate-50/70 flex items-start sm:items-center justify-between gap-2 shrink-0">
+          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="hidden sm:block p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-100 shrink-0">
               <Send size={22} />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">
+                <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight">
                   {isDevolucao ? 'Nota de Devolução (NF-e)' : isTransferencia ? 'NF-e de Transferência de Estoque' : 'Emissão de NF-e Eletrônica'}
                 </h3>
                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
@@ -295,18 +295,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   Transmissão Real ({(currentConfig.apiProvider || 'notaas').toUpperCase()})
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
                 Pedido <b>{order.reference}</b> | Próximo Nº NF-e: <b>{currentConfig.proxNumeroNFe || 1042}</b> (Série {currentConfig.serieNFe || 1})
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
+          <button onClick={onClose} aria-label="Fechar" className="p-2 -mt-1 -mr-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500 shrink-0">
             <X size={20} />
           </button>
         </div>
 
         {/* Conteúdo com Scroll */}
-        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto overscroll-contain flex-1 min-h-0">
           
           {/* Alerta se Chave de API Não Estiver Configurada */}
           {!hasApiKey && (
@@ -320,19 +320,19 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
                 <input
                   type="password"
                   placeholder="Cole sua chave ntaas_..."
                   value={quickApiKey}
                   onChange={(e) => setQuickApiKey(e.target.value)}
-                  className="flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                  className="w-full flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2.5 text-xs font-mono focus:ring-2 focus:ring-purple-500 outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleSaveApiKey}
                   disabled={isSavingKey || !quickApiKey.trim()}
-                  className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition-all disabled:opacity-50"
+                  className="w-full sm:w-auto justify-center px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition-all disabled:opacity-50"
                 >
                   {isSavingKey ? <RefreshCw size={13} className="animate-spin" /> : keySavedSuccess ? <Check size={13} /> : <Save size={13} />}
                   <span>{keySavedSuccess ? 'Salvo!' : 'Salvar Chave'}</span>
@@ -383,7 +383,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             
             {/* Emitente */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                   <Building size={12} /> Emitente
                 </span>
@@ -402,7 +402,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} - ${currentConfig.bairroEmitente || ''}, ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
                   : 'Rodovia Mineral BR-163, Km 42 - Santarém/PA'}
               </p>
-              <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 text-[10px] text-slate-500">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 border-t border-slate-200/60 text-[10px] text-slate-500">
                 <span>Regime: <strong className="text-slate-700">{currentConfig.regimeTributario === '1' ? 'Simples Nacional' : currentConfig.regimeTributario === '2' ? 'Simples Sublimite' : 'Regime Normal'}</strong></span>
                 <span>•</span>
                 <span>Série {currentConfig.serieNFe || 1}</span>
@@ -413,14 +413,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
             {/* Destinatário com Botão de Edição Rápida */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 relative group hover:border-purple-200 transition-colors">
-              <div className="flex items-center justify-between">
+              <div className="flex items-start sm:items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                   <User size={12} /> Destinatário
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsEditingCustomer(!isEditingCustomer)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all border border-purple-200 shadow-xs shrink-0"
                 >
                   <Edit3 size={11} /> {isEditingCustomer ? 'Fechar Edição' : 'Editar Dados Fiscais'}
                 </button>
@@ -437,7 +437,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 </>
               ) : (
                 <div className="pt-2 space-y-2.5 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-[9px] font-black uppercase text-slate-400">CPF / CNPJ</label>
                       <input
@@ -461,7 +461,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="text-[9px] font-black uppercase text-slate-400">CEP</label>
                       <div className="flex gap-1">
@@ -486,7 +486,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                         </button>
                       </div>
                     </div>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <label className="text-[9px] font-black uppercase text-slate-400">Logradouro / Endereço</label>
                       <input
                         type="text"
@@ -498,7 +498,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="text-[9px] font-black uppercase text-slate-400">Número</label>
                       <input
@@ -604,7 +604,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           {/* Itens do Pedido com CFOP e CST EDITÁVEIS */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                 <FileText size={12} /> Itens & Enquadramento Fiscal (CFOP e CST Editáveis)
               </span>
@@ -613,8 +613,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               </span>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs">
+            <p className="sm:hidden text-[9px] text-slate-400 font-medium">Deslize a tabela para o lado para ver todos os campos.</p>
+            <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
+              <table className="w-full min-w-[720px] text-left text-xs">
                 <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
                   <tr>
                     <th className="px-4 py-3">Item</th>
@@ -669,7 +670,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           {/* Informações Complementares Pré-definidas e Editáveis */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                 Informações Complementares da Nota (infCpl)
               </label>
@@ -687,7 +688,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           </div>
 
           {/* Totais do Documento */}
-          <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
+          <div className="p-4 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-0.5">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                 Total da Nota Fiscal (NF-e) · Frete {FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.sigla || 'Sem frete'}
@@ -696,7 +697,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 Produtos: {formatBRL(items.reduce((a, it) => a + (Number(it.total) || 0), 0))} | Frete: {formatBRL(freteValorEfetivo)}{(order.discount || 0) ? ` | Desc: ${formatBRL(order.discount)}` : ''}
               </p>
             </div>
-            <p className="text-xl font-black text-emerald-400">{formatBRL(totalComFrete)}</p>
+            <p className="text-xl font-black text-emerald-400 self-end sm:self-auto">{formatBRL(totalComFrete)}</p>
           </div>
 
           {errorMsg && (
@@ -729,19 +730,19 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-5 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center shrink-0">
+        <div className="p-3 sm:p-6 border-t border-slate-100 bg-white sm:bg-slate-50/50 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={onClose}
-            className="px-6 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
+            className="w-full sm:w-auto px-6 py-2.5 sm:py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
           >
             Fechar
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               disabled={loading || !validation.valid}
               onClick={handleEmitir}
-              className="flex items-center gap-2 px-6 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+              className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
               {loading ? (
                 <>

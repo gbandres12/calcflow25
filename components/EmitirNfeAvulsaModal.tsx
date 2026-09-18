@@ -375,18 +375,18 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[160] flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[160] flex items-stretch sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
+      <div className="bg-white w-full max-w-5xl rounded-none sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col h-[100dvh] sm:h-auto sm:max-h-[92vh]">
         
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-200">
+        <div className="p-3.5 sm:p-6 border-b border-slate-100 bg-slate-50 flex items-start sm:items-center justify-between gap-2 shrink-0">
+          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="hidden sm:block p-3 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-200">
               <FileText size={24} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-lg font-black text-slate-800 tracking-tight leading-tight w-full sm:w-auto">
                   Emissão de Nota Fiscal Avulsa (NF-e Direta)
                 </h3>
                 <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
@@ -398,19 +398,19 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   {config?.environment === 'production' ? 'Produção SEFAZ' : 'Homologação'}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-1 leading-snug">
                 Próximo Nº NF-e: <b>{config?.proxNumeroNFe || 1042}</b> (Série {config?.serieNFe || 1}) | Emitente: <b>{config?.razaoSocial || ''}</b>
               </p>
             </div>
           </div>
 
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400">
+          <button onClick={onClose} aria-label="Fechar" className="p-2 -mt-1 -mr-1 hover:bg-slate-200 rounded-full transition-colors text-slate-500 shrink-0">
             <X size={20} />
           </button>
         </div>
 
         {/* Formulário Principal */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
           
           {/* Status de Validação SEFAZ */}
           <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
@@ -440,16 +440,16 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           </div>
 
           {/* Seção 1: Destinatário */}
-          <div className="space-y-4 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+          <div className="space-y-4 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
               <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
                 <UserIcon size={16} className="text-purple-600" /> 1. Destinatário da NF-e
               </span>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setIsNewCustomer(false)}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${
                     !isNewCustomer ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -461,7 +461,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     setIsNewCustomer(true);
                     setSelectedCustomerId('');
                   }}
-                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${
                     isNewCustomer ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -604,15 +604,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           </div>
 
           {/* Seção 2: Itens da NF-e (com CFOP e CST editáveis) */}
-          <div className="space-y-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+          <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/60 pb-3">
               <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
                 <ShoppingBag size={16} className="text-purple-600" /> 2. Produtos & Enquadramento Fiscal (CFOP / CST Editáveis)
               </span>
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+                className="w-full sm:w-auto justify-center flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
               >
                 <Plus size={14} /> Adicionar Item
               </button>
@@ -620,8 +620,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
             <div className="space-y-3">
               {items.map((it, idx) => (
-                <div key={it.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
+                <div key={it.id} className="p-3 sm:p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
                     <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
                       Item #{idx + 1}
                     </span>
@@ -642,9 +642,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     {/* Produto Selecionável ou Nome */}
-                    <div className="md:col-span-2 space-y-1">
+                    <div className="col-span-2 md:col-span-2 space-y-1">
                       <label className="text-[9px] font-black uppercase text-slate-400">Produto do Catálogo</label>
                       <select
                         value={it.productId}
@@ -704,7 +704,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs pt-1 border-t border-slate-100">
                     <span className="text-[10px] text-slate-400 font-mono">NCM: {it.ncm}</span>
                     <span className="font-black text-slate-800">Total do Item: {formatBRL(it.total)}</span>
                   </div>
@@ -716,7 +716,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           {/* Seção 3: Parâmetros Fiscais e Informações Complementares */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            <div className="space-y-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+            <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
               <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2 border-b border-slate-200/60 pb-2">
                 <CreditCard size={16} className="text-purple-600" /> 3. Parâmetros Fiscais & Pagamento
               </span>
@@ -747,7 +747,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 p-5 bg-slate-50 rounded-3xl border border-slate-100">
+            <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
               <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2 border-b border-slate-200/60 pb-2">
                 <Info size={16} className="text-purple-600" /> 4. Informações Complementares (infCpl)
               </span>
@@ -771,8 +771,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           <FreteNfeSection value={frete} onChange={setFrete} totalQuantidade={totalQuantidade} />
 
           {/* Totais do Documento */}
-          <div className="p-5 bg-slate-900 text-white rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="space-y-0.5 text-center sm:text-left">
+          <div className="p-4 sm:p-5 bg-slate-900 text-white rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-0.5 w-full text-left">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                 Resumo da Nota Fiscal Avulsa
               </span>
@@ -780,7 +780,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 Produtos ({items.length} itens): {formatBRL(subtotal)} | Frete: {formatBRL(shippingVal)}
               </p>
             </div>
-            <div className="text-center sm:text-right">
+            <div className="text-right w-full sm:w-auto">
               <span className="text-[10px] font-bold text-slate-400 uppercase">Valor Total NF-e:</span>
               <p className="text-2xl font-black text-emerald-400">{formatBRL(total)}</p>
             </div>
@@ -795,10 +795,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <div className="p-3 sm:p-6 border-t border-slate-100 bg-white sm:bg-slate-50/50 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             onClick={onClose}
-            className="px-6 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
+            className="w-full sm:w-auto px-6 py-2.5 sm:py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
           >
             Cancelar
           </button>
@@ -806,7 +806,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           <button
             disabled={loading || !validation.valid}
             onClick={handleEmitirAvulsa}
-            className="flex items-center gap-2 px-8 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
+            className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 sm:px-8 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-[11px] sm:text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-purple-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
           >
             {loading ? (
               <>
