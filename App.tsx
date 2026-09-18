@@ -856,9 +856,9 @@ const App: React.FC = () => {
               </button>
 
               <div className="cf-user-chip">
-                <div className="cf-user-avatar">{currentUser.name.split(' (')[0].split(' ').map((part) => part[0]).slice(0, 2).join('')}</div>
+                <div className="cf-user-avatar">{(currentUser.name || 'U').split(' (')[0].split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('') || 'U'}</div>
                 <div className="cf-user-meta hidden sm:block">
-                  <strong>{currentUser.name.split(' (')[0]}</strong>
+                  <strong>{(currentUser.name || 'Usuário').split(' (')[0]}</strong>
                   <span>{currentUser.role}</span>
                 </div>
                 <button

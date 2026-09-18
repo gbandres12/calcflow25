@@ -29,6 +29,8 @@ import { QuickCustomerModal } from './QuickCustomerModal';
 import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
+import { resolveCustomerForOrder } from '../utils/customerUtils';
+import ErrorBoundary from './ErrorBoundary';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -262,7 +264,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
     if (selectedCustomerId) {
       const selected = customers.find(c => c.id === selectedCustomerId);
-      if (selected && selected.name.toLowerCase() === trimmedSearch.toLowerCase()) {
+      if (selected && String(selected.name || '').toLowerCase() === trimmedSearch.toLowerCase()) {
         return customers;
       }
     }
@@ -577,7 +579,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const totalOrdersAmount = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => acc + o.total, 0);
   
   const totalPaidGlobal = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => {
-    const receiptsTotal = (o.receipts || []).reduce((rSum, r) => rSum + r.amount, 0);
+    const receiptsTotal = (o.receipts || []).reduce((rSum, r) => rSum + (Number(r?.amount) || 0), 0);
     return acc + receiptsTotal;
   }, 0);
 
@@ -617,8 +619,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const customer = customers.find(c => c.id === o.customerId);
-      const matchCust = customer?.name.toLowerCase().includes(q) || customer?.document.includes(q);
-      const matchRef = o.reference.toLowerCase().includes(q);
+      const name = String(customer?.name || '').toLowerCase();
+      const doc = String(customer?.document || '').toLowerCase();
+      const ref = String(o.reference || '').toLowerCase();
+      const matchCust = name.includes(q) || doc.includes(q);
+      const matchRef = ref.includes(q);
       const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
       return matchCust || matchRef || matchPaymentStatus;
     }
@@ -2009,9 +2014,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
       {/* Modal de Emissão de NF-e via NotaAs */}
       {orderToEmitNfe && (
+        <ErrorBoundary label="emissão NF-e">
         <EmitirNfeModal
           order={{ ...orderToEmitNfe, companyId: orderToEmitNfe.companyId || companyId || company.id }}
-          customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, orderToEmitNfe.customerId)}
           config={fiscalConfig}
           company={company}
           transportadores={transportadores}
@@ -2031,13 +2037,14 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             setOrderToViewDanfe(updatedOrder);
           }}
         />
+        </ErrorBoundary>
       )}
 
       {/* Modal de Visualização e Impressão de DANFE */}
       {orderToViewDanfe && (
         <DanfeModal
           order={orderToViewDanfe}
-          customer={customers.find(c => c.id === orderToViewDanfe.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, orderToViewDanfe.customerId)}
           config={fiscalConfig}
           company={company}
           onClose={() => setOrderToViewDanfe(null)}
@@ -2070,7 +2077,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {printOrder && (
         <SalesOrderPdfModal
           order={printOrder}
-          customer={customers.find(c => c.id === printOrder.customerId) || customers[0]}
+          customer={resolveCustomerForOrder(customers, printOrder.customerId)}
           company={company}
           onClose={() => setPrintOrder(null)}
         />
