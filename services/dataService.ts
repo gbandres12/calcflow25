@@ -334,10 +334,15 @@ export const db = {
     // 1. Atualizar cache local imediatamente para resposta instantânea
     const current = stripSeedDocs(storage.get(storageKey) || []);
     const normalizedRecords = records.map((newRec) => {
+      // Versões antigas armazenavam hash de senha no perfil. Não permita que um
+      // cache pendente volte a sobrepor a sanitização feita pelo banco.
+      const safeRecord = tableName === 'users'
+        ? Object.fromEntries(Object.entries(newRec).filter(([key]) => key !== 'passwordHash'))
+        : newRec;
       return {
-        ...newRec, 
-        id: String(newRec.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
-        companyId: newRec.companyId || compKey 
+        ...safeRecord,
+        id: String(safeRecord.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
+        companyId: safeRecord.companyId || compKey
       };
     });
     const updated = mergeRecordsById(current, normalizedRecords);
