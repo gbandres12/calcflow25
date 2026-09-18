@@ -691,7 +691,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28 lg:pb-0">
       
       {/* Header Principal */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
@@ -1253,7 +1253,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </>
                     )}
 
-                    {(order.receipts && order.receipts.length > 0) || (order.nfes && order.nfes.length > 0) || (order.withdrawals && order.withdrawals.length > 0) ? (
+                    {(order.receipts && order.receipts.length > 0) || (order.nfes && order.nfes.length > 0) || (order.withdrawals && order.withdrawals.length > 0) || order.status === OrderStatus.FINALIZED ? (
                       <button
                         onClick={() => setSelectedOrderDetails(order)}
                         className="px-3.5 py-2.5 min-h-11 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
@@ -2268,7 +2268,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       <button
         type="button"
         onClick={openNewOrder}
-        className="sm:hidden fixed right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 min-h-12 px-5 bg-emerald-700 text-white rounded-2xl font-bold text-sm shadow-xl inline-flex items-center gap-2"
+        className="sm:hidden fixed right-4 bottom-[5.75rem] z-50 min-h-12 px-5 bg-emerald-700 text-white rounded-2xl font-bold text-sm shadow-xl inline-flex items-center gap-2"
       >
         <Plus size={18} /> {isQuotesView ? 'Novo orçamento' : 'Novo pedido'}
       </button>
