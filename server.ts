@@ -9,6 +9,8 @@ import danfeNfe from "./api/nfe/danfe";
 import xmlNfe from "./api/nfe/xml";
 import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
+import telegramPair from "./api/telegram/pair";
+import telegramWebhook from "./api/telegram/webhook";
 
 async function startServer() {
   const app = express();
@@ -27,6 +29,11 @@ async function startServer() {
   app.get("/api/webhooks/notaas", (req, res) => notaasWebhook(req, res));
   app.post("/api/users/invite", (req, res) => inviteUser(req, res));
   app.delete("/api/users/invite", (req, res) => inviteUser(req, res));
+  app.get("/api/telegram/pair", (req, res) => telegramPair(req, res));
+  app.post("/api/telegram/pair", (req, res) => telegramPair(req, res));
+  app.delete("/api/telegram/pair", (req, res) => telegramPair(req, res));
+  app.get("/api/telegram/webhook", (req, res) => telegramWebhook(req, res));
+  app.post("/api/telegram/webhook", (req, res) => telegramWebhook(req, res));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "Calcário Flow ERP" });
