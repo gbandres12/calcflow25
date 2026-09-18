@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SaleOrder, OrderWithdrawal, Customer, Company } from '../types';
-import { Truck, Printer, X, CheckCircle, Scale, Calendar, User, FileText, Package } from 'lucide-react';
+import { Printer, CheckCircle, Scale } from 'lucide-react';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface OrderWithdrawalModalProps {
   order: SaleOrder;
@@ -30,6 +31,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   const [loadedBy, setLoadedBy] = useState('Balança / Expedição');
   const [notes, setNotes] = useState('');
   const [savedWithdrawal, setSavedWithdrawal] = useState<OrderWithdrawal | null>(null);
+  const [formError, setFormError] = useState('');
 
   const qtyNum = parseFloat(quantity) || 0;
   const newBalance = Math.max(0, remainingToWithdraw - qtyNum);
@@ -37,13 +39,14 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (qtyNum <= 0) {
-      alert('Informe uma quantidade válida de toneladas para retirada.');
+      setFormError('Informe uma quantidade válida de toneladas para retirada.');
       return;
     }
     if (qtyNum > remainingToWithdraw + 0.01) {
-      alert(`Quantidade informada (${qtyNum} Ton) excede o saldo restante do pedido (${remainingToWithdraw.toFixed(1)} Ton).`);
+      setFormError(`Quantidade informada (${qtyNum} Ton) excede o saldo restante do pedido (${remainingToWithdraw.toFixed(1)} Ton).`);
       return;
     }
+    setFormError('');
 
     const withdrawal: OrderWithdrawal = {
       id: `RET-${Date.now()}`,
@@ -73,32 +76,42 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 print:shadow-none print:w-full print:max-w-none print:rounded-none">
-        
-        {/* Header */}
-        <div className="p-6 bg-slate-900 text-white flex justify-between items-center print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-600 rounded-xl text-white">
-              <Truck size={20} />
-            </div>
-            <div>
-              <h3 className="font-black text-lg tracking-tight">
-                {savedWithdrawal ? 'Comprovante de Retirada / Ticket' : 'Registrar Retirada de Carga'}
-              </h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest text-[9px]">
-                Pedido: {order.reference} • Cliente: {customer?.name || 'Cliente'}
-              </p>
-            </div>
+    <FlowSheet
+      title={savedWithdrawal ? 'Ticket de retirada' : 'Registrar retirada'}
+      printSafe
+      zIndexClass="z-[200]"
+      onClose={onClose}
+      subtitle={`${order.reference} · ${customer?.name || 'Cliente'}`}
+      footer={
+        savedWithdrawal ? (
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 min-h-11 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl">
+              Fechar
+            </button>
+            <button type="button" onClick={handlePrint} className="flex-1 min-h-11 bg-emerald-600 text-white font-bold text-xs rounded-xl inline-flex items-center justify-center gap-1.5">
+              <Printer size={14} /> Imprimir ticket
+            </button>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all">
-            <X size={20} />
-          </button>
-        </div>
+        ) : (
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 min-h-11 text-xs font-bold uppercase text-slate-500">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="order-withdrawal-form"
+              className="flex-1 min-h-11 bg-emerald-600 text-white font-bold text-xs uppercase rounded-xl inline-flex items-center justify-center gap-2"
+            >
+              <CheckCircle size={16} /> Confirmar e gerar ticket
+            </button>
+          </div>
+        )
+      }
+    >
 
         {savedWithdrawal ? (
           /* Visualização de Impressão do Romaneio de Retirada */
-          <div className="p-8 md:p-10 space-y-6 text-slate-800 bg-white" id="printable-ticket">
+          <div className="space-y-5 text-slate-800 bg-white" id="printable-ticket">
             <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
               <div>
                 <h2 className="text-lg font-black text-slate-900 tracking-tight">{company.name}</h2>
@@ -130,7 +143,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
               <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
                 <Scale size={14} /> Dados do Veículo e Pesagem
               </span>
-              <div className="grid grid-cols-3 gap-4 pt-1 text-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-slate-800">
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 uppercase">Placa / Veículo</span>
                   <p className="font-black text-base">{savedWithdrawal.plateNumber} {savedWithdrawal.truckModel && `(${savedWithdrawal.truckModel})`}</p>
@@ -163,7 +176,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
             </div>
 
             {/* Assinaturas */}
-            <div className="grid grid-cols-2 gap-12 pt-10">
+            <div className="grid grid-cols-2 gap-8 pt-8">
               <div className="text-center space-y-1">
                 <div className="border-t border-slate-400 pt-2 mx-4" />
                 <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{savedWithdrawal.driverName || 'Motorista'}</p>
@@ -175,19 +188,10 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 <p className="text-[9px] text-slate-400 font-bold uppercase">Operador de Balança / Expedição</p>
               </div>
             </div>
-
-            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 print:hidden">
-              <button onClick={onClose} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all">
-                Fechar
-              </button>
-              <button onClick={handlePrint} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-200 transition-all flex items-center gap-1.5">
-                <Printer size={14} /> Imprimir Ticket
-              </button>
-            </div>
           </div>
         ) : (
           /* Formulário de Registro de Retirada */
-          <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+          <form id="order-withdrawal-form" onSubmit={handleSubmit} className="space-y-4">
             
             {/* Resumo de Saldos */}
             <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
@@ -216,7 +220,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     value={quantity}
                     onChange={e => setQuantity(e.target.value)}
                     max={remainingToWithdraw}
-                    className="w-full p-4 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-lg focus:border-emerald-500"
+                    className="w-full p-3.5 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-lg focus:border-emerald-500"
                     placeholder="Ex: 32.5"
                   />
                   <span className="text-[10px] text-slate-400 font-bold">
@@ -245,7 +249,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     value={plateNumber}
                     onChange={e => setPlateNumber(e.target.value.toUpperCase())}
                     placeholder="Ex: ABC-1D23"
-                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-sm uppercase focus:border-purple-500"
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-sm uppercase focus:border-purple-500"
                   />
                 </div>
 
@@ -292,30 +296,14 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Ex: Carga com lona amarrada, lacre nº 4819..."
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-medium text-sm focus:border-purple-500 resize-none h-20"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-medium text-sm focus:border-purple-500 resize-none h-16"
                 />
               </div>
             </div>
 
-            <div className="flex gap-4 pt-4 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all flex items-center justify-center gap-2"
-              >
-                <CheckCircle size={16} /> Confirmar Retirada & Gerar Ticket
-              </button>
-            </div>
+            {formError ? <p className="text-xs font-bold text-rose-600">{formError}</p> : null}
           </form>
         )}
-
-      </div>
-    </div>
+    </FlowSheet>
   );
 };

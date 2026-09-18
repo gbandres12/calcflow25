@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { SaleOrder, FiscalConfig } from '../../types';
 import { fiscalService } from '../../services/fiscalService';
-import { AlertTriangle, Ban } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { FlowSheet } from '../ui/FlowSheet';
 
 interface Props {
   order: SaleOrder;
@@ -41,18 +42,28 @@ export const CancelarNfeModal: React.FC<Props> = ({ order, config, onClose, onCa
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
-        <div className="p-5 border-b border-rose-100 bg-rose-50 flex items-center gap-2 text-rose-900">
-          <Ban size={18} />
-          <div>
-            <h3 className="text-sm font-black">Cancelar NF-e na SEFAZ</h3>
-            <p className="text-[11px] font-medium text-rose-700">
-              Nota Nº {order.nfeNumero || '—'} · {order.reference}
-            </p>
-          </div>
+    <FlowSheet
+      title="Cancelar NF-e na SEFAZ"
+      zIndexClass="z-[220]"
+      onClose={onClose}
+      subtitle={`Nota Nº ${order.nfeNumero || '—'} · ${order.reference}`}
+      footer={
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="px-4 min-h-11 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">
+            Voltar
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={confirm}
+            className="flex-1 min-h-11 text-xs font-bold text-white bg-rose-600 rounded-xl disabled:opacity-50"
+          >
+            {loading ? 'Transmitindo…' : 'Confirmar cancelamento'}
+          </button>
         </div>
-        <div className="p-5 space-y-3">
+      }
+    >
+      <div className="space-y-3">
           <p className="text-xs text-slate-600 flex items-start gap-2">
             <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
             Permitido no prazo legal da SEFAZ (em geral até 24h após a autorização). A justificativa é obrigatória.
@@ -62,24 +73,10 @@ export const CancelarNfeModal: React.FC<Props> = ({ order, config, onClose, onCa
             onChange={(e) => setJustificativa(e.target.value)}
             rows={3}
             placeholder="Ex: Cancelamento por erro de quantidade / destinatário na emissão."
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-rose-400"
+            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
           />
           {error && <p className="text-xs font-bold text-rose-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">
-              Voltar
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={confirm}
-              className="px-4 py-2 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 rounded-xl disabled:opacity-50"
-            >
-              {loading ? 'Transmitindo…' : 'Confirmar cancelamento'}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </FlowSheet>
   );
 };

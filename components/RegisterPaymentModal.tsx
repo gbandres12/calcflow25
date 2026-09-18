@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company, TransactionStatus } from '../types';
-import { DollarSign, Landmark, CreditCard, Calendar, User, FileText, CheckCircle, X } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface RegisterPaymentModalProps {
   order: SaleOrder;
@@ -37,6 +38,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   const [receivedBy, setReceivedBy] = useState('Setor Financeiro / Caixa');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formError, setFormError] = useState('');
 
   const amountNum = parseFloat(amount) || 0;
   const remainingDebtAfter = Math.max(0, currentDebt - amountNum);
@@ -46,13 +48,14 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (amountNum <= 0) {
-      alert('Informe um valor de pagamento maior que zero.');
+      setFormError('Informe um valor de pagamento maior que zero.');
       return;
     }
     if (amountNum > currentDebt + 0.01) {
-      alert(`O valor informado é maior que o saldo em aberto de ${formatBRL(currentDebt)}.`);
+      setFormError(`O valor informado é maior que o saldo em aberto de ${formatBRL(currentDebt)}.`);
       return;
     }
+    setFormError('');
 
     const receiptId = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const selectedAccount = accounts.find(a => a.id === accountId);
@@ -89,31 +92,34 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        
-        {/* Header */}
-        <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-600 rounded-xl text-white">
-              <DollarSign size={20} />
-            </div>
-            <div>
-              <h3 className="font-black text-lg tracking-tight">Receber Entrada / Abatimento</h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest text-[9px]">
-                Pedido: {order.reference} • Cliente: {customer?.name || 'Cliente'}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all">
-            <X size={20} />
+    <FlowSheet
+      title="Receber entrada / abatimento"
+      zIndexClass="z-[200]"
+      onClose={onClose}
+      subtitle={`${order.reference} · ${customer?.name || 'Cliente'}`}
+      footer={
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 min-h-11 text-xs font-bold uppercase text-slate-500 hover:bg-slate-50 rounded-xl"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="register-payment-form"
+            className="flex-1 min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wide rounded-xl flex items-center justify-center gap-2"
+          >
+            <CheckCircle size={16} /> Confirmar e emitir recibo
           </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+      }
+    >
+        <form id="register-payment-form" onSubmit={handleSubmit} className="space-y-4">
           
           {/* Card Resumo do Pedido */}
-          <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+          <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl text-center">
             <div>
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valor Total Venda</span>
               <p className="text-sm font-black text-slate-800">{formatBRL(order.total)}</p>
@@ -167,7 +173,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               max={currentDebt}
               value={amount}
               onChange={e => setAmount(e.target.value)}
-              className="w-full p-4 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-2xl focus:border-emerald-500"
+              className="w-full p-3.5 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-xl sm:text-2xl focus:border-emerald-500"
               placeholder="0.00"
             />
             <div className="flex justify-between items-center pt-1 text-xs font-bold text-slate-500">
@@ -185,7 +191,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               <select
                 value={paymentMethod}
                 onChange={e => setPaymentMethod(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
               >
                 <option value="PIX">PIX</option>
                 <option value="Dinheiro">Dinheiro (Espécie)</option>
@@ -202,7 +208,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               <select
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
               >
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
@@ -221,7 +227,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
                 type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
               />
             </div>
 
@@ -231,7 +237,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
                 type="text"
                 value={receivedBy}
                 onChange={e => setReceivedBy(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
               />
             </div>
           </div>
@@ -243,28 +249,12 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="Ex: Pagamento referente a 1ª carga de calcário..."
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-medium text-sm focus:border-purple-500"
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-medium text-sm focus:border-purple-500"
             />
           </div>
 
-          <div className="flex gap-4 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-100 transition-all flex items-center justify-center gap-2"
-            >
-              <CheckCircle size={16} /> Confirmar Recebimento & Emitir Recibo
-            </button>
-          </div>
+          {formError ? <p className="text-xs font-bold text-rose-600">{formError}</p> : null}
         </form>
-
-      </div>
-    </div>
+    </FlowSheet>
   );
 };

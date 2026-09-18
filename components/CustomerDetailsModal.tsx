@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { Customer, SaleOrder, Transaction, OrderStatus, PaymentReceipt, OrderWithdrawal } from '../types';
 import { 
-  X, User, Phone, Mail, MapPin, FileText, ShoppingCart, 
-  CheckCircle2, Clock, AlertTriangle, ArrowUpRight, Truck, 
-  Receipt, DollarSign, Calendar, Printer, Download, ExternalLink,
+  ShoppingCart, 
+  CheckCircle2, Clock, AlertTriangle, Truck, 
+  Receipt, Printer,
   ChevronRight, ShieldAlert, BadgePercent, Scale, Edit3
 } from 'lucide-react';
-import { calculateOrderPayment, PaymentStatusType } from './SalesOrders';
+import { calculateOrderPayment } from './SalesOrders';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { COMPANY_INFO } from '../constants';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface CustomerDetailsModalProps {
   customer: Customer | null;
@@ -123,117 +124,64 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
   if (!isOpen || !customer || !customerData) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[120] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 border border-slate-100">
-        
-        {/* Cabeçalho do Modal com Dados do Cliente */}
-        <div className="bg-slate-900 text-white p-6 md:p-8 relative">
-          <div className="absolute top-6 right-6 flex items-center gap-2">
-            {onEditCustomer && (
-              <button 
-                type="button"
-                onClick={() => {
-                  onEditCustomer(customer);
-                }}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-purple-600 text-slate-200 hover:text-white rounded-xl transition-all font-bold text-xs flex items-center gap-1.5 border border-slate-700 hover:border-purple-500 shadow-sm"
-              >
-                <Edit3 size={14} /> Editar Cadastro
-              </button>
-            )}
-            <button 
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all"
-            >
-              <X size={22} />
-            </button>
-          </div>
-
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-purple-600/30 border border-purple-500/40 text-purple-300 flex items-center justify-center text-2xl font-black shadow-inner">
-                <User size={32} />
-              </div>
-              <div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-2xl font-black text-white tracking-tight">{customer.name}</h2>
-                  
-                  {/* Badge de Status Geral de Débito */}
-                  {customerData.financialStatus === 'ADIMPLENTE' ? (
-                    <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5">
-                      <CheckCircle2 size={12} /> Cliente Quitado (Sem Débitos)
-                    </span>
-                  ) : customerData.financialStatus === 'PENDENTE' ? (
-                    <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 animate-pulse">
-                      <AlertTriangle size={12} /> Débito Pendente: {formatBRL(customerData.totalDebt)}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-slate-700 text-slate-300 border border-slate-600">
-                      Sem Histórico de Vendas
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-4 mt-2 text-xs font-bold text-slate-300">
-                  <span className="font-mono bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
-                    Doc: {customer.document || 'Não Informado'}
-                  </span>
-                  {customer.email && (
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <Mail size={13} className="text-purple-400" /> {customer.email}
-                    </span>
-                  )}
-                  {customer.phone && (
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <Phone size={13} className="text-emerald-400" /> {customer.phone}
-                    </span>
-                  )}
-                  {customer.city && (
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <MapPin size={13} className="text-amber-400" /> {customer.city} - {customer.state || 'PA'}
-                      {customer.ibgeCode ? ` · IBGE ${customer.ibgeCode}` : ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Totalizador de Dívida e Compras no Topo */}
-            <div className="flex items-center gap-4 bg-slate-800/80 p-4 rounded-2xl border border-slate-700">
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Comprado</p>
-                <p className="text-lg font-black text-white">{formatBRL(customerData.totalPurchased)}</p>
-              </div>
-              <div className="h-8 w-px bg-slate-700"></div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Devedor</p>
-                <p className={`text-lg font-black ${customerData.totalDebt > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  {formatBRL(customerData.totalDebt)}
-                </p>
-              </div>
-            </div>
-          </div>
+    <FlowSheet
+      title={customer.name}
+      wide
+      zIndexClass="z-[120]"
+      onClose={onClose}
+      subtitle={
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="font-mono">{customer.document || 'Doc. não informado'}</span>
+          {customerData.financialStatus === 'ADIMPLENTE' ? (
+            <span className="text-emerald-700">Quitado</span>
+          ) : customerData.financialStatus === 'PENDENTE' ? (
+            <span className="text-rose-600">Débito {formatBRL(customerData.totalDebt)}</span>
+          ) : (
+            <span>Sem vendas</span>
+          )}
+          <span>Comprado {formatBRL(customerData.totalPurchased)}</span>
         </div>
-
-        {/* Abas de Navegação Interna */}
-        <div className="flex bg-slate-50 border-b border-slate-200 px-6 pt-3 gap-2 overflow-x-auto">
+      }
+      footer={
+        <div className="flex items-center justify-between gap-2">
+          {onEditCustomer ? (
+            <button
+              type="button"
+              onClick={() => onEditCustomer(customer)}
+              className="min-h-11 px-3 inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 border border-slate-200 rounded-xl"
+            >
+              <Edit3 size={14} /> Editar
+            </button>
+          ) : <span />}
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 px-5 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase"
+          >
+            Fechar
+          </button>
+        </div>
+      }
+    >
+        <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
           <button
             onClick={() => setActiveTab('OVERVIEW')}
-            className={`px-5 py-3 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t-2 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'OVERVIEW'
-                ? 'bg-white text-purple-700 border-purple-600 shadow-sm'
-                : 'text-slate-500 border-transparent hover:text-slate-900'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-500 hover:text-slate-900 bg-slate-100'
             }`}
           >
             <BadgePercent size={15} />
-            Visão Geral & Saldo
+            Geral
           </button>
 
           <button
             onClick={() => setActiveTab('ORDERS')}
-            className={`px-5 py-3 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t-2 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'ORDERS'
-                ? 'bg-white text-purple-700 border-purple-600 shadow-sm'
-                : 'text-slate-500 border-transparent hover:text-slate-900'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-500 hover:text-slate-900 bg-slate-100'
             }`}
           >
             <ShoppingCart size={15} />
@@ -242,48 +190,42 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('DEBTS')}
-            className={`px-5 py-3 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t-2 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'DEBTS'
-                ? 'bg-white text-rose-700 border-rose-600 shadow-sm'
-                : 'text-slate-500 border-transparent hover:text-rose-700'
+                ? 'bg-rose-600 text-white'
+                : 'text-slate-500 hover:text-rose-700 bg-slate-100'
             }`}
           >
-            <AlertTriangle size={15} className={customerData.totalDebt > 0 ? 'text-rose-600' : 'text-slate-400'} />
-            Débitos Pendentes ({customerData.ordersWithDebt.length})
-            {customerData.totalDebt > 0 && (
-              <span className="px-1.5 py-0.2 bg-rose-100 text-rose-800 rounded-md text-[10px]">
-                {formatBRL(customerData.totalDebt)}
-              </span>
-            )}
+            <AlertTriangle size={15} />
+            Débitos ({customerData.ordersWithDebt.length})
           </button>
 
           <button
             onClick={() => setActiveTab('RECEIPTS')}
-            className={`px-5 py-3 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t-2 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'RECEIPTS'
-                ? 'bg-white text-emerald-700 border-emerald-600 shadow-sm'
-                : 'text-slate-500 border-transparent hover:text-emerald-700'
+                ? 'bg-emerald-700 text-white'
+                : 'text-slate-500 hover:text-emerald-700 bg-slate-100'
             }`}
           >
             <Receipt size={15} />
-            Recibos de Quitação ({customerData.receipts.length})
+            Recibos ({customerData.receipts.length})
           </button>
 
           <button
             onClick={() => setActiveTab('WITHDRAWALS')}
-            className={`px-5 py-3 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t-2 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'WITHDRAWALS'
-                ? 'bg-white text-blue-700 border-blue-600 shadow-sm'
-                : 'text-slate-500 border-transparent hover:text-blue-700'
+                ? 'bg-blue-700 text-white'
+                : 'text-slate-500 hover:text-blue-700 bg-slate-100'
             }`}
           >
             <Truck size={15} />
-            Romaneios de Carga ({customerData.withdrawals.length})
+            Cargas ({customerData.withdrawals.length})
           </button>
         </div>
 
-        {/* Conteúdo Dinâmico das Abas */}
-        <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+        <div className="pt-4 space-y-6">
           
           {/* ABA 1: VISÃO GERAL */}
           {activeTab === 'OVERVIEW' && (
@@ -754,22 +696,6 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
         </div>
 
-        {/* Rodapé com Fechar */}
-        <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-between items-center">
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-            Consolidado em tempo real • Total Histórico: {customerData.customerOrders.length} pedido(s)
-          </p>
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase transition-all shadow-md"
-          >
-            Fechar
-          </button>
-        </div>
-
-      </div>
-
-      {/* Modal de Impressão de Recibo Individual */}
       {selectedReceipt && (
         <PaymentReceiptModal
           receipt={selectedReceipt}
@@ -777,6 +703,6 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           onClose={() => setSelectedReceipt(null)}
         />
       )}
-    </div>
+    </FlowSheet>
   );
 };

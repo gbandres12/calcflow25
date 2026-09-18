@@ -48,12 +48,12 @@ export const AppTopbar: React.FC<Props> = ({
   return (
     <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-5 print:hidden">
       <div className="flex items-center gap-2 w-full">
-        <button type="button" onClick={onOpenMenu} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 lg:hidden">
+        <button type="button" onClick={onOpenMenu} className="p-2.5 min-h-11 min-w-11 bg-white border border-slate-200 rounded-xl text-slate-600 lg:hidden inline-flex items-center justify-center">
           <Menu size={18} />
         </button>
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar romaneio, NF-e, cliente, fazenda…" className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-9 py-2 text-sm outline-none focus:border-blue-500" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar romaneio, NF-e, cliente, fazenda…" className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-9 py-2.5 min-h-11 text-sm outline-none focus:border-emerald-600" />
           {q && (
             <button type="button" onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X size={14} /></button>
           )}

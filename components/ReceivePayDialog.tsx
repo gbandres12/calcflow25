@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { 
-  X, CheckCircle2, DollarSign, Calendar, CreditCard, Landmark, 
-  Tag, Percent, AlertCircle, ArrowUpRight, ArrowDownLeft, Receipt, ShieldCheck
+  CheckCircle2, CreditCard, 
+  Tag
 } from 'lucide-react';
 import { 
   Transaction, 
@@ -10,6 +10,7 @@ import {
   FinancialAccount, 
   TransactionPayment 
 } from '../types';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface ReceivePayDialogProps {
   isOpen: boolean;
@@ -96,31 +97,26 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[140] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-[3rem] p-8 md:p-10 shadow-2xl animate-in zoom-in-95 border border-slate-100">
-        
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-2xl ${isIncome ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-              {isIncome ? <ArrowUpRight size={24} /> : <ArrowDownLeft size={24} />}
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-800 tracking-tight">
-                {isIncome ? 'Receber Valor (Baixa)' : 'Pagar Despesa (Baixa)'}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                {transaction.description}
-              </p>
-            </div>
-          </div>
-          <button 
-            onClick={onClose} 
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <FlowSheet
+      title={isIncome ? 'Receber valor' : 'Pagar despesa'}
+      zIndexClass="z-[140]"
+      onClose={onClose}
+      subtitle={transaction.description}
+      footer={
+        <button
+          type="submit"
+          form="receive-pay-form"
+          disabled={saving || numPayAmount <= 0}
+          className={`w-full min-h-11 text-white font-bold text-sm rounded-xl inline-flex items-center justify-center gap-2 disabled:opacity-50 ${
+            isIncome ? 'bg-emerald-600' : 'bg-rose-600'
+          }`}
+        >
+          <CheckCircle2 size={18} />
+          {saving ? 'Registrando…' : `Confirmar ${formatBRL(numPayAmount)}`}
+        </button>
+      }
+    >
+        <form id="receive-pay-form" onSubmit={handleSubmit} className="space-y-4">
 
         {/* Resumo da Transação */}
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-5 space-y-2">
@@ -137,8 +133,6 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
             <span className="text-amber-600 font-black">{formatBRL(remainingBalance)}</span>
           </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
           
           {/* Seletor se é Pagamento Normal ou Abatimento */}
           <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl">
@@ -262,21 +256,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
           </div>
 
           {/* Botão de Confirmação */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={saving || numPayAmount <= 0}
-              className={`w-full py-4 text-white font-black text-sm uppercase tracking-wider rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 ${
-                isIncome ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
-              }`}
-            >
-              <CheckCircle2 size={18} />
-              {saving ? 'Registrando Baixa...' : `Confirmar Baixa de ${formatBRL(numPayAmount)}`}
-            </button>
-          </div>
         </form>
-
-      </div>
-    </div>
+    </FlowSheet>
   );
 };

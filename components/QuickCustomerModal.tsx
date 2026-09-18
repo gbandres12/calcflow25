@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Customer } from '../types';
 import { 
-  UserPlus, X, MapPin, Loader2, CheckCircle2, AlertCircle, 
-  Building2, User, Tractor, Phone, Mail, FileText, Sparkles
+  MapPin, Loader2, CheckCircle2, AlertCircle, 
+  Building2, User, Tractor, Phone, Mail, Sparkles
 } from 'lucide-react';
 import { fetchAddressByCep, formatCep } from '../services/cepService';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface QuickCustomerModalProps {
   isOpen: boolean;
@@ -201,44 +202,38 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[130] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 my-auto">
-        
-        {/* Cabeçalho */}
-        <div className="px-6 py-4 bg-gradient-to-r from-purple-900 to-slate-900 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-500/20 text-purple-300 rounded-xl border border-purple-400/30">
-              <UserPlus size={22} />
-            </div>
-            <div>
-              <h3 className="text-base font-black tracking-tight flex items-center gap-2">
-                {customerToEdit ? 'Editar Dados do Cliente' : 'Cadastro Rápido de Cliente'}
-                <span className="text-[10px] bg-purple-500/30 text-purple-200 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
-                  {customerToEdit ? 'Edição' : 'Express'}
-                </span>
-              </h3>
-              <p className="text-xs text-purple-200/80 font-medium">
-                {customerToEdit ? 'Atualize dados cadastrais, fiscais e endereço' : 'Cadastre e busque endereço automático via CEP'}
-              </p>
-            </div>
-          </div>
-          <button 
+    <FlowSheet
+      title={customerToEdit ? 'Editar cliente' : 'Cadastro rápido'}
+      zIndexClass="z-[130]"
+      onClose={onClose}
+      subtitle={customerToEdit ? 'Dados cadastrais, fiscais e endereço' : 'CEP preenche rua, bairro e cidade'}
+      footer={
+        <div className="flex items-center gap-2">
+          <button
             type="button"
-            onClick={onClose} 
-            className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors"
+            onClick={onClose}
+            className="flex-1 min-h-11 text-xs font-bold uppercase tracking-wider text-slate-500 border border-slate-200 rounded-xl"
           >
-            <X size={20} />
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="quick-customer-form"
+            className="flex-[2] min-h-11 bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wide inline-flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 size={16} /> {customerToEdit ? 'Salvar cliente' : 'Salvar e selecionar'}
           </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+      }
+    >
+        <form id="quick-customer-form" onSubmit={handleSubmit} className="space-y-4">
           
           {/* Tipo de Pessoa */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
               Tipo de Perfil do Cliente
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={() => setTipoPessoa('PRODUTOR')}
@@ -249,7 +244,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                 }`}
               >
                 <Tractor size={15} className={tipoPessoa === 'PRODUTOR' ? 'text-emerald-600' : 'text-slate-400'} />
-                Produtor Rural
+                Produtor
               </button>
 
               <button
@@ -262,7 +257,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                 }`}
               >
                 <Building2 size={15} className={tipoPessoa === 'PJ' ? 'text-purple-600' : 'text-slate-400'} />
-                Pessoa Jurídica (PJ)
+                PJ
               </button>
 
               <button
@@ -275,7 +270,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                 }`}
               >
                 <User size={15} className={tipoPessoa === 'PF' ? 'text-blue-600' : 'text-slate-400'} />
-                Pessoa Física (PF)
+                PF
               </button>
             </div>
           </div>
@@ -505,26 +500,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
 
           </div>
 
-          {/* Rodapé e Ações */}
-          <div className="flex items-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-3.5 text-xs font-black uppercase tracking-wider text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-[2] py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-purple-200 hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-            >
-              <CheckCircle2 size={16} /> {customerToEdit ? 'Salvar Alterações do Cliente' : 'Salvar & Selecionar Cliente'}
-            </button>
-          </div>
-
-        </form>
-
-      </div>
-    </div>
+          </form>
+    </FlowSheet>
   );
 };

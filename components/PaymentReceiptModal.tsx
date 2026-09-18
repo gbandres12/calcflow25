@@ -1,6 +1,7 @@
 import React from 'react';
 import { PaymentReceipt, Company } from '../types';
-import { Printer, X, CheckCircle, FileText, Landmark, User, DollarSign, Calendar, Copy, Check } from 'lucide-react';
+import { Printer, Copy, Check } from 'lucide-react';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface PaymentReceiptModalProps {
   receipt: PaymentReceipt;
@@ -38,51 +39,36 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 print:shadow-none print:w-full print:max-w-none print:rounded-none">
-        
-        {/* Cabeçalho de Controle (Oculto na Impressão) */}
-        <div className="p-6 bg-slate-900 text-white flex justify-between items-center print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-purple-600 rounded-xl text-white">
-              <FileText size={20} />
-            </div>
-            <div>
-              <h3 className="font-black text-lg tracking-tight">Recibo de Pagamento / Abatimento</h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest text-[9px]">
-                Identificador: {receipt.id} • {receipt.type}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopyText}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-              title="Copiar texto do recibo"
-            >
-              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-              {copied ? 'Copiado!' : 'Copiar'}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-lg shadow-purple-900/30"
-            >
-              <Printer size={14} /> Imprimir Recibo
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all"
-            >
-              <X size={20} />
-            </button>
-          </div>
+    <FlowSheet
+      title="Recibo de pagamento"
+      printSafe
+      zIndexClass="z-[210]"
+      onClose={onClose}
+      subtitle={`${receipt.id} · ${receipt.type}`}
+      footer={
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleCopyText}
+            className="min-h-11 px-4 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5"
+          >
+            {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+            {copied ? 'Copiado' : 'Copiar'}
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex-1 min-h-11 bg-emerald-700 text-white rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5"
+          >
+            <Printer size={14} /> Imprimir
+          </button>
         </div>
-
-        {/* Corpo do Recibo (Visível na Tela e Formatado para Impressão) */}
-        <div className="p-8 md:p-10 space-y-6 text-slate-800 bg-white" id="printable-receipt">
+      }
+    >
+        <div className="space-y-5 text-slate-800 bg-white" id="printable-receipt">
           
           {/* Cabeçalho da Empresa */}
-          <div className="border-b-2 border-slate-900 pb-6 flex justify-between items-start">
+          <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start gap-3">
             <div className="space-y-1">
               <h2 className="text-xl font-black text-slate-900 tracking-tight">{company.name}</h2>
               <p className="text-xs text-slate-500 font-bold">CNPJ: {company.document || '10.375.218/0001-50'}</p>
@@ -100,10 +86,10 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           </div>
 
           {/* Destaque do Valor */}
-          <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Recebido</span>
-              <p className="text-3xl font-black text-emerald-600">{formatBRL(receipt.amount)}</p>
+            <p className="text-2xl sm:text-3xl font-black text-emerald-600">{formatBRL(receipt.amount)}</p>
             </div>
             <div className="text-right">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</span>
@@ -115,7 +101,7 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           </div>
 
           {/* Declaração Formal do Recibo */}
-          <div className="p-6 border border-slate-200 rounded-2xl space-y-4 text-sm leading-relaxed text-slate-700">
+          <div className="p-4 border border-slate-200 rounded-2xl space-y-3 text-sm leading-relaxed text-slate-700">
             <p>
               Recebemos de <strong className="text-slate-900 uppercase font-black">{receipt.customerName}</strong>
               {receipt.customerDocument ? ` (Inscrito no CPF/CNPJ sob o nº ${receipt.customerDocument})` : ''}, a quantia de{' '}
@@ -133,7 +119,7 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
 
           {/* Resumo da Negociação e Saldo Devedor */}
           {(receipt.totalOrderAmount !== undefined || receipt.remainingDebt !== undefined) && (
-            <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+            <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl text-center">
               <div>
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total da Venda</span>
                 <p className="text-sm font-bold text-slate-700">{formatBRL(receipt.totalOrderAmount)}</p>
@@ -150,7 +136,7 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           )}
 
           {/* Campos de Assinatura */}
-          <div className="grid grid-cols-2 gap-12 pt-12">
+          <div className="grid grid-cols-2 gap-8 pt-8">
             <div className="text-center space-y-2">
               <div className="border-t border-slate-400 pt-2 mx-4" />
               <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{receipt.customerName}</p>
@@ -171,8 +157,6 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           </div>
 
         </div>
-
-      </div>
-    </div>
+    </FlowSheet>
   );
 };

@@ -3,8 +3,9 @@ import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { commitLinkedNfeSync, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
 import {
-  X, Printer, Download, FileCheck, AlertTriangle, Ban, RefreshCw, FileX
+  Printer, Download, AlertTriangle, Ban, RefreshCw, FileX
 } from 'lucide-react';
+import { FlowSheet } from './ui/FlowSheet';
 
 interface DanfeModalProps {
   order: SaleOrder;
@@ -199,125 +200,122 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     'bg-amber-100 text-amber-700';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8 flex flex-col max-h-[92vh]">
-        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-3 bg-emerald-600 text-white rounded-2xl shadow-lg shrink-0">
-              <FileCheck size={24} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">DANFE oficial</h3>
-                <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${statusClass}`}>
-                  {STATUS_LABEL[status] || status}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium truncate">
-                NF-e Nº <b>{current.nfeNumero || '—'}</b> | Série <b>{current.nfeSerie || '—'}</b>
-                {current.nfeChave ? (
-                  <> | Chave: <span className="font-mono">{current.nfeChave}</span></>
-                ) : (
-                  <> | Chave ainda não retornada pela SEFAZ</>
-                )}
-              </p>
-            </div>
+    <FlowSheet
+      title="DANFE oficial"
+      wide
+      zIndexClass="z-[200]"
+      padded={false}
+      onClose={onClose}
+      subtitle={
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
+              {STATUS_LABEL[status] || status}
+            </span>
+            <span>NF-e Nº <b>{current.nfeNumero || '—'}</b> · Série <b>{current.nfeSerie || '—'}</b></span>
           </div>
-
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            <button
-              onClick={() => refreshFromSefaz()}
-              disabled={loadingStatus}
-              className="flex items-center gap-2 px-3 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={loadingStatus ? 'animate-spin' : ''} /> Atualizar SEFAZ
-            </button>
-            <button
-              onClick={handlePrintDanfe}
-              disabled={!pdfUrl}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 shadow-md disabled:opacity-40"
-            >
-              <Printer size={16} /> Imprimir
-            </button>
-            <button
-              onClick={handleDownloadPdf}
-              disabled={!pdfUrl}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 shadow-md disabled:opacity-40"
-            >
-              <Download size={16} /> PDF
-            </button>
-            <button
-              onClick={handleDownloadXml}
-              disabled={!current.nfeId}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 disabled:opacity-40"
-            >
-              <Download size={16} /> XML
-            </button>
-            {status === 'autorizada' && (
-              <button
-                onClick={() => setIsCanceling(!isCanceling)}
-                className="flex items-center gap-1.5 px-3 py-2.5 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold"
-              >
-                <Ban size={16} /> Cancelar NF-e
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-xl text-slate-400">
-              <X size={20} />
-            </button>
-          </div>
+          <p className="font-mono text-[10px] truncate">
+            {current.nfeChave || 'Chave ainda não retornada pela SEFAZ'}
+          </p>
         </div>
-
-        {isCanceling && (
-          <div className="p-6 bg-rose-50 border-b border-rose-200 space-y-3 shrink-0">
-            <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
-              <AlertTriangle size={18} /> Cancelamento de NF-e na SEFAZ
-            </div>
-            <textarea
-              value={cancelJustificativa}
-              onChange={(e) => setCancelJustificativa(e.target.value)}
-              placeholder="Justificativa com no mínimo 15 caracteres."
-              rows={2}
-              className="w-full p-3 bg-white border border-rose-300 rounded-xl text-xs outline-none focus:border-rose-500"
-            />
-            {cancelError && <p className="text-xs text-rose-600 font-bold">{cancelError}</p>}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setIsCanceling(false)} className="px-4 py-2 bg-white text-slate-600 rounded-xl text-xs font-bold border border-slate-200">
-                Voltar
-              </button>
-              <button
-                disabled={cancelLoading}
-                onClick={handleCancelNFe}
-                className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
-              >
-                {cancelLoading ? 'Transmitindo à SEFAZ...' : 'Confirmar Cancelamento'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {status === 'rejeitada' && current.nfeErro && (
-          <div className="px-6 py-3 bg-rose-50 border-b border-rose-100 text-sm text-rose-800 font-bold shrink-0">
-            Rejeição SEFAZ: {current.nfeErro}
-          </div>
-        )}
-
-        <div className="flex-1 min-h-[70vh] bg-slate-200/70">
-          {loadingStatus || loadingPdf ? (
-            <div className="h-full min-h-[70vh] flex flex-col items-center justify-center gap-3 text-slate-600">
-              <RefreshCw className="animate-spin" size={28} />
-              <p className="text-sm font-bold">{loadingStatus ? 'Consultando status real na SEFAZ…' : 'Carregando DANFE oficial…'}</p>
-            </div>
-          ) : pdfUrl ? (
-            <iframe title="DANFE oficial" src={pdfUrl} className="w-full h-full min-h-[70vh] border-0 bg-white" />
-          ) : (
-            <div className="h-full min-h-[70vh] flex flex-col items-center justify-center gap-3 p-8 text-center">
-              <FileX size={36} className="text-slate-400" />
-              <p className="text-sm font-black text-slate-800">DANFE oficial indisponível</p>
-              <p className="text-xs font-medium text-slate-600 max-w-md">{pdfError || 'O PDF da NotaAs ainda não está pronto.'}</p>
-            </div>
+      }
+      footer={
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => refreshFromSefaz()}
+            disabled={loadingStatus}
+            className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loadingStatus ? 'animate-spin' : ''} /> Atualizar
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintDanfe}
+            disabled={!pdfUrl}
+            className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold disabled:opacity-40"
+          >
+            <Printer size={15} /> Imprimir
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={!pdfUrl}
+            className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-40"
+          >
+            <Download size={15} /> PDF
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadXml}
+            disabled={!current.nfeId}
+            className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold disabled:opacity-40"
+          >
+            <Download size={15} /> XML
+          </button>
+          {status === 'autorizada' && (
+            <button
+              type="button"
+              onClick={() => setIsCanceling(!isCanceling)}
+              className="min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-600 border border-rose-200 bg-rose-50 rounded-xl text-xs font-bold"
+            >
+              <Ban size={15} /> Cancelar
+            </button>
           )}
         </div>
+      }
+    >
+      {isCanceling && (
+        <div className="p-4 bg-rose-50 border-b border-rose-200 space-y-3">
+          <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+            <AlertTriangle size={16} /> Cancelamento na SEFAZ
+          </div>
+          <textarea
+            value={cancelJustificativa}
+            onChange={(e) => setCancelJustificativa(e.target.value)}
+            placeholder="Justificativa com no mínimo 15 caracteres."
+            rows={2}
+            className="w-full p-3 bg-white border border-rose-300 rounded-xl text-sm outline-none"
+          />
+          {cancelError && <p className="text-xs text-rose-600 font-bold">{cancelError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setIsCanceling(false)} className="px-4 py-2.5 min-h-11 bg-white text-slate-600 rounded-xl text-xs font-bold border border-slate-200">
+              Voltar
+            </button>
+            <button
+              type="button"
+              disabled={cancelLoading}
+              onClick={handleCancelNFe}
+              className="px-4 py-2.5 min-h-11 bg-rose-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+            >
+              {cancelLoading ? 'Transmitindo…' : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {status === 'rejeitada' && current.nfeErro && (
+        <div className="px-4 py-3 bg-rose-50 border-b border-rose-100 text-sm text-rose-800 font-bold">
+          Rejeição SEFAZ: {current.nfeErro}
+        </div>
+      )}
+
+      <div className="min-h-[52dvh] sm:min-h-[62vh] bg-slate-200/70">
+        {loadingStatus || loadingPdf ? (
+          <div className="h-full min-h-[52dvh] flex flex-col items-center justify-center gap-3 text-slate-600 px-4">
+            <RefreshCw className="animate-spin" size={26} />
+            <p className="text-sm font-bold text-center">{loadingStatus ? 'Consultando status na SEFAZ…' : 'Carregando DANFE…'}</p>
+          </div>
+        ) : pdfUrl ? (
+          <iframe title="DANFE oficial" src={pdfUrl} className="w-full h-full min-h-[52dvh] sm:min-h-[62vh] border-0 bg-white" />
+        ) : (
+          <div className="h-full min-h-[52dvh] flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileX size={32} className="text-slate-400" />
+            <p className="text-sm font-black text-slate-800">DANFE oficial indisponível</p>
+            <p className="text-xs font-medium text-slate-600 max-w-md">{pdfError || 'O PDF da NotaAs ainda não está pronto.'}</p>
+          </div>
+        )}
       </div>
-    </div>
+    </FlowSheet>
   );
 };

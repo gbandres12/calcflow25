@@ -705,10 +705,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               : 'Gestão de contratos, entradas, parcelas, abatimentos e retiradas de carga'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="hidden sm:flex items-center gap-3">
           <button 
             onClick={openNewOrder}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-2xl font-black transition-all flex items-center gap-2 shadow-xl shadow-purple-200 text-sm hover:scale-[1.02]"
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 shadow-lg text-sm"
           >
             <Plus size={18} /> {isQuotesView ? 'Novo Orçamento' : 'Novo Pedido de Venda'}
           </button>
@@ -765,7 +765,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         <div className="flex flex-nowrap overflow-x-auto p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1 custom-scrollbar">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
               activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -774,7 +774,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PAID')}
-            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeFilter === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'
             }`}
           >
@@ -787,7 +787,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PARTIAL')}
-            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeFilter === 'PARTIAL' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'
             }`}
           >
@@ -800,7 +800,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('PENDING')}
-            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeFilter === 'PENDING' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-rose-700'
             }`}
           >
@@ -813,7 +813,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
           <button
             onClick={() => setActiveFilter('BUDGET')}
-            className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeFilter === 'BUDGET' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -833,7 +833,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             placeholder="Buscar por cliente, CPF/CNPJ, ref ou status..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs focus:border-purple-500"
+            className="w-full pl-11 pr-4 py-3 min-h-11 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-sm focus:border-emerald-600"
           />
         </div>
 
@@ -875,7 +875,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             return (
               <div 
                 key={order.id} 
-                className="bg-white rounded-3xl border border-slate-200/90 p-6 md:p-7 shadow-sm hover:shadow-md hover:border-slate-300 transition-all space-y-5"
+                className="bg-white rounded-2xl md:rounded-3xl border border-slate-200/90 p-4 md:p-7 shadow-sm hover:shadow-md hover:border-slate-300 transition-all space-y-4 md:space-y-5"
               >
                 
                 {/* Linha Superior: Cabeçalho do Pedido, Cliente e Badges de Pagamento */}
@@ -925,8 +925,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   </div>
 
                   {/* Status Badges: Badge de Pagamento Colorido e NF-e */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {/* Badge de Orçamento */}
+                  <div className="hidden sm:flex items-center gap-2 flex-wrap">
                     {order.status === OrderStatus.BUDGET ? (
                       <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
                         <FileText size={13} /> Orçamento
@@ -1238,18 +1237,18 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <>
                         <button
                           onClick={() => setOrderForPayment(order)}
-                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-emerald-100 hover:scale-105"
+                          className="px-3.5 py-2.5 min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
                           title="Registrar Entrada ou Abatimento e Emitir Recibo"
                         >
-                          <DollarSign size={14} /> Receber Entrada / Abatimento
+                          <DollarSign size={14} /> <span className="sm:hidden">Receber</span><span className="hidden sm:inline">Receber Entrada / Abatimento</span>
                         </button>
 
                         <button
                           onClick={() => setOrderForWithdrawal(order)}
-                          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-slate-200 hover:scale-105"
+                          className="px-3.5 py-2.5 min-h-11 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
                           title="Registrar saída de caminhão e emitir ticket"
                         >
-                          <Truck size={14} /> Registrar Retirada (Caminhão)
+                          <Truck size={14} /> <span className="sm:hidden">Carga</span><span className="hidden sm:inline">Registrar Retirada (Caminhão)</span>
                         </button>
                       </>
                     )}
@@ -1257,9 +1256,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {(order.receipts && order.receipts.length > 0) || (order.nfes && order.nfes.length > 0) || (order.withdrawals && order.withdrawals.length > 0) ? (
                       <button
                         onClick={() => setSelectedOrderDetails(order)}
-                        className="px-3.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
+                        className="px-3.5 py-2.5 min-h-11 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
                       >
-                        <Receipt size={14} /> Histórico ({order.receipts?.length || 0} Recibos / {order.withdrawals?.length || 0} Retiradas / {listOrderNfes(order).length} NF-e)
+                        <Receipt size={14} /> Histórico
                       </button>
                     ) : null}
                   </div>
@@ -2115,38 +2114,31 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         const modalCustomer = customers.find(c => c.id === selectedOrderDetails.customerId);
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95">
-              <div className="flex justify-between items-start border-b pb-4">
-                <div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h3 className="text-xl font-black text-slate-900">Extrato & Romaneios do Pedido</h3>
-                    {selectedOrderDetails.status === OrderStatus.BUDGET ? (
-                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-amber-50 text-amber-700 border border-amber-300">
-                        Orçamento
-                      </span>
-                    ) : paymentStatus === 'PAGO' ? (
-                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Quitado (100%)
-                      </span>
-                    ) : paymentStatus === 'PARCIAL' ? (
-                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-                        <Clock size={12} /> Parcial (Débito: {formatBRL(remainingDebt)})
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-black px-2.5 py-1 rounded-lg uppercase bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
-                        <AlertTriangle size={12} /> Pendente (Débito: {formatBRL(remainingDebt)})
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider text-[10px] pt-1">
-                    REF: {selectedOrderDetails.reference} • Cliente: {modalCustomer?.name} • Valor Total: {formatBRL(selectedOrderDetails.total)} • Quitado: {formatBRL(totalPaid)}
-                  </p>
-                </div>
-                <button onClick={() => setSelectedOrderDetails(null)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full">
-                  <X size={20} />
-                </button>
-              </div>
+          <FlowSheet
+            title="Extrato do pedido"
+            zIndexClass="z-[110]"
+            onClose={() => setSelectedOrderDetails(null)}
+            subtitle={
+              <span>
+                {selectedOrderDetails.reference} · {modalCustomer?.name} · {formatBRL(selectedOrderDetails.total)}
+                {selectedOrderDetails.status === OrderStatus.BUDGET
+                  ? ' · Orçamento'
+                  : paymentStatus === 'PAGO'
+                    ? ' · Quitado'
+                    : ` · Débito ${formatBRL(remainingDebt)}`}
+              </span>
+            }
+            footer={
+              <button
+                type="button"
+                onClick={() => setSelectedOrderDetails(null)}
+                className="w-full min-h-11 bg-slate-900 text-white font-bold text-xs rounded-xl"
+              >
+                Fechar
+              </button>
+            }
+          >
+            <div className="space-y-5">
 
             {/* Recibos de Pagamento */}
             <div className="space-y-3">
@@ -2158,7 +2150,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               ) : (
                 <div className="space-y-2">
                   {selectedOrderDetails.receipts?.map(r => (
-                    <div key={r.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
+                    <div key={r.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-800">{r.id}</span>
@@ -2197,7 +2189,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               ) : (
                 <div className="space-y-2">
                   {listOrderNfes(selectedOrderDetails).map((nfe) => (
-                    <div key={nfe.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center gap-3">
+                    <div key={nfe.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-black text-sm text-slate-800">
@@ -2245,7 +2237,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               ) : (
                 <div className="space-y-2">
                   {selectedOrderDetails.withdrawals?.map(w => (
-                    <div key={w.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
+                    <div key={w.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-800">{w.plateNumber}</span>
@@ -2267,15 +2259,20 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               )}
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-slate-100">
-              <button onClick={() => setSelectedOrderDetails(null)} className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
-                Fechar
-              </button>
             </div>
-          </div>
-        </div>
+          </FlowSheet>
       );
     })()}
+
+      {!isModalOpen && !orderForPayment && !orderForWithdrawal && !selectedOrderDetails && !orderToEmitNfe && !orderToViewDanfe && !viewingReceipt && (
+      <button
+        type="button"
+        onClick={openNewOrder}
+        className="sm:hidden fixed right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 min-h-12 px-5 bg-emerald-700 text-white rounded-2xl font-bold text-sm shadow-xl inline-flex items-center gap-2"
+      >
+        <Plus size={18} /> {isQuotesView ? 'Novo orçamento' : 'Novo pedido'}
+      </button>
+      )}
 
       {/* Modal Registrar Pagamento / Entrada / Abatimento */}
       {orderForPayment && (
