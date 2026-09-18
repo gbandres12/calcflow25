@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User } from '../types';
+import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
@@ -17,6 +17,8 @@ interface FiscalManagementProps {
   companyId?: string;
   inventory?: InventoryItem[];
   currentUser?: User;
+  transportadores?: Transportador[];
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   onUpdateOrder: (order: SaleOrder) => void;
   onAddOrder?: (order: any) => void;
   onNavigate?: (view: View) => void;
@@ -30,6 +32,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   companyId,
   inventory = [],
   currentUser,
+  transportadores = [],
+  onAddTransportador,
   onUpdateOrder,
   onAddOrder,
   onNavigate,
@@ -291,6 +295,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           config={config}
           company={company}
           currentUser={currentUser}
+          transportadores={transportadores}
+          onAddTransportador={onAddTransportador}
           onClose={() => setShowAvulsaModal(false)}
           onSuccess={(newOrder) => {
             if (onAddOrder) {
@@ -311,6 +317,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           customer={safeCustomers.find((c) => c.id === orderToEmitNfe.customerId) as Customer}
           config={config}
           company={company}
+          transportadores={transportadores}
+          onAddTransportador={onAddTransportador}
           transferencia={isTransferenciaEmit}
           onClose={() => { setOrderToEmitNfe(null); setIsTransferenciaEmit(false); }}
           onSuccess={(updatedOrder) => {

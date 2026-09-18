@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Truck, ChevronDown, ChevronUp, Info } from 'lucide-react';
-import { FreteInfo, FRETE_MODALIDADES } from '../types';
+import { Truck, ChevronDown, ChevronUp, Info, Plus, Search, Save, X } from 'lucide-react';
+import { FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
 
 interface FreteNfeSectionProps {
   value: FreteInfo;
   onChange: (next: FreteInfo) => void;
   totalQuantidade?: number; // soma das quantidades (para sugerir peso)
   compact?: boolean;
+  transportadores?: Transportador[];
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
 }
 
 function setDeep(base: FreteInfo, patch: Partial<FreteInfo>): FreteInfo {
@@ -17,7 +19,9 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   value,
   onChange,
   totalQuantidade,
-  compact
+  compact,
+  transportadores = [],
+  onAddTransportador
 }) => {
   const [showTransportadora, setShowTransportadora] = useState(
     Boolean(value.transportadora?.nome || value.transportadora?.documento || value.modalidade === 0 || value.modalidade === 2)
@@ -25,6 +29,18 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   const [showVolumes, setShowVolumes] = useState(
     Boolean(value.volumes?.pesoBruto || value.volumes?.pesoLiquido || value.volumes?.quantidade || value.veiculo?.placa)
   );
+  const [transportadorSearch, setTransportadorSearch] = useState('');
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickError, setQuickError] = useState('');
+  const [quick, setQuick] = useState({
+    nome: '',
+    documento: '',
+    telefone: '',
+    rntrc: '',
+    placa: '',
+    cidade: '',
+    uf: 'PA'
+  });
 
   const mod = Number(value.modalidade ?? 9);
   const precisaTransportadora = mod === 0 || mod === 1 || mod === 2;
@@ -32,6 +48,101 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   const valor = Number(value.valor ?? 0) || 0;
 
   const update = (patch: Partial<FreteInfo>) => onChange(setDeep(value, patch));
+
+  const transportadoresAtivos = (Array.isArray(transportadores) ? transportadores : [])
+    .filter(item => item && item.ativo !== false)
+    .filter(item => {
+      const q = transportadorSearch.trim().toLowerCase();
+      if (!q) return true;
+      return [item.nome, item.documento, item.placa, item.telefone, item.rntrc]
+        .some(field => String(field || '').toLowerCase().includes(q));
+    })
+    .slice(0, 30);
+
+  const selectTransportador = (id: string) => {
+    if (!id) {
+      update({ transportadorId: undefined, transportadora: undefined, veiculo: undefined });
+      return;
+    }
+    const item = transportadores.find(t => t?.id === id);
+    if (!item) return;
+    onChange({
+      ...value,
+      transportadorId: item.id,
+      transportadora: {
+        documento: item.documento || '',
+        nome: item.nome || '',
+        ie: item.ie || '',
+        endereco: item.endereco || '',
+        cidade: item.cidade || '',
+        uf: item.uf || '',
+        rntrc: item.rntrc || ''
+      },
+      veiculo: {
+        ...(value.veiculo || {}),
+        placa: item.placa || '',
+        uf: item.ufPlaca || item.uf || '',
+        rntrc: item.rntrc || ''
+      }
+    });
+    setShowTransportadora(true);
+  };
+
+  const saveQuickTransportador = () => {
+    const nome = quick.nome.trim();
+    const documento = quick.documento.replace(/\D/g, '');
+    if (nome.length < 2) {
+      setQuickError('Informe o nome do caminhoneiro ou da transportadora.');
+      return;
+    }
+    if (documento && documento.length !== 11 && documento.length !== 14) {
+      setQuickError('CPF deve ter 11 dígitos ou CNPJ 14 dígitos.');
+      return;
+    }
+    const data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'> = {
+      nome,
+      documento,
+      telefone: quick.telefone.trim(),
+      rntrc: quick.rntrc.trim(),
+      placa: quick.placa.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+      ufPlaca: quick.uf.toUpperCase(),
+      cidade: quick.cidade.trim(),
+      uf: quick.uf.toUpperCase(),
+      tipoServico: 'ENTREGA',
+      contratacao: mod === 1 || mod === 4 ? 'CLIENTE' : mod === 0 || mod === 3 ? 'EMPRESA' : 'AMBOS',
+      ativo: true
+    };
+    const created = onAddTransportador?.(data);
+    if (created) {
+      onChange({
+        ...value,
+        transportadorId: created.id,
+        transportadora: {
+          documento: created.documento,
+          nome: created.nome,
+          rntrc: created.rntrc,
+          cidade: created.cidade,
+          uf: created.uf
+        },
+        veiculo: {
+          ...(value.veiculo || {}),
+          placa: created.placa,
+          uf: created.ufPlaca || created.uf,
+          rntrc: created.rntrc
+        }
+      });
+    } else {
+      onChange({
+        ...value,
+        transportadora: { documento, nome, rntrc: data.rntrc, cidade: data.cidade, uf: data.uf },
+        veiculo: { ...(value.veiculo || {}), placa: data.placa, uf: data.ufPlaca, rntrc: data.rntrc }
+      });
+    }
+    setQuick({ nome: '', documento: '', telefone: '', rntrc: '', placa: '', cidade: '', uf: 'PA' });
+    setQuickError('');
+    setShowQuickAdd(false);
+    setShowTransportadora(true);
+  };
 
   const suggestPeso = () => {
     if (!totalQuantidade) return;
@@ -105,6 +216,87 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           {mod === 4 && 'Transporte próprio do destinatário: o cliente retira com frota própria.'}
         </span>
       </p>
+
+      {comCobranca && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-black uppercase tracking-wide text-emerald-800">
+                Transportador cadastrado
+              </label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="search"
+                  value={transportadorSearch}
+                  onChange={e => setTransportadorSearch(e.target.value)}
+                  placeholder="Buscar nome, CPF/CNPJ, placa ou RNTRC..."
+                  className="w-full rounded-xl border border-emerald-200 bg-white py-2.5 pl-9 pr-3 text-xs font-semibold outline-none focus:border-emerald-600"
+                />
+              </div>
+              <select
+                value={value.transportadorId || ''}
+                onChange={e => selectTransportador(e.target.value)}
+                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600"
+              >
+                <option value="">Selecionar da lista...</option>
+                {transportadoresAtivos.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.nome}{item.placa ? ` · ${item.placa}` : ''}{item.contratacao === 'CLIENTE' ? ' · do cliente' : item.contratacao === 'EMPRESA' ? ' · da empresa' : ''}
+                  </option>
+                ))}
+              </select>
+              {transportadoresAtivos.length === 0 && transportadorSearch && (
+                <p className="text-[10px] font-semibold text-slate-500">Nenhum cadastro encontrado.</p>
+              )}
+            </div>
+            {onAddTransportador && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickAdd(!showQuickAdd);
+                  setQuickError('');
+                }}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-[10px] font-black uppercase text-emerald-800 hover:bg-emerald-100 sm:w-auto"
+              >
+                {showQuickAdd ? <X size={14} /> : <Plus size={14} />}
+                {showQuickAdd ? 'Fechar cadastro' : 'Cadastrar agora'}
+              </button>
+            )}
+          </div>
+
+          {value.transportadorId && (
+            <p className="rounded-xl bg-white px-3 py-2 text-[10px] font-bold text-emerald-800">
+              Cadastro selecionado: {value.transportadora?.nome}
+              {value.veiculo?.placa ? ` · Placa ${value.veiculo.placa}` : ''}
+            </p>
+          )}
+
+          {showQuickAdd && onAddTransportador && (
+            <div className="space-y-3 rounded-2xl border border-emerald-200 bg-white p-3 animate-in fade-in duration-150">
+              <div>
+                <p className="text-xs font-black text-slate-800">Cadastro rápido do transportador</p>
+                <p className="text-[10px] text-slate-500">O cadastro ficará salvo para as próximas notas.</p>
+              </div>
+              {quickError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] font-bold text-rose-700">{quickError}</p>}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input value={quick.nome} onChange={e => setQuick({ ...quick, nome: e.target.value })} placeholder="Nome / Razão social *" className={inputCls} />
+                <input value={quick.documento} onChange={e => setQuick({ ...quick, documento: e.target.value })} inputMode="numeric" placeholder="CPF / CNPJ" className={inputCls} />
+                <input value={quick.telefone} onChange={e => setQuick({ ...quick, telefone: e.target.value })} inputMode="tel" placeholder="Telefone / WhatsApp" className={inputCls} />
+                <input value={quick.rntrc} onChange={e => setQuick({ ...quick, rntrc: e.target.value })} placeholder="RNTRC / ANTT" className={inputCls} />
+                <input value={quick.placa} onChange={e => setQuick({ ...quick, placa: e.target.value.toUpperCase() })} placeholder="Placa do veículo" className={inputCls} />
+                <div className="flex gap-2">
+                  <input value={quick.cidade} onChange={e => setQuick({ ...quick, cidade: e.target.value })} placeholder="Cidade" className={`${inputCls} flex-1`} />
+                  <input value={quick.uf} onChange={e => setQuick({ ...quick, uf: e.target.value.toUpperCase() })} maxLength={2} placeholder="UF" className={`${inputCls} w-16 text-center`} />
+                </div>
+              </div>
+              <button type="button" onClick={saveQuickTransportador} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-[10px] font-black uppercase text-white hover:bg-emerald-800">
+                <Save size={14} /> Salvar e usar nesta NF-e
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {comCobranca && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -327,6 +327,31 @@ export interface FreteTransportadora {
   rntrc?: string; // Registro ANTT
 }
 
+export type TransportadorTipoServico = 'INTERNO' | 'ENTREGA' | 'AMBOS';
+export type TransportadorContratacao = 'EMPRESA' | 'CLIENTE' | 'AMBOS';
+
+/** Cadastro mestre reutilizado nas operações internas e na emissão de NF-e. */
+export interface Transportador extends FreteTransportadora {
+  id: string;
+  companyId?: string;
+  nome: string;
+  documento: string;
+  tipoServico: TransportadorTipoServico;
+  contratacao: TransportadorContratacao;
+  telefone?: string;
+  email?: string;
+  cnh?: string;
+  categoriaCnh?: string;
+  validadeCnh?: string;
+  placa?: string;
+  ufPlaca?: string;
+  modeloVeiculo?: string;
+  ativo: boolean;
+  observacoes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface FreteVeiculo {
   placa?: string;
   uf?: string;
@@ -344,6 +369,7 @@ export interface FreteVolume {
 export interface FreteInfo {
   modalidade?: FreteModalidade | number;
   valor?: number; // vFrete — compõe o total da NF-e
+  transportadorId?: string; // vínculo com o cadastro mestre
   transportadora?: FreteTransportadora;
   veiculo?: FreteVeiculo;
   volumes?: FreteVolume;
@@ -516,4 +542,4 @@ export interface TransferShipment {
   updatedAt?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';

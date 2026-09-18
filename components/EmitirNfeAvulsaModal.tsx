@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo } from '../types';
+import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
@@ -16,6 +16,8 @@ interface EmitirNfeAvulsaModalProps {
   currentUser?: User;
   onClose: () => void;
   onSuccess: (newOrder: SaleOrder) => void;
+  transportadores?: Transportador[];
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
 }
 
 interface AvulsaItem {
@@ -45,7 +47,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   company,
   currentUser,
   onClose,
-  onSuccess
+  onSuccess,
+  transportadores = [],
+  onAddTransportador
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -768,7 +772,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           </div>
 
           {/* Seção 5: Frete & Transporte — sem frete, CIF, FOB */}
-          <FreteNfeSection value={frete} onChange={setFrete} totalQuantidade={totalQuantidade} />
+          <FreteNfeSection
+            value={frete}
+            onChange={setFrete}
+            totalQuantidade={totalQuantidade}
+            transportadores={transportadores}
+            onAddTransportador={onAddTransportador}
+          />
 
           {/* Totais do Documento */}
           <div className="p-4 sm:p-5 bg-slate-900 text-white rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

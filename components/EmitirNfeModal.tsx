@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { SaleOrder, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES } from '../types';
+import { SaleOrder, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { FreteNfeSection } from './FreteNfeSection';
@@ -19,6 +19,8 @@ interface EmitirNfeModalProps {
   company: Company;
   onClose: () => void;
   onSuccess: (updatedOrder: SaleOrder) => void;
+  transportadores?: Transportador[];
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   devolutionChave?: string;
   transferencia?: boolean;
 }
@@ -30,6 +32,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   company,
   onClose,
   onSuccess,
+  transportadores = [],
+  onAddTransportador,
   devolutionChave,
   transferencia
 }) => {
@@ -594,7 +598,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
           {/* Frete / Transporte — sem frete, CIF, FOB */}
           {!isDevolucao && !isTransferencia ? (
-            <FreteNfeSection value={frete} onChange={setFrete} totalQuantidade={totalQuantidade} />
+            <FreteNfeSection
+              value={frete}
+              onChange={setFrete}
+              totalQuantidade={totalQuantidade}
+              transportadores={transportadores}
+              onAddTransportador={onAddTransportador}
+            />
           ) : (
             <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl text-xs text-slate-500 flex items-center gap-2">
               <Truck size={16} className="text-slate-400 shrink-0" />

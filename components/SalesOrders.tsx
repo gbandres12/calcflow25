@@ -10,7 +10,8 @@ import {
   FinancialAccount, 
   FiscalConfig,
   PaymentReceipt,
-  OrderWithdrawal
+  OrderWithdrawal,
+  Transportador
 } from '../types';
 import { 
   Plus, Printer, FileCheck, Search, X, 
@@ -38,6 +39,8 @@ interface SalesOrdersProps {
   companyId?: string;
   onAddOrder: (order: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => void;
   onAddCustomer?: (customerData: Omit<Customer, 'id' | 'companyId' | 'totalSpent'>) => Customer | void;
+  transportadores?: Transportador[];
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   onUpdateOrder: (order: SaleOrder) => void;
   onDeleteOrder: (orderId: string) => void;
   onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
@@ -97,6 +100,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   companyId,
   onAddOrder, 
   onAddCustomer,
+  transportadores = [],
+  onAddTransportador,
   onUpdateOrder,
   onDeleteOrder,
   onVerifyDeletionPassword,
@@ -1947,6 +1952,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderToEmitNfe.customerId) || customers[0]}
           config={fiscalConfig}
           company={company}
+          transportadores={transportadores}
+          onAddTransportador={onAddTransportador}
           devolutionChave={devolutionChave}
           transferencia={emitTransferencia}
           onClose={() => {

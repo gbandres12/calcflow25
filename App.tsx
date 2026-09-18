@@ -18,6 +18,7 @@ import CategorySettings from './components/CategorySettings';
 import { FiscalManagement } from './components/FiscalManagement';
 import { FiscalConfigView } from './components/FiscalConfigView';
 import TransferManagement from './components/TransferManagement';
+import Transportadores from './components/Transportadores';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -44,7 +45,8 @@ import {
   User,
   Category,
   Company,
-  TransferShipment
+  TransferShipment,
+  Transportador
 } from './types';
 import { 
   INITIAL_COST_CENTERS,
@@ -98,6 +100,7 @@ const App: React.FC = () => {
   const [fuelPurchases, setFuelPurchases] = useState<FuelPurchase[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transfers, setTransfers] = useState<TransferShipment[]>([]);
+  const [transportadores, setTransportadores] = useState<Transportador[]>([]);
 
   // Check if current user needs onboarding upon login
   useEffect(() => {
@@ -136,7 +139,7 @@ const App: React.FC = () => {
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers
+          savedCategories, savedUsers, savedTransfers, savedTransportadores
         ] = await Promise.all([
           financeService.getTransactions(activeCompanyId),
           inventoryService.getInventory(activeCompanyId),
@@ -150,7 +153,8 @@ const App: React.FC = () => {
           db.getTable('financial_accounts', activeCompanyId),
           db.getTable('categories', activeCompanyId),
           userService.getAll(activeCompanyId),
-          db.getTable('transfers', activeCompanyId)
+          db.getTable('transfers', activeCompanyId),
+          db.getTable('transportadores', activeCompanyId)
         ]);
 
         setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
@@ -166,6 +170,7 @@ const App: React.FC = () => {
         setCategories(Array.isArray(savedCategories) ? savedCategories : []);
         setUsers(Array.isArray(savedUsers) ? savedUsers : []);
         setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
+        setTransportadores(Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : []);
 
       } catch (error) {
         console.error("Erro ao carregar dados:", error);
@@ -393,6 +398,38 @@ const App: React.FC = () => {
   const handleDeleteCustomer = (id: string) => {
     setCustomers(prev => prev.filter(c => c.id !== id));
     db.delete('customers', activeCompanyId, id).catch(() => {});
+  };
+
+  // Transportadores / caminhoneiros
+  const handleAddTransportador = (
+    data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>
+  ): Transportador => {
+    const now = new Date().toISOString();
+    const transportador: Transportador = {
+      ...data,
+      id: newId('transp'),
+      companyId: activeCompanyId,
+      createdAt: now,
+      updatedAt: now
+    };
+    setTransportadores(prev => [...prev, transportador]);
+    persistCloud('transportadores', transportador);
+    return transportador;
+  };
+
+  const handleUpdateTransportador = (updated: Transportador) => {
+    const tagged: Transportador = {
+      ...updated,
+      companyId: updated.companyId || activeCompanyId,
+      updatedAt: new Date().toISOString()
+    };
+    setTransportadores(prev => prev.map(item => item.id === tagged.id ? tagged : item));
+    persistCloud('transportadores', tagged);
+  };
+
+  const handleDeleteTransportador = (id: string) => {
+    setTransportadores(prev => prev.filter(item => item.id !== id));
+    db.delete('transportadores', activeCompanyId, id).catch(() => {});
   };
 
   // Estoque
@@ -858,6 +895,8 @@ const App: React.FC = () => {
               companyId={activeCompanyId}
               onAddOrder={handleAddOrder} 
               onAddCustomer={handleAddCustomer}
+              transportadores={transportadores}
+              onAddTransportador={handleAddTransportador}
               onUpdateOrder={handleUpdateOrder} 
               onDeleteOrder={handleDeleteOrder}
               onVerifyDeletionPassword={verifyCurrentUserPassword}
@@ -877,6 +916,8 @@ const App: React.FC = () => {
               companyId={activeCompanyId}
               inventory={inventory}
               currentUser={currentUser}
+              transportadores={transportadores}
+              onAddTransportador={handleAddTransportador}
               onUpdateOrder={handleUpdateOrder} 
               onAddOrder={handleAddOrder}
               onNavigate={setCurrentView}
@@ -988,6 +1029,14 @@ const App: React.FC = () => {
               onAddCustomer={handleAddCustomer} 
               onUpdateCustomer={handleUpdateCustomer}
               onDeleteCustomer={handleDeleteCustomer}
+            />
+          )}
+          {currentView === 'transportadores' && (
+            <Transportadores
+              transportadores={transportadores}
+              onAdd={handleAddTransportador}
+              onUpdate={handleUpdateTransportador}
+              onDelete={handleDeleteTransportador}
             />
           )}
           {currentView === 'cashflow' && (

@@ -32,7 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(itemId)) return userPermissions.financial;
     if (['users'].includes(itemId)) return userPermissions.users;
     if (['inventory', 'milling'].includes(itemId)) return userPermissions.inventory;
-    if (['orders', 'quotes', 'customers', 'yard', 'transfers'].includes(itemId)) return userPermissions.orders;
+    if (['orders', 'quotes', 'customers', 'transportadores', 'yard', 'transfers'].includes(itemId)) return userPermissions.orders;
     return true;
   };
 
@@ -51,6 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     { title: 'Frota, Pátio & Suprimentos', items: [
       { id: 'yard', label: 'Pátio, Balança & Peças', icon: Boxes },
       { id: 'transfers', label: 'Transferências', icon: ArrowRightLeft },
+      { id: 'transportadores', label: 'Transportadores', icon: Truck },
       { id: 'fleet', label: 'Frota e Maquinário', icon: Truck },
       { id: 'fuel', label: 'Combustível', icon: Fuel },
     ]},
