@@ -12,13 +12,16 @@ import {
   SUPABASE_SQL_SCHEMA,
   isSupabaseConfigured 
 } from '../services/supabaseClient';
+import { dedupeTenantUsers, fetchTenants, mergeTenants } from '../services/adminApi';
 
 interface DatabaseStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isAdmin?: boolean;
+  companyId?: string;
 }
 
-export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen, onClose }) => {
+export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen, onClose, isAdmin, companyId }) => {
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingPersistence, setTestingPersistence] = useState(false);
@@ -29,6 +32,11 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
     message: string;
     url?: string;
   } | null>(null);
+
+  const [tenants, setTenants] = useState<any[] | null>(null);
+  const [currentCompanyId, setCurrentCompanyId] = useState('');
+  const [tenantBusy, setTenantBusy] = useState(false);
+  const [tenantMessage, setTenantMessage] = useState<string | null>(null);
 
   const config = getSupabaseConfig();
 
@@ -63,11 +71,23 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
     }
   };
 
+  const loadTenants = async () => {
+    if (!isAdmin) return;
+    try {
+      const payload = await fetchTenants(companyId);
+      setTenants(payload.tenants || []);
+      setCurrentCompanyId(payload.currentCompanyId);
+    } catch (e: any) {
+      setTenantMessage(e?.message || 'Não foi possível listar as pastas.');
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       runTest();
+      loadTenants();
     }
-  }, [isOpen]);
+  }, [isOpen, isAdmin, companyId]);
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
@@ -244,6 +264,76 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
               </div>
             </div>
           </div>
+
+          {isAdmin && (
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Pastas internas da CBA</h3>
+              <p className="text-[11px] text-slate-400">
+                Vocês têm uma empresa só. Se aparecer mais de uma pasta de produção, una na pasta atual da Alana. Não apague a pasta antiga até conferir as notas.
+              </p>
+              {tenantMessage && <p className="text-xs text-amber-300">{tenantMessage}</p>}
+              <div className="space-y-2">
+                {(tenants || []).filter((t) => !t.isDemo).map((tenant) => (
+                  <div key={tenant.companyId} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="text-white">{tenant.isCurrent ? 'Pasta atual (Alana)' : 'Pasta antiga'}</strong>
+                      <span className="text-slate-500 font-mono truncate">{tenant.companyId}</span>
+                    </div>
+                    <p className="text-slate-300">
+                      {tenant.salesOrders} pedidos · {tenant.nfeOrders} NF-e · {tenant.customers} clientes · {tenant.users.length} usuários
+                    </p>
+                    <p className="text-slate-500">{tenant.users.map((u: any) => u.email).filter(Boolean).join(', ')}</p>
+                    {!tenant.isCurrent && currentCompanyId && (
+                      <button
+                        type="button"
+                        disabled={tenantBusy}
+                        onClick={async () => {
+                          if (!window.confirm('Copiar os dados desta pasta antiga para a pasta atual da Alana? A pasta antiga não será apagada.')) return;
+                          setTenantBusy(true);
+                          setTenantMessage(null);
+                          try {
+                            const result = await mergeTenants(tenant.companyId, currentCompanyId);
+                            setTenantMessage(`Unificado: ${result.copied} registros copiados, ${result.skipped} já existiam na pasta atual.`);
+                            await loadTenants();
+                          } catch (e: any) {
+                            setTenantMessage(e?.message || 'Falha ao unificar.');
+                          } finally {
+                            setTenantBusy(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-bold disabled:opacity-50"
+                      >
+                        Unir nesta pasta da Alana
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {currentCompanyId && (
+                <button
+                  type="button"
+                  disabled={tenantBusy}
+                  onClick={async () => {
+                    setTenantBusy(true);
+                    setTenantMessage(null);
+                    try {
+                      const result = await dedupeTenantUsers(currentCompanyId);
+                      const names = (result.removed || []).map((row) => row.name || row.email).join(', ');
+                      setTenantMessage(result.removed?.length ? `Cadastros duplicados removidos: ${names}` : 'Não havia cadastro duplicado nesta pasta.');
+                      await loadTenants();
+                    } catch (e: any) {
+                      setTenantMessage(e?.message || 'Falha ao limpar duplicados.');
+                    } finally {
+                      setTenantBusy(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-bold disabled:opacity-50"
+                >
+                  Unificar Cassia duplicada
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Configuration details */}
           <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">

@@ -373,6 +373,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           linked
         );
 
+        const persistCompanyId = order.companyId || company.id;
+        try {
+          await db.upsert('sales_orders', persistCompanyId, { ...updatedOrder, companyId: persistCompanyId });
+        } catch (persistErr: any) {
+          setErrorMsg(
+            persistErr?.message
+              ? `NF-e transmitida, mas o banco não confirmou o pedido: ${persistErr.message}. Não feche nem limpe o navegador — toque em Reenviar agora.`
+              : 'NF-e transmitida, mas o banco não confirmou o pedido. Não feche nem limpe o navegador.'
+          );
+          return;
+        }
+
         onSuccess(updatedOrder);
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e pela SEFAZ.');

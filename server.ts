@@ -9,6 +9,7 @@ import danfeNfe from "./api/nfe/danfe";
 import xmlNfe from "./api/nfe/xml";
 import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
+import adminTenants from "./api/admin/tenants";
 
 async function startServer() {
   const app = express();
@@ -27,6 +28,8 @@ async function startServer() {
   app.get("/api/webhooks/notaas", (req, res) => notaasWebhook(req, res));
   app.post("/api/users/invite", (req, res) => inviteUser(req, res));
   app.delete("/api/users/invite", (req, res) => inviteUser(req, res));
+  app.get("/api/admin/tenants", (req, res) => adminTenants(req, res));
+  app.post("/api/admin/tenants", (req, res) => adminTenants(req, res));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", service: "Calcário Flow ERP" });

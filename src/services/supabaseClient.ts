@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { pickMembershipCompanyId } from '../../services/membershipCompany';
 
 // Função para limpar strings de variáveis de ambiente (remover aspas ou espaços acidentais)
 const cleanEnv = (val?: string): string => {
@@ -173,12 +174,13 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
     const { data: sessionData } = await client.auth.getSession();
     let companyId = 'matriz-demo';
     if (sessionData.session?.user) {
-      const { data: membership, error: membershipError } = await client
+      const { data: memberships, error: membershipError } = await client
         .from('company_memberships')
-        .select('company_id')
-        .eq('user_id', sessionData.session.user.id)
-        .maybeSingle();
-      if (membershipError || !membership?.company_id) {
+        .select('company_id, created_at, role')
+        .eq('user_id', sessionData.session.user.id);
+      const preferred = String(sessionData.session.user.user_metadata?.companyId || '');
+      const companyFromMembership = pickMembershipCompanyId(memberships || [], preferred);
+      if (membershipError || !companyFromMembership) {
         return {
           ok: false,
           canWrite: false,
@@ -187,7 +189,7 @@ export const testSupabasePersistence = async (): Promise<SupabasePersistenceTest
           counts: { salesOrders: 0, nfeOrders: 0, transactions: 0, customers: 0, total: 0 }
         };
       }
-      companyId = membership.company_id;
+      companyId = companyFromMembership;
     }
 
     // 1. Testar Gravação (Upsert)

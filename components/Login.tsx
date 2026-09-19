@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { userService } from '../services/dataService';
+import { isLocalDevHost } from '../services/authLogic';
 import { INITIAL_USERS } from '../constants';
 import { 
   Lock, Mail, Loader2, ArrowRight, Factory, ShieldCheck, 
@@ -19,8 +20,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [showDbModal, setShowDbModal] = useState(false);
   
   // Login State
-  const [email, setEmail] = useState('admin@calcarioflow.com.br');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   
   // Register State
   const [registerName, setRegisterName] = useState('');
@@ -91,7 +92,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         setSuccessInfo('Conta criada com sucesso no Supabase! Verifique sua caixa de entrada para confirmar o e-mail (ou faça login caso a confirmação esteja desativada no seu painel).');
         setMode('login');
         setEmail(registerEmail);
-        setPassword(registerPassword);
+        setPassword('');
       } else {
         onLoginSuccess(newUser, true);
       }
@@ -124,9 +125,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const handleQuickRole = (user: User) => {
     setEmail(user.email);
-    setPassword('123456');
+    setPassword('');
     handleLogin(undefined, user.email, '123456');
   };
+
+  const showDemoAccess = isLocalDevHost();
 
   const roleIcons = {
     [UserRole.ADMIN]: ShieldCheck,
@@ -160,14 +163,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </p>
           </div>
 
-          {/* Perfis Estratégicos Rápidos */}
+          {showDemoAccess && (
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                Acesso de Demonstração (1-Clique)
-              </span>
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                <CheckCircle2 size={12} /> Usina Matriz Ativa
+                Acesso de Demonstração (apenas local)
               </span>
             </div>
 
@@ -201,6 +201,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               })}
             </div>
           </div>
+          )}
         </div>
 
         {/* Painel Direito: Formulário com Alternância Login / Cadastro SaaS */}
@@ -263,7 +264,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       className="w-full pl-12 pr-6 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold transition-all text-sm text-slate-800"
-                      placeholder="ex: admin@calcarioflow.com.br"
+                      placeholder="seu e-mail corporativo"
                     />
                   </div>
                 </div>
@@ -281,8 +282,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                       placeholder="••••••••"
                     />
                   </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <p className="text-[10px] text-slate-400 font-medium">Senha padrão: <strong className="text-slate-700">123456</strong></p>
+                  <div className="flex items-center justify-end pt-1">
                     <button
                       type="button"
                       onClick={() => { setMode('forgot'); setError(''); setForgotSuccess(''); setForgotEmail(email); }}
@@ -492,6 +492,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               © 2026 CalcárioFlow ERP • Moagem Mineral
             </p>
+            {showDemoAccess && (
             <button
               type="button"
               onClick={() => setShowDbModal(true)}
@@ -500,6 +501,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <Database size={13} className="text-emerald-500" />
               Status Supabase Cloud
             </button>
+            )}
           </div>
         </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { listOrderNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe } from '../services/saleNfe';
+import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
@@ -51,6 +52,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao'>('notas_emitidas');
   const [showAvulsaModal, setShowAvulsaModal] = useState(false);
+  const [duplicateDraft, setDuplicateDraft] = useState<NfeDuplicateDraft | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
@@ -80,6 +82,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
     setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const openDuplicate = (order: SaleOrder, linkedNfeId?: string) => {
+    const linked = findLinkedNfe(order, linkedNfeId) || listOrderNfes(order).slice(-1)[0];
+    setDuplicateDraft(buildNfeDuplicateDraft(order, linked));
+    setSelectedDanfeOrder(null);
+    setSelectedDanfeLinkedNfeId(undefined);
+    setShowAvulsaModal(true);
   };
 
   const nfeStatusLabel = (status?: string) => {
@@ -162,7 +172,10 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => setShowAvulsaModal(true)}
+            onClick={() => {
+              setDuplicateDraft(null);
+              setShowAvulsaModal(true);
+            }}
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-purple-200 transition-all hover:scale-[1.02]"
             title="Emitir NF-e Avulsa diretamente sem necessidade de pedido de venda anterior"
           >
@@ -284,9 +297,16 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                                 setSelectedDanfeLinkedNfeId(row.nfe.id);
                                 setSelectedDanfeOrder(row.order);
                               }}
-                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black"
+                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black inline-flex items-center gap-1"
                             >
                               <Eye size={12} /> DANFE
+                            </button>
+                            <button
+                              onClick={() => openDuplicate(row.order, row.nfe.id)}
+                              className="px-3 py-1.5 bg-white border border-purple-200 text-purple-800 rounded-xl text-[10px] font-black inline-flex items-center gap-1"
+                              title="Emitir uma nota nova com os mesmos dados"
+                            >
+                              <Copy size={12} /> Duplicar
                             </button>
                           </div>
                         </td>
@@ -358,7 +378,11 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           currentUser={currentUser}
           transportadores={transportadores}
           onAddTransportador={onAddTransportador}
-          onClose={() => setShowAvulsaModal(false)}
+          onClose={() => {
+            setShowAvulsaModal(false);
+            setDuplicateDraft(null);
+          }}
+          duplicateFrom={duplicateDraft}
           onSuccess={(newOrder) => {
             if (onAddOrder) {
               onAddOrder(newOrder);
@@ -366,6 +390,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               onUpdateOrder(newOrder);
             }
             setShowAvulsaModal(false);
+            setDuplicateDraft(null);
             setSelectedDanfeOrder(newOrder);
           }}
         />
@@ -384,8 +409,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           transferencia={isTransferenciaEmit}
           modo={isAvulsaEmit ? 'avulsa' : 'pedido'}
           onClose={() => { setOrderToEmitNfe(null); setIsTransferenciaEmit(false); setIsAvulsaEmit(false); }}
-          onSuccess={(updatedOrder) => {
-            onUpdateOrder(updatedOrder);
+          onSuccess={async (updatedOrder) => {
+            await onUpdateOrder(updatedOrder);
             setOrderToEmitNfe(null);
             setIsTransferenciaEmit(false);
             setIsAvulsaEmit(false);
@@ -409,6 +434,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
             setSelectedDanfeOrder(null);
             setSelectedDanfeLinkedNfeId(undefined);
           }}
+          onDuplicate={() => openDuplicate(selectedDanfeOrder, selectedDanfeLinkedNfeId)}
           onOrderUpdated={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
             setSelectedDanfeOrder(updatedOrder);

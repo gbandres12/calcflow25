@@ -1,11 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
+import { NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
-  CreditCard, Info, HelpCircle
+  CreditCard, Info, HelpCircle, Copy
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 
@@ -19,6 +20,7 @@ interface EmitirNfeAvulsaModalProps {
   onSuccess: (newOrder: SaleOrder) => void;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
+  duplicateFrom?: NfeDuplicateDraft | null;
 }
 
 interface AvulsaItem {
@@ -50,40 +52,67 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   onClose,
   onSuccess,
   transportadores = [],
-  onAddTransportador
+  onAddTransportador,
+  duplicateFrom
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
+  const seedCustomer = (Array.isArray(customers) ? customers : []).find((c) => c && c.id === duplicateFrom?.customerId);
 
   // Destinatário
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [customerSearch, setCustomerSearch] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(duplicateFrom?.customerId || '');
+  const [customerSearch, setCustomerSearch] = useState<string>(seedCustomer?.name || '');
   const [isNewCustomer, setIsNewCustomer] = useState(false);
 
   // Dados manuais se for novo cliente
-  const [destName, setDestName] = useState('');
-  const [destDoc, setDestDoc] = useState('');
-  const [destIe, setDestIe] = useState('');
-  const [destIsentoIe, setDestIsentoIe] = useState(false);
-  const [destStreet, setDestStreet] = useState('');
-  const [destNumber, setDestNumber] = useState('');
-  const [destNeighborhood, setDestNeighborhood] = useState('');
-  const [destCity, setDestCity] = useState('Santarém');
-  const [destState, setDestState] = useState('PA');
-  const [destZip, setDestZip] = useState('68000-000');
-  const [destIbge, setDestIbge] = useState('1506807');
-  const [destEmail, setDestEmail] = useState('');
+  const [destName, setDestName] = useState(seedCustomer?.name || '');
+  const [destDoc, setDestDoc] = useState(seedCustomer?.document || '');
+  const [destIe, setDestIe] = useState(seedCustomer?.ie || '');
+  const [destIsentoIe, setDestIsentoIe] = useState(Boolean(seedCustomer?.isentoIE));
+  const [destStreet, setDestStreet] = useState(seedCustomer?.street || '');
+  const [destNumber, setDestNumber] = useState(seedCustomer?.number || '');
+  const [destNeighborhood, setDestNeighborhood] = useState(seedCustomer?.neighborhood || '');
+  const [destCity, setDestCity] = useState(seedCustomer?.city || 'Santarém');
+  const [destState, setDestState] = useState(seedCustomer?.state || 'PA');
+  const [destZip, setDestZip] = useState(seedCustomer?.zipCode || '68000-000');
+  const [destIbge, setDestIbge] = useState(seedCustomer?.ibgeCode || '1506807');
+  const [destEmail, setDestEmail] = useState(seedCustomer?.email || '');
 
   // Parâmetros da NF-e
-  const [naturezaOperacao, setNaturezaOperacao] = useState(config?.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento');
-  const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'Boleto' | 'Dinheiro' | 'Transferência' | 'Sem Pagamento'>('PIX');
+  const [naturezaOperacao, setNaturezaOperacao] = useState(
+    duplicateFrom?.naturezaOperacao || config?.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'
+  );
+  const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'Boleto' | 'Dinheiro' | 'Transferência' | 'Sem Pagamento'>(
+    duplicateFrom?.paymentMethod || 'PIX'
+  );
   // Frete / transporte (modFrete SEFAZ): 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2/3/4
-  const [frete, setFrete] = useState<FreteInfo>({ modalidade: 9, valor: 0 });
-  const [infCplCustom, setInfCplCustom] = useState<string>('');
+  const [frete, setFrete] = useState<FreteInfo>(duplicateFrom?.frete || { modalidade: 9, valor: 0 });
+  const [infCplCustom, setInfCplCustom] = useState<string>(duplicateFrom?.infCpl || '');
 
   // Itens da Nota
   const [items, setItems] = useState<AvulsaItem[]>(() => {
+    if (duplicateFrom?.items?.length) {
+      return duplicateFrom.items.map((it, idx) => ({
+        id: `item-dup-${idx}`,
+        productId: it.productId || 'custom',
+        productCode: it.productCode || String(idx + 1).padStart(3, '0'),
+        productName: it.productName || 'Item',
+        unit: it.unit || 'TON',
+        quantity: Number(it.quantity) || 0,
+        unitPrice: Number(it.unitPrice) || 0,
+        discount: Number(it.discount) || 0,
+        total: Number(it.total) || 0,
+        ncm: it.ncm || '2517.10.00',
+        cfop: it.cfop || config?.cfopPadraoEstadual || '5101',
+        cst: it.cst || config?.cstIcmsPadrao || '40',
+        cClassTrib: it.cClassTrib,
+        aliquotaIbs: it.aliquotaIbs,
+        aliquotaCbs: it.aliquotaCbs,
+        aliquotaIs: it.aliquotaIs,
+        informacoesComplementares: it.informacoesComplementares
+      }));
+    }
     const firstProd = (inventory || [])[0];
     return [
     {
@@ -383,8 +412,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     <FlowSheet
       wide
       zIndexClass="z-[160]"
-      title="NF-e avulsa"
-      subtitle={`Nº ${config?.proxNumeroNFe || 1042} · série ${config?.serieNFe || 1} · ${config?.environment === 'production' ? 'Produção' : 'Homologação'}`}
+      title={duplicateFrom?.sourceNumero ? `Duplicar NF-e Nº ${duplicateFrom.sourceNumero}` : 'NF-e avulsa'}
+      subtitle={duplicateFrom
+        ? 'Cópia para emissão nova. Número, chave e protocolo da original não são reutilizados.'
+        : `Nº ${config?.proxNumeroNFe || 1042} · série ${config?.serieNFe || 1} · ${config?.environment === 'production' ? 'Produção' : 'Homologação'}`}
       onClose={onClose}
       footer={(
         <div className="flex items-center gap-2">
@@ -412,6 +443,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       )}
     >
         <div className="space-y-4">
+          {duplicateFrom && (
+            <div className="p-3.5 rounded-2xl border border-purple-200 bg-purple-50 text-purple-900 flex items-start gap-2.5">
+              <Copy className="text-purple-600 mt-0.5 shrink-0" size={16} />
+              <p className="text-xs font-medium leading-relaxed">
+                Destinatário, itens, CFOP e frete vieram da NF-e {duplicateFrom.sourceNumero ? `Nº ${duplicateFrom.sourceNumero}` : 'original'}.
+                Revise quantidades e transmita como nota nova.
+              </p>
+            </div>
+          )}
           
           {/* Status de Validação SEFAZ */}
           <div className={`p-4 rounded-2xl border flex items-start gap-3 ${

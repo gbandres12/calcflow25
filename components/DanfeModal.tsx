@@ -3,7 +3,7 @@ import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { commitLinkedNfeSync, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
 import {
-  Printer, Download, AlertTriangle, Ban, RefreshCw, FileX
+  Printer, Download, AlertTriangle, Ban, RefreshCw, FileX, Copy
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 
@@ -15,6 +15,7 @@ interface DanfeModalProps {
   onClose: () => void;
   onOrderUpdated: (updatedOrder: SaleOrder) => void;
   linkedNfeId?: string;
+  onDuplicate?: () => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -32,7 +33,8 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   company: _company,
   onClose,
   onOrderUpdated,
-  linkedNfeId
+  linkedNfeId,
+  onDuplicate
 }) => {
   const invoiceView = (() => {
     const linked = findLinkedNfe(order, linkedNfeId);
@@ -253,6 +255,15 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           >
             <Download size={15} /> XML
           </button>
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-purple-200 text-purple-800 rounded-xl text-xs font-bold"
+            >
+              <Copy size={14} /> Duplicar
+            </button>
+          )}
           {status === 'autorizada' && (
             <button
               type="button"

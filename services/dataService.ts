@@ -16,7 +16,7 @@ import {
 } from '../constants';
 import { User, UserRole } from '../types';
 import { getSupabase } from './supabaseClient';
-import { isDemoEmail } from './authLogic';
+import { isDemoEmail, isLocalDevHost } from './authLogic';
 import {
   SEED_DOC_ID,
   applyPendingDeletes,
@@ -29,6 +29,7 @@ import {
   splitConfirmedPending,
   stripSeedDocs
 } from './persistSeed';
+import { pickMembershipCompanyId } from './membershipCompany';
 
 // Cache local e fila de reenvio. A fonte da verdade é o Supabase.
 const storage = {
@@ -296,6 +297,32 @@ const membershipCompanyFromRpc = (payload: any): string | null => {
   return companyId ? String(companyId) : null;
 };
 
+const parsePendingStorageKey = (fullKey: string): { tableName: string; companyId: string } | null => {
+  if (!fullKey.startsWith('calcarioflow_') || !fullKey.includes('__pending_')) return null;
+  const inner = fullKey.replace(/^calcarioflow_/, '').replace(/__pending_(upserts|deletes)$/, '');
+  const tableName = ALL_TABLES.find((name) => inner === name || inner.startsWith(`${name}_`));
+  if (!tableName) return null;
+  const companyId = inner.slice(tableName.length + 1);
+  if (!companyId) return null;
+  return { tableName, companyId };
+};
+
+const countAllBrowserPending = (): number => {
+  if (typeof localStorage === 'undefined') return 0;
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i) || '';
+    if (!key.startsWith('calcarioflow_') || !key.includes('__pending_')) continue;
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || '[]');
+      total += Array.isArray(value) ? value.length : 0;
+    } catch {
+      /* ignore */
+    }
+  }
+  return total;
+};
+
 export const resolveMembershipCompanyId = async (
   userId: string,
   fallback: string
@@ -305,12 +332,11 @@ export const resolveMembershipCompanyId = async (
   try {
     const { data, error } = await supabase
       .from('company_memberships')
-      .select('company_id, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-      .limit(1);
-    if (!error && Array.isArray(data) && data[0]?.company_id) {
-      return String(data[0].company_id);
+      .select('company_id, created_at, role')
+      .eq('user_id', userId);
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const picked = pickMembershipCompanyId(data, fallback);
+      if (picked) return picked;
     }
   } catch (err) {
     console.warn('[Supabase] Falha ao ler company_memberships:', err);
@@ -340,7 +366,7 @@ export const db = {
       pendingCount += getPendingUpserts(storageKey).length + getPendingDeleteIds(storageKey).length;
     });
     return {
-      pendingCount,
+      pendingCount: Math.max(pendingCount, countAllBrowserPending()),
       lastError: lastPersistError,
       cloudEnabled: Boolean(getSupabase())
     };
@@ -360,6 +386,20 @@ export const db = {
         await persistPendingDeletes(tableName, compKey, pendingDeletes);
         pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
       }
+    }
+  },
+
+  async flushAllPending() {
+    if (typeof localStorage === 'undefined') return;
+    const seen = new Set<string>();
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const fullKey = localStorage.key(i) || '';
+      const parsed = parsePendingStorageKey(fullKey);
+      if (!parsed) continue;
+      const stamp = `${parsed.tableName}::${parsed.companyId}`;
+      if (seen.has(stamp)) continue;
+      seen.add(stamp);
+      await this.flushPending(parsed.companyId);
     }
   },
 
@@ -669,7 +709,7 @@ export const userService = {
         if (authError) {
           // Permite que as contas padrão de demonstração sejam acessadas mesmo sem pré-registro no Auth
           const isDemoAccount = INITIAL_USERS.some(u => u.email.toLowerCase() === cleanEmail) || cleanEmail === 'admin@calcarioflow.com.br';
-          if (isDemoAccount && pass === '123456') {
+          if (isLocalDevHost() && isDemoAccount && pass === '123456') {
             console.info('[Supabase Auth] Usando perfil de demonstração local.');
             const demoMatch = INITIAL_USERS.find(u => u.email.toLowerCase() === cleanEmail) || INITIAL_USERS[0];
             return { ...demoMatch, companyId: 'matriz-demo', lastAccess: new Date().toISOString() };
@@ -703,7 +743,7 @@ export const userService = {
     const matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
 
     if (matchedUser && isDemoEmail(cleanEmail)) {
-      if (pass === '123456') {
+      if (isLocalDevHost() && pass === '123456') {
         const withCompany: User = {
           ...matchedUser,
           companyId: matchedUser.companyId || (cleanEmail.endsWith('@calcarioflow.com.br') ? 'matriz-demo' : `comp-${matchedUser.id}`),
@@ -712,10 +752,10 @@ export const userService = {
         await this.saveUser(withCompany);
         return withCompany;
       }
-      throw new Error('Senha incorreta. Utilize 123456.');
+      throw new Error('E-mail ou senha incorretos. Verifique suas credenciais.');
     }
 
-    if ((cleanEmail === 'admin@calcarioflow.com.br' || cleanEmail === 'admin') && pass === '123456') {
+    if (isLocalDevHost() && (cleanEmail === 'admin@calcarioflow.com.br' || cleanEmail === 'admin') && pass === '123456') {
       return { ...INITIAL_USERS[0], companyId: 'matriz-demo' };
     }
 
@@ -736,7 +776,10 @@ export const userService = {
     role?: UserRole;
   }): Promise<{ user: User; requiresEmailConfirmation?: boolean }> {
     const cleanEmail = userData.email.trim().toLowerCase();
-    const password = userData.password || '123456';
+    const password = (userData.password || '').trim();
+    if (password.length < 6) {
+      throw new Error('A senha deve ter no mínimo 6 caracteres.');
+    }
     const supabase = getSupabase();
 
     let authUserId = `usr-${Date.now()}`;

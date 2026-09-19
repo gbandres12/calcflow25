@@ -54,9 +54,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   // Passo 4: Equipe Inicial
   const [teamMember, setTeamMember] = useState({
-    name: 'José Balança (Operador)',
-    email: 'balanca@calcarioflow.com.br',
-    role: UserRole.OPERATOR
+    name: '',
+    email: '',
+    role: UserRole.OPERATOR,
+    password: ''
   });
 
   if (!isOpen) return null;
@@ -125,11 +126,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       });
 
       // 4. Cria operador adicional se preenchido
-      if (teamMember.name && teamMember.email) {
+      if (teamMember.name && teamMember.email && teamMember.password.trim().length >= 6) {
         await userService.inviteUser({
           name: teamMember.name,
           email: teamMember.email.toLowerCase(),
-          password: '123456',
+          password: teamMember.password.trim(),
           role: teamMember.role,
           status: 'Ativo',
           companyId,
@@ -504,7 +505,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       type="email"
                       value={teamMember.email}
                       onChange={e => setTeamMember({ ...teamMember, email: e.target.value })}
-                      placeholder="balanca@calcarioflow.com.br"
+                      placeholder="operador@suaempresa.com.br"
                       className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-bold text-sm"
                     />
                   </div>
@@ -521,12 +522,24 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       <option value={UserRole.ADMIN}>Administrador (Acesso Irrestrito)</option>
                     </select>
                   </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Senha inicial do operador</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      value={teamMember.password}
+                      onChange={e => setTeamMember({ ...teamMember, password: e.target.value })}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-bold text-sm"
+                    />
+                  </div>
                 </div>
 
-                <div className="p-4 bg-amber-100/50 border border-amber-200 rounded-2xl flex items-center gap-3">
-                  <ShieldCheck size={20} className="text-amber-700 shrink-0" />
-                  <p className="text-xs text-amber-900 font-bold">
-                    A senha provisória de acesso para novos operadores é <strong>123456</strong>.
+                <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl flex items-center gap-3">
+                  <ShieldCheck size={20} className="text-slate-600 shrink-0" />
+                  <p className="text-xs text-slate-700 font-medium">
+                    Informe uma senha só para este convite. Depois o operador usa “Esqueci minha senha” se precisar redefinir.
                   </p>
                 </div>
               </div>

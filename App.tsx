@@ -47,7 +47,8 @@ import {
   Category,
   Company,
   TransferShipment,
-  Transportador
+  Transportador,
+  UserRole
 } from './types';
 import { 
   INITIAL_COST_CENTERS,
@@ -127,8 +128,8 @@ const App: React.FC = () => {
     }
   };
 
-  const persistCloud = (tableName: string, record: any) => {
-    db.upsert(tableName, activeCompanyId, record)
+  const persistCloud = (tableName: string, record: any, options?: { required?: boolean }) => {
+    return db.upsert(tableName, activeCompanyId, record)
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
@@ -139,6 +140,7 @@ const App: React.FC = () => {
         setPendingSyncCount(state.pendingCount);
         setPersistError(err?.message || `Não foi possível gravar ${tableName} no Supabase.`);
         console.warn('[PERSISTÊNCIA] Gravação no banco falhou; o registro ficou na fila local para reenvio:', tableName, err);
+        if (options?.required) throw err;
       });
   };
 
@@ -230,7 +232,7 @@ const App: React.FC = () => {
         setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
         setTransportadores(Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : []);
 
-        db.flushPending(activeCompanyId).catch((err) => {
+        db.flushAllPending().catch((err) => {
           console.warn('[PERSISTÊNCIA] Reenvio da fila para o Supabase falhou:', err);
         }).finally(() => {
           const state = db.getSyncState(activeCompanyId);
@@ -248,11 +250,27 @@ const App: React.FC = () => {
     loadAllData();
 
     const refreshOnFocus = () => { void loadAllData(); };
+    const flushQueue = () => {
+      db.flushAllPending()
+        .then(() => {
+          const state = db.getSyncState(activeCompanyId);
+          setPendingSyncCount(state.pendingCount);
+          setPersistError(state.lastError);
+        })
+        .catch((err) => setPersistError(err?.message || 'Falha ao reenviar a fila.'));
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') flushQueue();
+    };
     const refreshTimer = window.setInterval(refreshOnFocus, 60_000);
     window.addEventListener('focus', refreshOnFocus);
+    window.addEventListener('online', flushQueue);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.clearInterval(refreshTimer);
       window.removeEventListener('focus', refreshOnFocus);
+      window.removeEventListener('online', flushQueue);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [currentUser, activeCompanyId]);
 
@@ -512,7 +530,10 @@ const App: React.FC = () => {
 
   // Usuários
   const handleAddUser = async (userData: Omit<User, 'id'> & { password?: string }): Promise<User> => {
-    const rawPassword = (userData.password || '').trim() || '123456';
+    const rawPassword = (userData.password || '').trim();
+    if (rawPassword.length < 6) {
+      throw new Error('Informe uma senha com pelo menos 6 caracteres.');
+    }
     const { password: _password, ...rest } = userData as Omit<User, 'id'> & { password?: string };
     const newUser = await userService.inviteUser({
       ...rest,
@@ -523,7 +544,10 @@ const App: React.FC = () => {
       companyName: currentUser?.companyName || 'Sua Empresa'
     });
     const publicUser = toPublicUser(newUser);
-    setUsers(prev => [...prev, publicUser]);
+    setUsers(prev => {
+      const without = prev.filter((item) => item.id !== publicUser.id && item.email !== publicUser.email);
+      return [...without, publicUser];
+    });
     return publicUser;
   };
 
@@ -747,15 +771,16 @@ const App: React.FC = () => {
     persistDelete('sales_orders', orderId);
   };
 
-  const handleUpdateOrder = (updatedOrder: SaleOrder) => {
+  const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean }) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
-    persistCloud('sales_orders', tagged);
+    const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
     if (originalOrder && originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }
+    return persist;
   };
 
   // Resetar empresa para banco 100% limpo
@@ -934,14 +959,14 @@ const App: React.FC = () => {
             <div className={`mb-4 rounded-xl border px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center gap-2 ${persistError ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
               <p className="flex-1">
                 {persistError
-                  ? `O banco não confirmou a última gravação (${pendingSyncCount} item(ns) na fila). Clientes e vendas não ficam só no navegador — vamos reenviar ao Supabase.`
-                  : `${pendingSyncCount} registro(s) aguardando confirmação no Supabase.`}
+                  ? `O banco não confirmou a última gravação (${pendingSyncCount} item(ns) na fila). Não limpe o histórico nem os dados deste site neste aparelho — as notas podem estar só aqui até o reenvio.`
+                  : `${pendingSyncCount} registro(s) aguardando confirmação no Supabase. Não limpe o navegador até tocar em Reenviar agora.`}
               </p>
               <button
                 type="button"
                 className="shrink-0 px-3 py-1.5 rounded-lg bg-white border border-current/20 text-xs font-bold"
                 onClick={() => {
-                  db.flushPending(activeCompanyId)
+                  db.flushAllPending()
                     .then(() => {
                       const state = db.getSyncState(activeCompanyId);
                       setPendingSyncCount(state.pendingCount);
@@ -1144,13 +1169,14 @@ const App: React.FC = () => {
             />
           )}
           {currentView === 'users' && (
-            <UserManagement 
-              users={displayUsers} 
+            <UserManagement
+              users={displayUsers}
               currentUser={currentUser}
-              onAddUser={handleAddUser} 
-              onUpdateUser={handleUpdateUser} 
+              onAddUser={handleAddUser}
+              onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
               onOpenOnboarding={() => setShowOnboardingModal(true)}
+              onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
           {currentView === 'fleet' && (
@@ -1279,6 +1305,8 @@ const App: React.FC = () => {
       <DatabaseStatusModal
         isOpen={showDbModal}
         onClose={() => setShowDbModal(false)}
+        isAdmin={currentUser?.role === UserRole.ADMIN}
+        companyId={activeCompanyId}
       />
     </div>
   );

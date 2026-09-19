@@ -23,12 +23,15 @@ import {
   Building2,
   Calendar,
   AlertCircle,
-  FileUp
+  FileUp,
+  Copy,
+  Zap
 } from 'lucide-react';
 import { TransferShipment, TransferItem, TransferStatus, StoreItem, Company, User } from '../types';
 import { NfImportModal } from './NfImportModal';
 import { nextTransferCode } from '../services/ids';
 import { TransferRomaneioDocument } from './transfer-print/TransferRomaneioDocument';
+import { QuickRomaneioModal } from './QuickRomaneioModal';
 
 interface TransferManagementProps {
   transfers: TransferShipment[];
@@ -72,6 +75,8 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
   const [conferringTransfer, setConferringTransfer] = useState<TransferShipment | null>(null);
   const [printingTransfer, setPrintingTransfer] = useState<TransferShipment | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isQuickOpen, setIsQuickOpen] = useState(false);
+  const [quickSource, setQuickSource] = useState<TransferShipment | null>(null);
   const [formError, setFormError] = useState('');
   const [deleteCandidate, setDeleteCandidate] = useState<TransferShipment | null>(null);
 
@@ -287,7 +292,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-[#D5E3DC]">
-                Importar XML da compra em Santarém, revisar itens, gerar remessa em trânsito e conferir na fazenda.
+                Romaneio rápido Santarém → fazenda, importar XML da compra e conferir o recebimento na matriz.
               </p>
             </div>
           </div>
@@ -296,8 +301,16 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => setIsImportOpen(true)}
+            onClick={() => { setQuickSource(null); setIsQuickOpen(true); }}
             className="flex items-center gap-2 bg-[#F1D67A] hover:bg-[#e6c96a] text-[#0F5948] px-5 py-2.5 rounded-2xl font-semibold text-sm shadow-lg"
+          >
+            <Zap size={18} />
+            <span>Romaneio rápido</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsImportOpen(true)}
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-2xl font-semibold text-sm border border-white/20"
           >
             <FileUp size={18} />
             <span>Importar NF de Santarém</span>
@@ -436,11 +449,11 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
               Cadastre uma nova relação de remessa para enviar peças, insumos e equipamentos de Santarém para a Fazenda Matriz.
             </p>
             <button
-              onClick={handleOpenCreateModal}
+              onClick={() => { setQuickSource(null); setIsQuickOpen(true); }}
               className="inline-flex items-center gap-2 bg-[#0F5948] hover:bg-[#1B6B58] text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-md mt-2"
             >
-              <Plus size={16} />
-              Criar Primeira Remessa
+              <Zap size={16} />
+              Abrir romaneio rápido
             </button>
           </div>
         ) : (
@@ -525,6 +538,15 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     >
                       <Printer size={15} />
                       <span className="hidden sm:inline">Romaneio / Guia</span>
+                    </button>
+
+                    <button
+                      onClick={() => { setQuickSource(transfer); setIsQuickOpen(true); }}
+                      className="flex items-center gap-1.5 bg-white hover:bg-[#F7F8F3] text-[#0F5948] border border-[#D5E3DC] px-3 py-2 rounded-xl text-xs font-bold transition-colors"
+                      title="Duplicar esta carga no romaneio rápido"
+                    >
+                      <Copy size={15} />
+                      <span className="hidden sm:inline">Duplicar</span>
                     </button>
 
                     <button
@@ -1129,6 +1151,25 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
           transfer={printingTransfer}
           company={company}
           onClose={() => setPrintingTransfer(null)}
+        />
+      )}
+
+      {isQuickOpen && (
+        <QuickRomaneioModal
+          transfers={safeTransfers}
+          storeItems={storeItems}
+          currentUser={currentUser}
+          company={company}
+          source={quickSource}
+          onClose={() => { setIsQuickOpen(false); setQuickSource(null); }}
+          onSave={(shipment, print) => {
+            onAddTransfer(shipment);
+            setIsQuickOpen(false);
+            setQuickSource(null);
+            if (print) {
+              setPrintingTransfer({ ...shipment, id: `preview-${Date.now()}` });
+            }
+          }}
         />
       )}
 

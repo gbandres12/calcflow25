@@ -29,6 +29,7 @@ interface UserManagementProps {
   onUpdateUser: (user: User) => void;
   onDeleteUser?: (id: string) => void;
   onOpenOnboarding?: () => void;
+  onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ 
@@ -37,7 +38,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
   onAddUser, 
   onUpdateUser,
   onDeleteUser,
-  onOpenOnboarding
+  onOpenOnboarding,
+  onVerifyDeletionPassword
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -83,7 +85,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
       handleClose();
       return;
     }
-    const password = (formData.password || '').trim() || '123456';
+    const password = (formData.password || '').trim();
     if (password.length < 6) return;
     setSavingUser(true);
     try {
@@ -133,19 +135,23 @@ const UserManagement: React.FC<UserManagementProps> = ({
     });
   };
 
+  const buildAccessShareText = (user: User) => {
+    const knownPassword = invitePasswords[user.id];
+    const passwordLine = knownPassword
+      ? `🔑 Senha: ${knownPassword}`
+      : `🔑 Senha: use "Esqueci minha senha" em ${window.location.origin} para definir uma nova senha`;
+    return `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n${passwordLine}\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${window.location.origin}`;
+  };
+
   const handleCopyCredentials = (user: User) => {
-    const password = invitePasswords[user.id] || '123456';
-    const credText = `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n🔑 Senha: ${password}\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${window.location.origin}`;
-    navigator.clipboard?.writeText(credText);
+    navigator.clipboard?.writeText(buildAccessShareText(user));
     setCopiedId(user.id);
     setTimeout(() => setCopiedId(null), 3000);
   };
 
   const handleSendWhatsApp = (user: User) => {
     const cleanPhone = (user.phone || '').replace(/\D/g, '');
-    const password = invitePasswords[user.id] || '123456';
-    const message = `*Acesso ao CalcárioFlow ERP*\n\nOlá *${user.name}*, seu acesso à plataforma da usina foi gerado com sucesso!\n\n👤 *Usuário:* ${user.email}\n🔑 *Senha:* ${password}\n📌 *Função:* ${user.jobTitle || user.role}\n🏢 *Unidade:* ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📲 *Acesse pelo navegador ou instale como app no celular:*\n${window.location.origin}`;
-    const encoded = encodeURIComponent(message);
+    const encoded = encodeURIComponent(buildAccessShareText(user));
     const url = cleanPhone ? `https://wa.me/55${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, '_blank');
   };
@@ -348,14 +354,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <button 
                             onClick={() => handleSendWhatsApp(user)}
                             className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all border border-emerald-200"
-                            title="Enviar Convite com Acesso via WhatsApp"
+                            title="Enviar convite de acesso via WhatsApp"
                           >
                             <Send size={14} />
                           </button>
                           <button 
                             onClick={() => handleCopyCredentials(user)} 
                             className={`p-1.5 rounded-lg transition-all border ${copiedId === user.id ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 border-slate-200'}`} 
-                            title="Copiar dados de login"
+                            title={invitePasswords[user.id] ? 'Copiar e-mail e senha do convite' : 'Copiar e-mail e instrução de redefinição'}
                           >
                             {copiedId === user.id ? <Check size={14} /> : <Copy size={14} />}
                           </button>
@@ -373,7 +379,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                 setIsDeleteModalOpen(true);
                               }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-slate-200" 
-                              title="Excluir Usuário (Senha 1234)"
+                              title="Excluir usuário"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -488,14 +494,15 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <label className="text-xs font-bold text-slate-700">Senha de Acesso *</label>
                     <input
                       required
-                      type="text"
+                      type="password"
+                      autoComplete="new-password"
                       minLength={6}
                       value={formData.password || ''}
                       onChange={e => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm font-mono"
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm"
                       placeholder="Mínimo 6 caracteres"
                     />
-                    <p className="text-[10px] text-slate-500">Essa senha será enviada no convite de WhatsApp.</p>
+                    <p className="text-[10px] text-slate-500">Essa senha só aparece no WhatsApp e na cópia se o convite for enviado nesta sessão. Depois, o colaborador usa “Esqueci minha senha”.</p>
                   </div>
                 )}
 
@@ -737,12 +744,11 @@ const UserManagement: React.FC<UserManagementProps> = ({
         </div>
       )}
 
-      {/* Modal de Exclusão de Usuário com Senha 1234 */}
       {userToDelete && (
         <DeletionPasswordModal
           isOpen={isDeleteModalOpen}
           title="Excluir Colaborador"
-          description={`Tem certeza que deseja apagar o usuário ${userToDelete.name} (${userToDelete.email})? Esta ação revogará o acesso ao sistema imediatamente.`}
+          description={`Tem certeza que deseja apagar o usuário ${userToDelete.name} (${userToDelete.email})? Esta ação revogará o acesso ao sistema imediatamente. Digite a sua senha de acesso para confirmar.`}
           itemDescription={`Usuário: ${userToDelete.name}`}
           onConfirm={() => {
             if (onDeleteUser && userToDelete) {
@@ -755,7 +761,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             setIsDeleteModalOpen(false);
             setUserToDelete(null);
           }}
-          correctPassword="1234"
+          onVerifyPassword={onVerifyDeletionPassword}
         />
       )}
     </div>

@@ -1,51 +1,43 @@
-import { getAdminSupabase, getAdminSupabaseConfigError } from '../_lib/supabaseAdmin.js';
+import { requireCompanyAdmin } from '../_lib/companyAdmin.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
-
-const ADMIN_ROLE = 'Administrador';
 
 function setCors(res: any) {
   res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS,POST');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
 }
 
-function getBearerToken(req: any): string | null {
-  const header = String(req.headers?.authorization || '');
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] || null;
+async function findAuthUserByEmail(admin: any, email: string) {
+  let page = 1;
+  while (page <= 10) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) return null;
+    const found = (data?.users || []).find((user: any) => String(user.email || '').toLowerCase() === email);
+    if (found) return found;
+    if ((data?.users || []).length < 200) return null;
+    page += 1;
+  }
+  return null;
 }
 
-async function requireCompanyAdmin(req: any, res: any) {
-  const token = getBearerToken(req);
-  const admin = getAdminSupabase();
-  if (!admin) {
-    res.status(503).json({ error: getAdminSupabaseConfigError() || 'Configuração do Supabase indisponível no servidor.' });
-    return null;
-  }
-  if (!token) {
-    res.status(401).json({ error: 'Sessão de acesso ausente.' });
-    return null;
-  }
+async function upsertProfile(admin: any, companyId: string, profile: any) {
+  const { error } = await admin.from('app_records').upsert({
+    id: profile.id,
+    table_name: 'users',
+    company_id: companyId,
+    data: profile,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'table_name,company_id,id' });
+  if (error) throw new Error(error.message);
+}
 
-  const { data: authData, error: authError } = await admin.auth.getUser(token);
-  if (authError || !authData.user) {
-    res.status(401).json({ error: 'Sessão inválida ou expirada.' });
-    return null;
-  }
-
-  const { data: membership, error: membershipError } = await admin
-    .from('company_memberships')
-    .select('company_id, role')
-    .eq('user_id', authData.user.id)
-    .eq('role', ADMIN_ROLE)
-    .maybeSingle();
-
-  if (membershipError || !membership) {
-    res.status(403).json({ error: 'Apenas administradores da empresa podem gerir acessos.' });
-    return null;
-  }
-
-  return { admin, userId: authData.user.id, companyId: membership.company_id };
+async function ensureMembership(admin: any, companyId: string, userId: string, role: string) {
+  const { error } = await admin.from('company_memberships').upsert({
+    company_id: companyId,
+    user_id: userId,
+    role
+  }, { onConflict: 'company_id,user_id' });
+  if (error) throw new Error(error.message);
 }
 
 export default async function handler(req: any, res: any) {
@@ -73,10 +65,11 @@ export default async function handler(req: any, res: any) {
       .maybeSingle();
 
     if (targetMembership) {
-      const { error: deleteAuthError } = await context.admin.auth.admin.deleteUser(targetId);
-      if (deleteAuthError) {
-        return res.status(400).json({ error: `Não foi possível remover o acesso: ${deleteAuthError.message}` });
-      }
+      await context.admin
+        .from('company_memberships')
+        .delete()
+        .eq('company_id', context.companyId)
+        .eq('user_id', targetId);
     }
 
     const { error: deleteProfileError } = await context.admin
@@ -87,7 +80,7 @@ export default async function handler(req: any, res: any) {
       .eq('id', targetId);
 
     if (deleteProfileError) {
-      return res.status(400).json({ error: `Acesso removido, mas o perfil não foi apagado: ${deleteProfileError.message}` });
+      return res.status(400).json({ error: `Não foi possível apagar o perfil: ${deleteProfileError.message}` });
     }
     return res.status(200).json({ ok: true });
   }
@@ -99,7 +92,49 @@ export default async function handler(req: any, res: any) {
   const role = String(body.role || 'Operador');
   const status = body.status === 'Inativo' ? 'Inativo' : 'Ativo';
 
-  if (!name || !email || password.length < 6) {
+  if (!name || !email) {
+    return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
+  }
+
+  const existingAuth = await findAuthUserByEmail(context.admin, email);
+  if (existingAuth) {
+    const profile = {
+      id: existingAuth.id,
+      name,
+      email,
+      role,
+      status,
+      companyId: context.companyId,
+      companyName: String(body.companyName || '').trim(),
+      cnpj: String(body.cnpj || '').trim(),
+      phone: String(body.phone || '').trim(),
+      jobTitle: String(body.jobTitle || '').trim(),
+      onboardingCompleted: Boolean(body.onboardingCompleted),
+      onboardingStep: Number(body.onboardingStep || 1),
+      createdAt: existingAuth.created_at,
+      lastAccess: existingAuth.last_sign_in_at || existingAuth.created_at,
+      plan: body.plan || 'PRO',
+      permissions: body.permissions
+    };
+    try {
+      await ensureMembership(context.admin, context.companyId, existingAuth.id, role);
+      await upsertProfile(context.admin, context.companyId, profile);
+      await context.admin.auth.admin.updateUserById(existingAuth.id, {
+        user_metadata: {
+          ...(existingAuth.user_metadata || {}),
+          name,
+          companyId: context.companyId,
+          companyName: profile.companyName,
+          role
+        }
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error?.message || 'Não foi possível atualizar o acesso existente.' });
+    }
+    return res.status(200).json({ user: profile, existing: true });
+  }
+
+  if (password.length < 6) {
     return res.status(400).json({ error: 'Nome, e-mail e senha com pelo menos 6 caracteres são obrigatórios.' });
   }
 
@@ -146,19 +181,12 @@ export default async function handler(req: any, res: any) {
     permissions: body.permissions
   };
 
-  const { error: profileError } = await context.admin
-    .from('app_records')
-    .upsert({
-      id: created.user.id,
-      table_name: 'users',
-      company_id: context.companyId,
-      data: profile,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'table_name,company_id,id' });
-
-  if (profileError) {
+  try {
+    await ensureMembership(context.admin, context.companyId, created.user.id, role);
+    await upsertProfile(context.admin, context.companyId, profile);
+  } catch (error: any) {
     await context.admin.auth.admin.deleteUser(created.user.id);
-    return res.status(500).json({ error: `Não foi possível salvar o perfil: ${profileError.message}` });
+    return res.status(500).json({ error: `Não foi possível salvar o perfil: ${error?.message || error}` });
   }
 
   return res.status(201).json({ user: profile });
