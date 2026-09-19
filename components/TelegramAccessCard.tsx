@@ -141,7 +141,7 @@ export const TelegramAccessCard: React.FC = () => {
           <div>
             <h3 className="text-lg font-black text-slate-800 tracking-tight">Conectar Telegram</h3>
             <p className="text-xs text-slate-500 font-medium">
-              Assessor financeiro no celular: consulta saldo, recebíveis e registra abatimentos por texto, áudio ou foto.
+              Assessor no celular: consulta saldo, faz pedido, emite NF-e e registra abatimentos por texto, áudio ou foto.
             </p>
           </div>
         </div>

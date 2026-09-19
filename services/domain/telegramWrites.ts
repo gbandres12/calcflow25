@@ -11,6 +11,7 @@ import {
   TransactionType
 } from '../../types.js';
 import { newId, nextOrderReference, nextQuoteReference } from '../ids.js';
+import { productSheetFromInventory } from '../../utils/salesOrderProduct.js';
 
 /**
  * Regras de escrita do agente do Telegram.
@@ -243,6 +244,7 @@ function buildOrderItems(input: { items: BudgetItemInput[]; inventory: Inventory
       productId: product.id,
       productCode: product.code || product.id,
       productName: product.name,
+      productDescription: product.name,
       unit: product.unit || 'Ton',
       quantity,
       unitPrice,
@@ -300,6 +302,13 @@ export function buildSaleOrder(input: BuildSaleOrderInput): SaleOrder {
   const subtotal = round2(items.reduce((sum, item) => sum + toNumber(item.total), 0));
   const date = input.date || new Date().toISOString().split('T')[0];
   const accountId = input.accountId || 'acc-1';
+  const sheet =
+    items.length > 1
+      ? {
+          title: 'Informações complementares do pedido',
+          body: 'Consulte a tabela de itens acima para descrição de cada produto.'
+        }
+      : productSheetFromInventory(input.inventory.find((item) => item.id === items[0]?.productId));
 
   return {
     id: newId('ord'),
@@ -308,6 +317,8 @@ export function buildSaleOrder(input: BuildSaleOrderInput): SaleOrder {
     sellerName: input.sellerName || 'Agente Telegram',
     date,
     items,
+    productSheetTitle: sheet.title,
+    productSheetBody: sheet.body,
     subtotal,
     discount: 0,
     shipping: 0,

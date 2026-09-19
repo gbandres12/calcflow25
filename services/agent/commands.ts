@@ -26,6 +26,7 @@ export const HELP_TEXT = [
   '/estoque [produto] — posição do estoque',
   '/resumo — entradas e saídas de hoje',
   '/conferir — procura divergência entre recibos e baixas',
+  '/nfe <pedido> — prepara NF-e do pedido de venda',
   '/ajuda — esta lista'
 ].join('\n');
 
@@ -147,6 +148,21 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             `Abatimentos: ${formatBRL(data.abatimentos)}`,
             `Resultado: ${formatBRL(data.resultado)}`
           ].join('\n')
+        };
+      }
+
+      case '/nfe': {
+        if (!argument) {
+          return { text: 'Use assim: /nfe PED-2026-0001. Para nota avulsa, peça em texto: nota avulsa para o cliente X, 10 ton de calcário.' };
+        }
+        const outcome = await executeTool('emitir_nfe_pedido', { pedidoRef: argument }, ctx);
+        if (outcome.kind !== 'confirm') {
+          const data = dataOf(outcome);
+          return { text: data?.erro || 'Não consegui preparar a NF-e desse pedido.' };
+        }
+        return {
+          text: outcome.summary,
+          pending: { action: outcome.action, payload: outcome.payload, summary: outcome.summary }
         };
       }
 

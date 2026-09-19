@@ -46,7 +46,7 @@ async function loadAgentModules() {
   };
 }
 
-export const config = { runtime: 'nodejs', maxDuration: 30 };
+export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const repo = { getTable, upsert };
 
@@ -241,11 +241,20 @@ async function deliver(
   const confirmPrompt =
     reply.pending.action === 'criar_pedido_venda'
       ? 'Confere esses dados. Se estiver certo, toque em Confirmar. Aí eu gravo o pedido e mando o PDF.'
-      : 'Confirma o lançamento?';
+      : reply.pending.action === 'emitir_nfe_pedido' || reply.pending.action === 'emitir_nfe_avulsa'
+        ? 'Confere esses dados. Se estiver certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
+        : 'Confirma o lançamento?';
+
+  const confirmLabel =
+    reply.pending.action === 'criar_pedido_venda'
+      ? 'Confirmar pedido'
+      : reply.pending.action === 'emitir_nfe_pedido' || reply.pending.action === 'emitir_nfe_avulsa'
+        ? 'Emitir NF-e'
+        : 'Confirmar';
 
   await sendMessage(chatId, `${body}\n\n${confirmPrompt}`, [
     [
-      { text: reply.pending.action === 'criar_pedido_venda' ? 'Confirmar pedido' : 'Confirmar', callback_data: `ok:${pendingId}` },
+      { text: confirmLabel, callback_data: `ok:${pendingId}` },
       { text: 'Cancelar', callback_data: `no:${pendingId}` }
     ]
   ]);
@@ -310,6 +319,11 @@ function isAffirmative(text: string): boolean {
 
 async function fulfillPending(chatId: string, link: TelegramLink, pending: { action: string; payload: any }): Promise<void> {
   try {
+    const isNfe = pending.action === 'emitir_nfe_pedido' || pending.action === 'emitir_nfe_avulsa';
+    if (isNfe) {
+      await sendChatAction(chatId, 'typing');
+      await sendMessage(chatId, 'Enviando a NF-e para a SEFAZ. Isso pode levar uns segundos.');
+    }
     const { commitAction } = await loadAgentModules();
     const result = await commitAction(pending.action, pending.payload, buildContext(link));
     await writeAudit({
@@ -329,7 +343,9 @@ async function fulfillPending(chatId: string, link: TelegramLink, pending: { act
         console.error('[TELEGRAM] Pedido gravado, PDF não saiu:', error);
         await sendMessage(
           chatId,
-          'O pedido foi gravado no ERP, mas o PDF não foi. Abra o pedido no sistema e imprima por lá.'
+          isNfe
+            ? 'A NF-e foi transmitida, mas o DANFE não saiu agora. Baixe no ERP, em Fiscal.'
+            : 'O pedido foi gravado no ERP, mas o PDF não foi. Abra o pedido no sistema e imprima por lá.'
         );
       }
     }

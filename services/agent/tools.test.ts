@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { OrderStatus, TransactionStatus, TransactionType } from '../../types';
 import { AgentContext, commitAction, executeTool } from './tools';
 import { runCommand } from './commands';
+import { setTelegramNfeTransport } from '../domain/telegramNfe';
 
 /** Repositório em memória com o mesmo contrato do erpRepository. */
 function fakeRepo(seed: Record<string, any[]>) {
@@ -242,6 +243,128 @@ describe('agente: orçamento', () => {
   });
 });
 
+function seedNfe() {
+  const seed = seedData();
+  seed.customers[0] = {
+    ...seed.customers[0],
+    city: 'Santarém',
+    state: 'PA',
+    street: 'Rodovia PA',
+    neighborhood: 'Zona Rural',
+    zipCode: '68000000',
+    ibgeCode: '1506807'
+  };
+  seed.inventory[0] = { ...seed.inventory[0], ncm: '25171000', cfop: '5102' };
+  seed.sales_orders[0].items = [
+    {
+      productId: 'moido',
+      productCode: 'moido',
+      productName: 'Calcário Agrícola Moído (Granel)',
+      unit: 'Ton',
+      quantity: 10,
+      unitPrice: 180,
+      discount: 0,
+      total: 1800,
+      ncm: '25171000',
+      cfop: '5102'
+    }
+  ];
+  seed.sales_orders[0].subtotal = 1800;
+  seed.sales_orders[0].total = 1800;
+  (seed as any).fiscal_config = [
+    {
+      id: 'fiscal-1',
+      apiKey: 'ntaas_test',
+      environment: 'sandbox',
+      serieNFe: '1',
+      proxNumeroNFe: 1042,
+      naturezaOperacaoPadrao: 'Venda',
+      cfopPadraoEstadual: '5101',
+      cfopPadraoInterestadual: '6101',
+      cstIcmsPadrao: '40',
+      ufEmitente: 'PA',
+      cidadeEmitente: 'Santarém'
+    }
+  ];
+  return seed;
+}
+
+describe('agente: emissão de NF-e pelo Telegram', () => {
+  it('propõe NF-e do pedido sem transmitir', async () => {
+    const repo = fakeRepo(seedNfe());
+    const proposal = await executeTool('emitir_nfe_pedido', { pedidoRef: 'PED-2026-0001' }, makeContext(repo));
+    assert.equal(proposal.kind, 'confirm');
+    assert.equal((proposal as any).action, 'emitir_nfe_pedido');
+    assert.match((proposal as any).summary, /PED-2026-0001/);
+    assert.match((proposal as any).summary, /1\.800,00|1800/);
+    assert.equal(repo.tables.sales_orders[0].nfeStatus, undefined);
+  });
+
+  it('recusa orçamento e cliente sem documento', async () => {
+    const seed = seedNfe();
+    seed.sales_orders[0].status = OrderStatus.BUDGET;
+    await assert.rejects(
+      () => executeTool('emitir_nfe_pedido', { pedidoRef: 'PED-2026-0001' }, makeContext(fakeRepo(seed))),
+      /orçamento/
+    );
+
+    const bad = seedNfe();
+    bad.customers[0].document = '123';
+    await assert.rejects(
+      () => executeTool('emitir_nfe_pedido', { pedidoRef: 'PED-2026-0001' }, makeContext(fakeRepo(bad))),
+      /CPF ou CNPJ/
+    );
+  });
+
+  it('emite NF-e do pedido, grava no pedido e devolve DANFE', async () => {
+    const repo = fakeRepo(seedNfe());
+    const ctx = makeContext(repo);
+    setTelegramNfeTransport({
+      async request({ url, binary }) {
+        if (String(url).includes('/emitir')) {
+          return {
+            status: 200,
+            data: { status: 'issued', invoiceId: 'inv-99', chaveAcesso: '3'.repeat(44), nNf: 1042, nProt: 'p99' }
+          };
+        }
+        if (binary || String(url).includes('/danfe')) {
+          return { status: 200, buffer: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]) };
+        }
+        return { status: 200, data: { status: 'issued', invoiceId: 'inv-99' } };
+      },
+      async sleep() {}
+    });
+
+    try {
+      const proposal = await executeTool('emitir_nfe_pedido', { pedidoRef: 'PED-2026-0001' }, ctx);
+      const committed = await commitAction((proposal as any).action, (proposal as any).payload, ctx);
+      const saved = repo.tables.sales_orders[0];
+      assert.equal(saved.nfeStatus, 'autorizada');
+      assert.equal(saved.nfeNumero, '1042');
+      assert.equal(saved.nfes[0].tipo, 'pedido');
+      assert.equal(repo.tables.fiscal_config[0].proxNumeroNFe, 1043);
+      assert.ok(committed.document);
+      assert.match(committed.document!.filename, /DANFE-1042/);
+      assert.equal(Buffer.from(committed.document!.bytes.subarray(0, 4)).toString(), '%PDF');
+    } finally {
+      setTelegramNfeTransport(null);
+    }
+  });
+
+  it('propõe NF-e avulsa solta sem gravar pedido', async () => {
+    const repo = fakeRepo(seedNfe());
+    const proposal = await executeTool(
+      'emitir_nfe_avulsa',
+      { clienteNome: 'Fazenda Boa Vista', itens: [{ produto: 'calcário agrícola moído', quantidade: 2, precoUnitario: 180 }] },
+      makeContext(repo)
+    );
+    assert.equal(proposal.kind, 'confirm');
+    assert.equal((proposal as any).action, 'emitir_nfe_avulsa');
+    assert.equal((proposal as any).payload.standalone, true);
+    assert.equal(repo.tables.sales_orders.length, 1);
+  });
+});
+
 describe('agente: comandos determinísticos, o fallback sem IA', () => {
   it('/saldo responde sem passar por modelo nenhum', async () => {
     const reply = await runCommand('/saldo', makeContext(fakeRepo(seedData())));
@@ -278,6 +401,13 @@ describe('agente: comandos determinísticos, o fallback sem IA', () => {
 
     const reply = await runCommand('/conferir', makeContext(fakeRepo(seed)));
     assert.match(reply!.text, /divergência/);
+    assert.match(reply!.text, /PED-2026-0001/);
+  });
+
+  it('/nfe monta a confirmação da nota do pedido', async () => {
+    const reply = await runCommand('/nfe PED-2026-0001', makeContext(fakeRepo(seedNfe())));
+    assert.ok(reply?.pending);
+    assert.equal(reply!.pending!.action, 'emitir_nfe_pedido');
     assert.match(reply!.text, /PED-2026-0001/);
   });
 

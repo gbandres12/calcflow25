@@ -1,8 +1,11 @@
 import {
   Customer,
+  FiscalConfig,
   FinancialAccount,
   InventoryItem,
+  OrderStatus,
   SaleOrder,
+  SaleOrderItem,
   Transaction,
   TransactionStatus,
   TransactionType
@@ -25,6 +28,19 @@ import {
   stockAfterSale
 } from '../domain/telegramWrites.js';
 import { buildSalesOrderPdf } from '../domain/salesOrderPdf.js';
+import {
+  applyEmitToOrder,
+  emitNfeOnNotaAs,
+  fetchDanfePdf,
+  nfeEnvironmentLabel,
+  pickNfeItems,
+  readFiscalConfig,
+  remainingItemsForNfe,
+  totalsOf,
+  validateFiscalForEmit
+} from '../domain/telegramNfe.js';
+import { avulsaExternalRef, listOrderNfes, overlayNfeFields } from '../saleNfe.js';
+import { newId, nextAvulsaReference } from '../ids.js';
 import { formatSuggestions, pickUnique, rankNamed } from './search.js';
 
 export interface ErpRepo {
@@ -110,6 +126,51 @@ function requireWrites(ctx: AgentContext) {
   if (!ctx.allowWrites) {
     throw new Error('O agente está em modo somente consulta. Peça ao administrador para liberar os lançamentos.');
   }
+}
+
+function requireFiscal(ctx: AgentContext) {
+  if (ctx.user.permissions?.fiscal === false) {
+    throw new Error('Seu acesso no ERP não inclui a emissão fiscal.');
+  }
+  if (ctx.user.permissions?.fiscal !== true) {
+    requirePermission(ctx, 'orders');
+  }
+}
+
+function hasProcessingNfe(order: SaleOrder): boolean {
+  if (order.nfeStatus === 'processando') return true;
+  return listOrderNfes(order).some((nfe) => nfe.nfeStatus === 'processando');
+}
+
+function nfeProposalSummary(params: {
+  title: string;
+  customer: Customer;
+  items: SaleOrderItem[];
+  total: number;
+  config: FiscalConfig | null;
+  warnings: string[];
+  extra?: string[];
+}): string {
+  return [
+    params.title,
+    '',
+    `Cliente: ${params.customer.name}`,
+    params.customer.document ? `Documento: ${params.customer.document}` : null,
+    params.customer.city
+      ? `Cidade: ${params.customer.city}${params.customer.state ? `/${params.customer.state}` : ''}`
+      : null,
+    ...params.items.map(
+      (item) => `• ${item.quantity} ${item.unit} de ${item.productName} — ${formatBRL(item.total)}`
+    ),
+    `Total da nota: ${formatBRL(params.total)}`,
+    `Ambiente: ${nfeEnvironmentLabel(params.config)}`,
+    ...(params.warnings.length ? ['Avisos:', ...params.warnings.map((warning) => `• ${warning}`)] : []),
+    ...(params.extra || []),
+    '',
+    'Se estiver certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
 }
 
 function resolveCustomer(
@@ -477,6 +538,7 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
             data: order.date,
             total: order.total,
             status: order.status,
+            nfeStatus: order.nfeStatus || 'nao_emitida',
             recebido: (order.receipts || []).reduce((sum, receipt) => sum + toNumber(receipt?.amount), 0)
           }))
         }
@@ -487,6 +549,7 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       const orders = (await ctx.repo.getTable(ctx.companyId, 'sales_orders')) as SaleOrder[];
       const order = findOrder(orders, String(args.pedidoRef || ''));
       if (!order) return { kind: 'data', data: { encontrado: false } };
+      const remaining = remainingItemsForNfe(order);
 
       return {
         kind: 'data',
@@ -497,7 +560,14 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           numero: order.nfeNumero,
           chave: order.nfeChave,
           erro: order.nfeErro,
-          observacao: 'A emissão de NF-e é feita apenas pelo ERP, não pelo Telegram.'
+          notas: listOrderNfes(order).map((nfe) => ({
+            tipo: nfe.tipo,
+            status: nfe.nfeStatus,
+            numero: nfe.nfeNumero,
+            chave: nfe.nfeChave,
+            total: nfe.total
+          })),
+          quantidadePendente: remaining.reduce((sum, item) => sum + item.quantity, 0)
         }
       };
     }
@@ -638,6 +708,160 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           accountId
         },
         summary
+      };
+    }
+
+    case 'emitir_nfe_pedido': {
+      requireFiscal(ctx);
+      requireWrites(ctx);
+
+      const [orders, customers, fiscalRows] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+      ]);
+
+      const order = findOrder(orders, String(args.pedidoRef || ''));
+      if (!order) throw new Error(`Não encontrei o pedido ${args.pedidoRef || ''}.`);
+      if (order.status === OrderStatus.BUDGET) {
+        throw new Error(`O ${order.reference} ainda é orçamento. Confirme a venda antes de emitir a NF-e.`);
+      }
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new Error(`O ${order.reference} está cancelado. Não emito NF-e dele.`);
+      }
+      if (hasProcessingNfe(order)) {
+        throw new Error(`O ${order.reference} já tem uma NF-e em processamento na SEFAZ. Espere autorizar ou rejeitar.`);
+      }
+
+      const customer = customers.find((item) => item.id === order.customerId);
+      const items = remainingItemsForNfe(order);
+      if (!items.length) {
+        throw new Error(`O ${order.reference} já está faturado. Para outra nota, use nota avulsa com quantidade menor.`);
+      }
+
+      const totals = totalsOf(items, order.shipping);
+      const previewOrder = { ...order, items, subtotal: totals.subtotal, shipping: totals.shipping, total: totals.total };
+      const validation = validateFiscalForEmit(previewOrder, customer);
+      if (!validation.valid) throw new Error(validation.errors.join(' '));
+
+      const config = readFiscalConfig(fiscalRows);
+      if (!String(config?.apiKey || '').trim()) {
+        throw new Error('Cadastre a Project Key da NotaAs nas Configurações Fiscais antes de emitir pelo Telegram.');
+      }
+
+      return {
+        kind: 'confirm',
+        action: 'emitir_nfe_pedido',
+        payload: { orderId: order.id, items },
+        summary: nfeProposalSummary({
+          title: `NF-e do pedido ${order.reference}`,
+          customer: customer!,
+          items,
+          total: totals.total,
+          config,
+          warnings: validation.warnings
+        })
+      };
+    }
+
+    case 'emitir_nfe_avulsa': {
+      requireFiscal(ctx);
+      requireWrites(ctx);
+
+      const [orders, customers, inventory, fiscalRows] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+        ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+      ]);
+
+      const config = readFiscalConfig(fiscalRows);
+      if (!String(config?.apiKey || '').trim()) {
+        throw new Error('Cadastre a Project Key da NotaAs nas Configurações Fiscais antes de emitir pelo Telegram.');
+      }
+
+      if (args.pedidoRef) {
+        const order = findOrder(orders, String(args.pedidoRef));
+        if (!order) throw new Error(`Não encontrei o pedido ${args.pedidoRef}.`);
+        if (order.status === OrderStatus.CANCELLED) {
+          throw new Error(`O ${order.reference} está cancelado. Não emito NF-e dele.`);
+        }
+        if (hasProcessingNfe(order)) {
+          throw new Error(`O ${order.reference} já tem uma NF-e em processamento na SEFAZ. Espere autorizar ou rejeitar.`);
+        }
+
+        const customer = customers.find((item) => item.id === order.customerId);
+        const items = pickNfeItems(order, args.itens);
+        if (!items.length) {
+          throw new Error(`Não restou quantidade para faturar no ${order.reference}.`);
+        }
+
+        const totals = totalsOf(items);
+        const previewOrder = {
+          ...order,
+          items,
+          subtotal: totals.subtotal,
+          shipping: 0,
+          total: totals.total,
+          isAvulsa: true
+        };
+        const validation = validateFiscalForEmit(previewOrder, customer);
+        if (!validation.valid) throw new Error(validation.errors.join(' '));
+
+        return {
+          kind: 'confirm',
+          action: 'emitir_nfe_avulsa',
+          payload: { orderId: order.id, items, standalone: false },
+          summary: nfeProposalSummary({
+            title: `NF-e avulsa do pedido ${order.reference}`,
+            customer: customer!,
+            items,
+            total: totals.total,
+            config,
+            warnings: validation.warnings,
+            extra: ['Essa nota é parcial: não substitui a nota do pedido completo.']
+          })
+        };
+      }
+
+      const resolvedCustomer = resolveCustomer(customers, String(args.clienteNome || ''));
+      const customer = resolvedCustomer.customer;
+      if (!customer) throw missingCustomerError(String(args.clienteNome || ''), resolvedCustomer.suggestions);
+
+      const lines = parseOrderLines(inventory, args.itens);
+      const preview = buildSaleOrder({
+        companyId: ctx.companyId,
+        customer,
+        items: lines,
+        inventory,
+        existingOrders: orders,
+        sellerName: ctx.user.name,
+        notes: args.observacao,
+        paymentMethod: args.formaPagamento
+      });
+      const items = preview.items;
+      const validation = validateFiscalForEmit({ ...preview, isAvulsa: true }, customer);
+      if (!validation.valid) throw new Error(validation.errors.join(' '));
+
+      return {
+        kind: 'confirm',
+        action: 'emitir_nfe_avulsa',
+        payload: {
+          customerId: customer.id,
+          items,
+          paymentMethod: args.formaPagamento || null,
+          notes: args.observacao || null,
+          standalone: true
+        },
+        summary: nfeProposalSummary({
+          title: 'NF-e avulsa (sem pedido de venda)',
+          customer,
+          items,
+          total: preview.total,
+          config,
+          warnings: validation.warnings,
+          extra: ['Não baixa estoque nem abre parcela. Só emite a nota.']
+        })
       };
     }
 
@@ -810,10 +1034,15 @@ export async function commitAction(
       const bytes = await buildSalesOrderPdf({
         order,
         customer: nextCustomer,
+        brand: fiscal,
+        printedAt: new Date().toLocaleString('pt-BR'),
         companyName: fiscal?.razaoSocial || fiscal?.nomeFantasia || 'CBA Mineração',
         companyDocument: fiscal?.cnpjEmitente,
         companyPhone: fiscal?.telefoneEmitente,
-        companyCity: fiscal?.cidadeEmitente && fiscal?.ufEmitente ? `${fiscal.cidadeEmitente}/${fiscal.ufEmitente}` : undefined
+        companyCity:
+          fiscal?.cidadeEmitente && fiscal?.ufEmitente
+            ? `${fiscal.cidadeEmitente} – ${fiscal.ufEmitente}`
+            : undefined
       });
       document = {
         filename: `Pedido-${order.reference}.pdf`,
@@ -835,6 +1064,138 @@ export async function commitAction(
     };
   }
 
+  if (action === 'emitir_nfe_pedido' || action === 'emitir_nfe_avulsa') {
+    requireFiscal(ctx);
+
+    const [orders, customers, fiscalRows] = await Promise.all([
+      ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+      ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+      ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+    ]);
+
+    const config = readFiscalConfig(fiscalRows);
+    if (!config || !String(config.apiKey || '').trim()) {
+      throw new Error('Cadastre a Project Key da NotaAs nas Configurações Fiscais. Nada foi emitido.');
+    }
+
+    const standalone = Boolean(payload.standalone);
+    let order: SaleOrder;
+    let customer: Customer | undefined;
+    let items: SaleOrderItem[] = payload.items || [];
+    const tipo: 'pedido' | 'avulsa' = action === 'emitir_nfe_pedido' ? 'pedido' : 'avulsa';
+
+    if (standalone) {
+      customer = customers.find((item) => item.id === payload.customerId);
+      if (!customer) throw new Error('Cliente não encontrado. Nada foi emitido.');
+      if (!items.length) throw new Error('A nota avulsa precisa de itens.');
+      const totals = totalsOf(items);
+      order = {
+        id: newId('ord'),
+        reference: nextAvulsaReference(orders),
+        customerId: customer.id,
+        sellerName: ctx.user.name,
+        date: ctx.today,
+        isAvulsa: true,
+        items,
+        subtotal: totals.subtotal,
+        discount: 0,
+        shipping: 0,
+        total: totals.total,
+        status: OrderStatus.FINALIZED,
+        paymentMethod: payload.paymentMethod || 'Outros',
+        payments: [],
+        notes: payload.notes || undefined,
+        companyId: ctx.companyId,
+        nfeReferenciaExterna: undefined
+      };
+    } else {
+      order = orders.find((item) => item.id === payload.orderId) as SaleOrder;
+      if (!order) throw new Error('Pedido não encontrado. Nada foi emitido.');
+      if (hasProcessingNfe(order)) {
+        throw new Error(`O ${order.reference} já tem uma NF-e em processamento. Nada foi emitido de novo.`);
+      }
+      customer = customers.find((item) => item.id === order.customerId);
+      const remaining = remainingItemsForNfe(order);
+      if (!remaining.length) throw new Error(`O ${order.reference} já está faturado. Nada foi emitido.`);
+      items = items.length ? items : remaining;
+    }
+
+    if (!customer) throw new Error('Cliente do pedido não encontrado. Nada foi emitido.');
+
+    const totals = totalsOf(items, tipo === 'pedido' ? order.shipping : 0);
+    const linkedId = tipo === 'avulsa' ? `nfa-${Date.now().toString(36)}` : `nfp-${Date.now().toString(36)}`;
+    const emitOrder: SaleOrder = {
+      ...order,
+      items,
+      subtotal: totals.subtotal,
+      discount: 0,
+      shipping: totals.shipping,
+      total: totals.total,
+      isAvulsa: tipo === 'avulsa',
+      nfeReferenciaExterna: tipo === 'avulsa' ? avulsaExternalRef(order.reference, linkedId) : order.reference
+    };
+
+    const result = await emitNfeOnNotaAs({ order: emitOrder, customer, config });
+    let updatedOrder = applyEmitToOrder({ order, items, tipo, result, linkedId });
+    if (standalone) {
+      const linked = listOrderNfes(updatedOrder).at(-1);
+      if (linked) updatedOrder = { ...overlayNfeFields(updatedOrder, linked), isAvulsa: true };
+    }
+    await ctx.repo.upsert(ctx.companyId, 'sales_orders', { ...updatedOrder, origin: 'telegram' });
+
+    if (result.success && config.id) {
+      await ctx.repo.upsert(ctx.companyId, 'fiscal_config', {
+        ...config,
+        proxNumeroNFe: (Number(config.proxNumeroNFe) || 1042) + 1
+      });
+    }
+
+    if (!result.success) {
+      throw new Error(result.nfeErro || 'A SEFAZ rejeitou a NF-e. Nada autorizado.');
+    }
+
+    let document: { filename: string; bytes: Uint8Array; caption: string } | undefined;
+    if (result.nfeStatus === 'autorizada' && result.nfeId) {
+      try {
+        const bytes = await fetchDanfePdf(result.nfeId, config);
+        if (bytes) {
+          const numero = result.nfeNumero || 'nfe';
+          document = {
+            filename: `DANFE-${numero}.pdf`,
+            bytes,
+            caption: `DANFE NF-e ${numero} · ${customer.name} · ${formatBRL(totals.total)}`
+          };
+        }
+      } catch (error: any) {
+        console.warn('[TELEGRAM] Falha ao baixar DANFE:', error?.message);
+      }
+    }
+
+    const numero = result.nfeNumero ? `nº ${result.nfeNumero}` : '';
+    const statusText =
+      result.nfeStatus === 'autorizada'
+        ? `autorizada ${numero}`.trim()
+        : result.nfeStatus === 'processando'
+          ? 'enviada e ainda processando na SEFAZ'
+          : result.nfeStatus;
+    return {
+      message: [
+        `NF-e ${statusText} para ${customer.name}.`,
+        standalone ? `Registro ${updatedOrder.reference}.` : `Pedido ${order.reference}.`,
+        result.nfeChave ? `Chave ${result.nfeChave}.` : null,
+        document
+          ? 'O DANFE vai em seguida.'
+          : result.nfeStatus === 'autorizada'
+            ? 'A nota está no ERP; o DANFE não saiu agora.'
+            : 'Acompanhe pelo status da nota neste chat ou no ERP.'
+      ]
+        .filter(Boolean)
+        .join(' '),
+      records: [{ table: 'sales_orders', id: updatedOrder.id }],
+      document
+    };
+  }
+
   throw new Error(`Ação desconhecida: ${action}`);
 }
 
@@ -849,7 +1210,14 @@ export const READ_ONLY_TOOLS = [
   'conferir_lancamentos'
 ];
 
-export const WRITE_TOOLS = ['registrar_abatimento', 'registrar_recebimento', 'criar_orcamento', 'criar_pedido_venda'];
+export const WRITE_TOOLS = [
+  'registrar_abatimento',
+  'registrar_recebimento',
+  'criar_orcamento',
+  'criar_pedido_venda',
+  'emitir_nfe_pedido',
+  'emitir_nfe_avulsa'
+];
 
 /** Declarações no formato de function calling do Gemini. */
 export const toolDeclarations = [
@@ -910,7 +1278,7 @@ export const toolDeclarations = [
   },
   {
     name: 'status_nfe_pedido',
-    description: 'Situação fiscal da NF-e de um pedido. Consulta apenas: a emissão é feita no ERP.',
+    description: 'Situação fiscal das NF-e de um pedido, inclusive avulsas e quantidade ainda sem nota.',
     parameters: {
       type: 'OBJECT',
       properties: { pedidoRef: { type: 'STRING' } },
@@ -1003,6 +1371,42 @@ export const toolDeclarations = [
         observacao: { type: 'STRING' }
       },
       required: ['clienteNome', 'itens']
+    }
+  },
+  {
+    name: 'emitir_nfe_pedido',
+    description:
+      'Prepara a NF-e do pedido de venda (quantidade ainda sem nota). Não transmite até o usuário tocar em Emitir NF-e. Use a referência PED-...',
+    parameters: {
+      type: 'OBJECT',
+      properties: { pedidoRef: { type: 'STRING', description: 'Referência do pedido, por exemplo PED-2026-0012.' } },
+      required: ['pedidoRef']
+    }
+  },
+  {
+    name: 'emitir_nfe_avulsa',
+    description:
+      'Prepara NF-e avulsa: parcial de um pedido (pedidoRef + quantidades) ou nota solta (cliente + itens), sem baixar estoque. Não transmite até o usuário confirmar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoRef: { type: 'STRING', description: 'Se for parcial de um pedido existente.' },
+        clienteNome: { type: 'STRING', description: 'Obrigatório na nota solta, sem pedido.' },
+        itens: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              produto: { type: 'STRING' },
+              quantidade: { type: 'NUMBER' },
+              precoUnitario: { type: 'NUMBER' }
+            },
+            required: ['produto', 'quantidade']
+          }
+        },
+        formaPagamento: { type: 'STRING' },
+        observacao: { type: 'STRING' }
+      }
     }
   }
 ];
