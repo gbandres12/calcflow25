@@ -9,8 +9,8 @@ import {
   TransactionPayment,
   TransactionStatus,
   TransactionType
-} from '../../types';
-import { newId, nextQuoteReference } from '../ids';
+} from '../../types.js';
+import { newId, nextQuoteReference } from '../ids.js';
 
 /**
  * Regras de escrita do agente do Telegram.

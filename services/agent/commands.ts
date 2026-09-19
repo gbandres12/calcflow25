@@ -1,5 +1,5 @@
-import { AgentContext, ToolOutcome, executeTool } from './tools';
-import { formatBRL } from '../domain/telegramWrites';
+import { AgentContext, ToolOutcome, executeTool } from './tools.js';
+import { formatBRL } from '../domain/telegramWrites.js';
 
 /**
  * Comandos fixos, sem IA nenhuma.

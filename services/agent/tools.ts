@@ -7,7 +7,7 @@ import {
   Transaction,
   TransactionStatus,
   TransactionType
-} from '../../types';
+} from '../../types.js';
 import {
   DEDUCTION_METHOD,
   PaymentKind,
@@ -19,7 +19,7 @@ import {
   listOpenInstallments,
   newReceiptId,
   reconcileReceiptsAgainstPayments
-} from '../domain/telegramWrites';
+} from '../domain/telegramWrites.js';
 
 export interface ErpRepo {
   getTable(companyId: string, table: string): Promise<any[]>;

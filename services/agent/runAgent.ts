@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { AgentContext, ToolOutcome, executeTool, toolDeclarations } from './tools';
+import { AgentContext, ToolOutcome, executeTool, toolDeclarations } from './tools.js';
 
 export interface AgentAttachment {
   mimeType: string;
