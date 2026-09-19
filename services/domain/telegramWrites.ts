@@ -1,10 +1,12 @@
 import {
   Customer,
+  FinancialAccount,
   InventoryItem,
   OrderStatus,
   PaymentReceipt,
   SaleOrder,
   SaleOrderItem,
+  SalePayment,
   Transaction,
   TransactionPayment,
   TransactionStatus,
@@ -24,6 +26,10 @@ import { newId, nextQuoteReference } from '../ids';
  *    duplicado quando o app abrir.
  * 2. handleAddOrder só chama finalizeSale quando o status é FINALIZED, então
  *    pedido criado como Orçamento não mexe em estoque nem no financeiro.
+ *
+ * buildConfirmSaleEffects espelha a regra de finalizeSale do App.tsx (estoque
+ * clampado em 0 + parcelas SALE + totalSpent do cliente) para o caminho
+ * server-side do Telegram, sem importar o App.
  */
 
 export const TOLERANCE = 0.01;
@@ -228,7 +234,8 @@ export interface BuildBudgetOrderInput {
 /**
  * Pedido em Orçamento: não baixa estoque nem gera financeiro, porque o
  * handleAddOrder do app só chama finalizeSale quando o status é FINALIZED.
- * A conversão em venda confirmada continua sendo feita dentro do app.
+ * A conversão em venda confirmada pode ser feita no ERP ou via confirmar_pedido
+ * no Telegram (buildConfirmSaleEffects).
  */
 export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
   if (!input.customer?.id) throw new Error('Informe o cliente do orçamento.');
@@ -281,6 +288,161 @@ export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
     notes: input.notes,
     companyId: input.companyId
   };
+}
+
+export interface StockLineCheck {
+  productId: string;
+  productName: string;
+  quantity: number;
+  available: number;
+  minStock: number;
+  insufficient: boolean;
+  criticalAfter: boolean;
+}
+
+/** Avisos de estoque antes de confirmar (qty > disponível ou pós-venda ≤ mínimo). */
+export function assessStockForItems(
+  items: BudgetItemInput[],
+  inventory: InventoryItem[]
+): StockLineCheck[] {
+  return (items || []).map((line) => {
+    const product = (inventory || []).find((item) => item.id === line.productId);
+    const available = round2(toNumber(product?.quantity));
+    const minStock = round2(toNumber(product?.minStock));
+    const quantity = round2(toNumber(line.quantity));
+    const remaining = round2(available - quantity);
+    return {
+      productId: line.productId,
+      productName: product?.name || line.productId,
+      quantity,
+      available,
+      minStock,
+      insufficient: quantity > available + TOLERANCE,
+      criticalAfter: remaining <= minStock + TOLERANCE
+    };
+  });
+}
+
+export interface ConfirmSaleEffectsInput {
+  order: SaleOrder;
+  inventory: InventoryItem[];
+  accounts: FinancialAccount[];
+  customer: Customer;
+  today?: string;
+  payments?: SalePayment[];
+}
+
+export interface ConfirmSaleEffects {
+  order: SaleOrder;
+  inventoryPatches: InventoryItem[];
+  transactions: Transaction[];
+  customerPatch: Customer;
+}
+
+/**
+ * Espelha finalizeSale do App.tsx: baixa estoque (clamp 0), gera parcelas SALE
+ * e soma totalSpent no cliente. Puro — quem grava é o commitAction.
+ */
+export function buildConfirmSaleEffects(input: ConfirmSaleEffectsInput): ConfirmSaleEffects {
+  const order = input.order;
+  if (!order?.id) throw new Error('Pedido não encontrado.');
+  if (order.status === OrderStatus.FINALIZED) {
+    throw new Error(`O pedido ${order.reference} já está confirmado.`);
+  }
+  if (order.status === OrderStatus.CANCELLED) {
+    throw new Error(`O pedido ${order.reference} está cancelado.`);
+  }
+
+  const inventoryPatches: InventoryItem[] = [];
+  for (const item of order.items || []) {
+    if (!item?.productId) continue;
+    const product = (input.inventory || []).find((row) => row.id === item.productId);
+    if (!product) throw new Error(`Produto ${item.productId} não encontrado no estoque.`);
+    const qty = round2(toNumber(item.quantity));
+    inventoryPatches.push({
+      ...product,
+      quantity: Math.max(0, round2(toNumber(product.quantity) - qty))
+    });
+  }
+
+  const payments = input.payments || order.payments || [];
+  const scheduledTotal = round2(payments.reduce((sum, payment) => sum + toNumber(payment.amount), 0));
+  const balanceWithoutSchedule = Math.max(0, round2(toNumber(order.total) - scheduledTotal));
+  const defaultAccountId = input.accounts?.[0]?.id || 'acc-1';
+  const date = input.today || order.date || new Date().toISOString().split('T')[0];
+
+  const financialSchedule: SalePayment[] = [
+    ...payments,
+    ...(balanceWithoutSchedule > TOLERANCE
+      ? [
+          {
+            id: newId('pay'),
+            amount: balanceWithoutSchedule,
+            paidAmount: 0,
+            date,
+            status: TransactionStatus.PENDENTE,
+            accountId: defaultAccountId,
+            description: 'Saldo em aberto da venda'
+          }
+        ]
+      : [])
+  ];
+
+  const transactions: Transaction[] = financialSchedule.map((payment) => {
+    let actualPaid = 0;
+    if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
+      actualPaid = round2(toNumber(payment.amount));
+    } else if (payment.status === TransactionStatus.PARCIAL) {
+      actualPaid = round2(toNumber(payment.paidAmount));
+    }
+
+    const accId = payment.accountId || defaultAccountId;
+    const txId = newId('tx');
+    return {
+      id: txId,
+      accountId: accId,
+      costCenterId: 'cc4',
+      date: payment.date || date,
+      type: TransactionType.SALE,
+      status: payment.status,
+      description: `Venda Faturada #${order.reference}`,
+      category: 'Venda Calcário Moído Granel',
+      amount: round2(toNumber(payment.amount)),
+      paidAmount: actualPaid,
+      customerId: order.customerId,
+      orderId: order.id,
+      companyId: order.companyId,
+      payments:
+        actualPaid > TOLERANCE
+          ? [
+              {
+                id: newId('pmt'),
+                transactionId: txId,
+                amount: actualPaid,
+                paymentDate: payment.date || date,
+                accountId: accId,
+                paymentMethod: payment.paymentMethod || 'PIX',
+                notes: `Recebimento da venda #${order.reference}`
+              }
+            ]
+          : []
+    };
+  });
+
+  const finalizedOrder: SaleOrder = {
+    ...order,
+    payments: financialSchedule,
+    status: OrderStatus.FINALIZED,
+    companyId: order.companyId
+  };
+
+  const customerPatch: Customer = {
+    ...input.customer,
+    totalSpent: round2(toNumber(input.customer.totalSpent) + toNumber(order.total)),
+    status: 'Ativo'
+  };
+
+  return { order: finalizedOrder, inventoryPatches, transactions, customerPatch };
 }
 
 export interface ReconciliationIssue {

@@ -4,15 +4,19 @@ import {
   downloadFileAsBase64,
   editMessageReplyMarkup,
   sendChatAction,
+  sendDocument,
   sendMessage
 } from '../_lib/telegramApi.js';
 import {
   TelegramLink,
   claimUpdate,
+  clearSaleDraft,
   consumePairingCode,
   consumePendingAction,
   getLink,
+  getSaleDraft,
   savePendingAction,
+  saveSaleDraft,
   touchLink,
   writeAudit
 } from '../_lib/telegramStore.js';
@@ -25,6 +29,10 @@ type AgentContext = {
   repo: { getTable: typeof getTable; upsert: typeof upsert };
   allowWrites: boolean;
   today: string;
+  chatId?: string;
+  saleDraft?: Record<string, unknown> | null;
+  persistSaleDraft?: (slots: Record<string, unknown>) => Promise<void>;
+  clearSaleDraft?: () => Promise<void>;
 };
 
 async function loadAgentModules() {
@@ -56,7 +64,8 @@ function webhookAuthorized(req: any): boolean {
   return received === expected;
 }
 
-function buildContext(link: TelegramLink): AgentContext {
+function buildContext(link: TelegramLink, chatId?: string, saleDraft?: Record<string, unknown> | null): AgentContext {
+  const id = chatId || link.chatId;
   return {
     companyId: link.companyId,
     user: {
@@ -67,7 +76,20 @@ function buildContext(link: TelegramLink): AgentContext {
     },
     repo,
     allowWrites: writesEnabled(),
-    today: new Date().toISOString().split('T')[0]
+    today: new Date().toISOString().split('T')[0],
+    chatId: id,
+    saleDraft: saleDraft || null,
+    persistSaleDraft: async (slots) => {
+      await saveSaleDraft({
+        chatId: id,
+        companyId: link.companyId,
+        userId: link.userId,
+        slots
+      });
+    },
+    clearSaleDraft: async () => {
+      await clearSaleDraft(id);
+    }
   };
 }
 
@@ -150,7 +172,8 @@ async function handleMessage(message: any): Promise<void> {
   }
 
   await touchLink(chatId);
-  const ctx = buildContext(link);
+  const draft = await getSaleDraft(chatId).catch(() => null);
+  const ctx = buildContext(link, chatId, draft);
 
   const agent = await loadAgentModules();
   if (agent.isCommand(text)) {
@@ -260,6 +283,7 @@ async function handleCallback(callback: any): Promise<void> {
       payload: pending.payload,
       result: 'cancelado'
     });
+    // Mantém o rascunho da entrevista para o operador poder re-propor.
     await sendMessage(chatId, 'Cancelado. Nada foi lançado.');
     return;
   }
@@ -268,7 +292,8 @@ async function handleCallback(callback: any): Promise<void> {
 
   try {
     const { commitAction } = await loadAgentModules();
-    const result = await commitAction(pending.action, pending.payload, buildContext(link));
+    const draft = await getSaleDraft(chatId).catch(() => null);
+    const result = await commitAction(pending.action, pending.payload, buildContext(link, chatId, draft));
     await writeAudit({
       chatId,
       companyId: link.companyId,
@@ -278,6 +303,14 @@ async function handleCallback(callback: any): Promise<void> {
       result: 'confirmado'
     });
     await sendMessage(chatId, result.message);
+    if (result.document?.buffer) {
+      await sendDocument(chatId, {
+        buffer: result.document.buffer,
+        filename: result.document.filename,
+        mimeType: result.document.mimeType,
+        caption: 'DANFE'
+      });
+    }
   } catch (error: any) {
     console.error('[TELEGRAM] Falha ao gravar:', error);
     await writeAudit({

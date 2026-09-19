@@ -41,6 +41,30 @@ export async function sendMessage(
   });
 }
 
+/** Envia PDF/arquivo (ex.: DANFE) para o chat. */
+export async function sendDocument(
+  chatId: string | number,
+  input: { buffer: Buffer; filename: string; mimeType?: string; caption?: string }
+): Promise<void> {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  form.append(
+    'document',
+    new Blob([new Uint8Array(input.buffer)], { type: input.mimeType || 'application/pdf' }),
+    input.filename || 'documento.pdf'
+  );
+  if (input.caption) form.append('caption', input.caption.slice(0, 1024));
+
+  const response = await fetch(`${API_BASE}/bot${botToken()}/sendDocument`, {
+    method: 'POST',
+    body: form
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!json?.ok) {
+    console.warn('[TELEGRAM] sendDocument falhou:', json?.description || response.status);
+  }
+}
+
 export async function sendChatAction(chatId: string | number, action = 'typing'): Promise<void> {
   await callApi('sendChatAction', { chat_id: chatId, action });
 }

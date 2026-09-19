@@ -173,6 +173,122 @@ describe('agente: orçamento', () => {
     assert.equal(created.total, 3600);
     assert.deepEqual(created.payments, [], 'orçamento não nasce com financeiro');
   });
+
+  it('recusa cliente inexistente sem cadastrar', async () => {
+    const ctx = makeContext(fakeRepo(seedData()));
+    await assert.rejects(
+      () =>
+        executeTool(
+          'criar_orcamento',
+          { clienteNome: 'Cliente Fantasma XYZ', itens: [{ produto: 'moído', quantidade: 1 }] },
+          ctx
+        ),
+      /Não cadastro cliente pelo Telegram/
+    );
+  });
+
+  it('lista opções quando há dois clientes parecidos', async () => {
+    const seed = seedData();
+    seed.customers.push({ id: 'cust-2', name: 'Fazenda Boa Esperança', document: '111' });
+    seed.customers.push({ id: 'cust-3', name: 'Fazenda Boa Terra', document: '222' });
+    const listed = await executeTool('buscar_cliente', { termo: 'Fazenda Boa' }, makeContext(fakeRepo(seed)));
+    assert.equal((listed as any).data.quantidade >= 2, true);
+    assert.equal((listed as any).data.precisaoEscolha, true);
+  });
+});
+
+describe('agente: confirmar pedido e ciclo', () => {
+  it('confirma orçamento baixando estoque e gerando parcela', async () => {
+    const repo = fakeRepo(seedData());
+    const ctx = makeContext(repo);
+
+    const proposal = await executeTool(
+      'criar_orcamento',
+      { clienteNome: 'Boa Vista', itens: [{ produto: 'moído', quantidade: 20 }] },
+      ctx
+    );
+    await commitAction((proposal as any).action, (proposal as any).payload, ctx);
+    const budget = repo.tables.sales_orders.find((order: any) => order.status === OrderStatus.BUDGET);
+
+    const confirmProposal = await executeTool(
+      'confirmar_pedido',
+      { pedidoRef: budget.reference, aceitarEstoqueCritico: true },
+      ctx
+    );
+    assert.equal(confirmProposal.kind, 'confirm');
+    await commitAction((confirmProposal as any).action, (confirmProposal as any).payload, ctx);
+
+    const finalized = repo.tables.sales_orders.find((order: any) => order.id === budget.id);
+    assert.equal(finalized.status, OrderStatus.FINALIZED);
+    assert.equal(repo.tables.inventory[0].quantity, 480);
+    assert.ok(repo.tables.transactions.some((tx: any) => tx.orderId === budget.id));
+  });
+
+  it('ciclo orçamento sem confirmar não baixa estoque', async () => {
+    const repo = fakeRepo(seedData());
+    const ctx = makeContext(repo);
+    const proposal = await executeTool(
+      'propor_ciclo_venda',
+      {
+        clienteNome: 'Boa Vista',
+        itens: [{ produto: 'moído', quantidade: 5 }],
+        destino: 'orcamento',
+        emitirNfe: false
+      },
+      ctx
+    );
+    assert.equal((proposal as any).action, 'ciclo_venda');
+    assert.equal((proposal as any).payload.confirmarPedido, null);
+    await commitAction((proposal as any).action, (proposal as any).payload, ctx);
+    assert.equal(repo.tables.inventory[0].quantity, 500);
+    assert.ok(repo.tables.sales_orders.some((o: any) => o.status === OrderStatus.BUDGET));
+  });
+
+  it('emissão recusa pedido já com NF-e autorizada', async () => {
+    const seed = seedData();
+    seed.sales_orders[0].nfeStatus = 'autorizada';
+    seed.sales_orders[0].nfeNumero = '1042';
+    seed.customers[0] = {
+      ...seed.customers[0],
+      street: 'Rua A',
+      city: 'Santarém',
+      state: 'PA',
+      document: '12345678000190'
+    };
+    seed.fiscal_config = [
+      {
+        id: 'fiscal-1',
+        apiKey: 'ntaas_test',
+        naturezaOperacaoPadrao: 'Venda',
+        cfopPadraoEstadual: '5101',
+        ufEmitente: 'PA'
+      }
+    ];
+    const ctx = makeContext(fakeRepo(seed));
+    await assert.rejects(
+      () => executeTool('emitir_nfe', { pedidoRef: 'PED-2026-0001' }, ctx),
+      /já tem NF-e autorizada/
+    );
+  });
+
+  it('estoque insuficiente exige aceite explícito no ciclo confirmado', async () => {
+    const seed = seedData();
+    seed.inventory[0].quantity = 2;
+    const ctx = makeContext(fakeRepo(seed));
+    await assert.rejects(
+      () =>
+        executeTool(
+          'propor_ciclo_venda',
+          {
+            clienteNome: 'Boa Vista',
+            itens: [{ produto: 'moído', quantidade: 10 }],
+            destino: 'confirmado'
+          },
+          ctx
+        ),
+      /Estoque apertado/
+    );
+  });
 });
 
 describe('agente: comandos determinísticos, o fallback sem IA', () => {

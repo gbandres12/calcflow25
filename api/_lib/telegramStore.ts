@@ -21,6 +21,10 @@ export interface PendingAction {
 
 const PAIRING_TTL_MINUTES = 10;
 const PENDING_TTL_MINUTES = 5;
+const SALE_DRAFT_TTL_MINUTES = 30;
+
+/** Slots da entrevista de pedido/NF-e (espelha services/agent/saleDraft). */
+export type TelegramSaleDraftSlots = Record<string, unknown>;
 
 // Sem 0/O/1/I: o código é lido em voz alta e digitado no celular.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -281,4 +285,43 @@ export async function writeAudit(input: {
   } catch (error: any) {
     console.warn('[TELEGRAM] Falha ao gravar auditoria:', error?.message);
   }
+}
+
+export async function getSaleDraft(chatId: string): Promise<TelegramSaleDraftSlots | null> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('telegram_sale_drafts')
+    .select('slots, expires_at')
+    .eq('chat_id', String(chatId))
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return (data.slots && typeof data.slots === 'object' ? data.slots : {}) as TelegramSaleDraftSlots;
+}
+
+export async function saveSaleDraft(input: {
+  chatId: string;
+  companyId: string;
+  userId?: string;
+  slots: TelegramSaleDraftSlots;
+}): Promise<void> {
+  const supabase = requireSupabase();
+  const { error } = await supabase.from('telegram_sale_drafts').upsert(
+    {
+      chat_id: String(input.chatId),
+      company_id: input.companyId,
+      user_id: input.userId || null,
+      slots: input.slots || {},
+      updated_at: new Date().toISOString(),
+      expires_at: minutesFromNow(SALE_DRAFT_TTL_MINUTES)
+    },
+    { onConflict: 'chat_id' }
+  );
+  if (error) throw new Error(`Falha ao guardar o rascunho da venda: ${error.message}`);
+}
+
+export async function clearSaleDraft(chatId: string): Promise<void> {
+  const supabase = requireSupabase();
+  await supabase.from('telegram_sale_drafts').delete().eq('chat_id', String(chatId));
 }
