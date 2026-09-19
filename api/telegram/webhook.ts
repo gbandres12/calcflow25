@@ -16,11 +16,33 @@ import {
   touchLink,
   writeAudit
 } from '../_lib/telegramStore.js';
-import { HELP_TEXT, isCommand, runCommand } from '../../services/agent/commands.js';
-import { AgentAttachment, runAgent } from '../../services/agent/runAgent.js';
-import { AgentContext, commitAction } from '../../services/agent/tools.js';
+// Imports dinâmicos: o bundle serverless da Vercel quebra se @google/genai e
+// o restante do agente carregam no cold start desta função.
+type AgentAttachment = { mimeType: string; data: string };
+type AgentContext = {
+  companyId: string;
+  user: { id: string; name: string; role: string; permissions: Record<string, boolean> };
+  repo: { getTable: typeof getTable; upsert: typeof upsert };
+  allowWrites: boolean;
+  today: string;
+};
 
-export const config = { runtime: 'nodejs', maxDuration: 60 };
+async function loadAgentModules() {
+  const [commands, runAgentMod, toolsMod] = await Promise.all([
+    import('../../services/agent/commands.js'),
+    import('../../services/agent/runAgent.js'),
+    import('../../services/agent/tools.js')
+  ]);
+  return {
+    HELP_TEXT: commands.HELP_TEXT,
+    isCommand: commands.isCommand,
+    runCommand: commands.runCommand,
+    runAgent: runAgentMod.runAgent,
+    commitAction: toolsMod.commitAction
+  };
+}
+
+export const config = { runtime: 'nodejs', maxDuration: 30 };
 
 const repo = { getTable, upsert };
 
@@ -92,6 +114,7 @@ async function handlePairing(chatId: string, text: string): Promise<boolean> {
     result: 'ok'
   });
 
+  const { HELP_TEXT } = await loadAgentModules();
   await sendMessage(
     chatId,
     [
@@ -129,8 +152,9 @@ async function handleMessage(message: any): Promise<void> {
   await touchLink(chatId);
   const ctx = buildContext(link);
 
-  if (isCommand(text)) {
-    const reply = await runCommand(text, ctx);
+  const agent = await loadAgentModules();
+  if (agent.isCommand(text)) {
+    const reply = await agent.runCommand(text, ctx);
     if (reply) {
       await deliver(chatId, link, reply);
       return;
@@ -148,12 +172,12 @@ async function handleMessage(message: any): Promise<void> {
   }
 
   if (!text && !attachments.length) {
-    await sendMessage(chatId, HELP_TEXT);
+    await sendMessage(chatId, agent.HELP_TEXT);
     return;
   }
 
   try {
-    const reply = await runAgent({ text, attachments, ctx });
+    const reply = await agent.runAgent({ text, attachments, ctx });
     await deliver(chatId, link, reply);
   } catch (error: any) {
     console.error('[TELEGRAM] Falha no agente:', error);
@@ -162,7 +186,7 @@ async function handleMessage(message: any): Promise<void> {
       [
         'A IA não respondeu agora. Os comandos diretos continuam funcionando:',
         '',
-        HELP_TEXT
+        agent.HELP_TEXT
       ].join('\n')
     );
   }
@@ -243,6 +267,7 @@ async function handleCallback(callback: any): Promise<void> {
   await answerCallbackQuery(callback.id, 'Lançando...');
 
   try {
+    const { commitAction } = await loadAgentModules();
     const result = await commitAction(pending.action, pending.payload, buildContext(link));
     await writeAudit({
       chatId,
