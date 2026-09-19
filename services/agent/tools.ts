@@ -1,6 +1,7 @@
 import {
   Customer,
   FinancialAccount,
+  FiscalConfig,
   InventoryItem,
   OrderStatus,
   SaleOrder,
@@ -13,13 +14,17 @@ import {
   PaymentKind,
   appendReceiptToOrder,
   applyPaymentToTransaction,
+  assessStockForItems,
   buildBudgetOrder,
+  buildConfirmSaleEffects,
   buildPaymentReceipt,
   formatBRL,
   listOpenInstallments,
   newReceiptId,
   reconcileReceiptsAgainstPayments
 } from '../domain/telegramWrites';
+import { avaliarAptidaoNfe, emitirNfeParaPedidoTelegram } from '../domain/telegramNfe';
+import { mergeSaleDraft, SaleDraftSlots } from './saleDraft';
 
 export interface ErpRepo {
   getTable(companyId: string, table: string): Promise<any[]>;
@@ -40,11 +45,21 @@ export interface AgentContext {
   /** Desliga toda escrita por variável de ambiente, para subir só com consulta. */
   allowWrites: boolean;
   today: string;
+  chatId?: string;
+  saleDraft?: SaleDraftSlots | null;
+  persistSaleDraft?: (slots: SaleDraftSlots) => Promise<void>;
+  clearSaleDraft?: () => Promise<void>;
 }
 
 export type ToolOutcome =
   | { kind: 'data'; data: any }
   | { kind: 'confirm'; action: string; payload: any; summary: string };
+
+export interface CommitResult {
+  message: string;
+  records: { table: string; id: string }[];
+  document?: { buffer: Buffer; filename: string; mimeType?: string };
+}
 
 const normalize = (text: string): string =>
   String(text || '')
@@ -94,9 +109,15 @@ function accountBalance(account: FinancialAccount, transactions: Transaction[]):
   return toNumber(account.initialBalance) + totalIn - totalOut;
 }
 
-function requirePermission(ctx: AgentContext, permission: 'financial' | 'orders' | 'inventory') {
+function requirePermission(ctx: AgentContext, permission: 'financial' | 'orders' | 'inventory' | 'fiscal') {
   if (ctx.user.permissions?.[permission] === false) {
-    throw new Error(`Seu acesso no ERP não inclui ${permission === 'financial' ? 'o Financeiro' : 'esse módulo'}.`);
+    const labels: Record<string, string> = {
+      financial: 'o Financeiro',
+      orders: 'Pedidos',
+      inventory: 'o Estoque',
+      fiscal: 'o Fiscal / NF-e'
+    };
+    throw new Error(`Seu acesso no ERP não inclui ${labels[permission] || 'esse módulo'}.`);
   }
 }
 
@@ -106,17 +127,40 @@ function requireWrites(ctx: AgentContext) {
   }
 }
 
-function findCustomer(customers: Customer[], term: string): Customer | null {
+function findCustomers(customers: Customer[], term: string, limit = 3): Customer[] {
   const query = normalize(term);
-  if (!query) return null;
+  if (!query) return [];
   const digits = query.replace(/\D/g, '');
 
-  return (
-    customers.find((customer) => normalize(customer.name) === query) ||
-    (digits ? customers.find((customer) => String(customer.document || '').replace(/\D/g, '') === digits) : null) ||
-    customers.find((customer) => normalize(customer.name).includes(query)) ||
-    null
-  );
+  const exactName = customers.filter((customer) => normalize(customer.name) === query);
+  if (exactName.length) return exactName.slice(0, limit);
+
+  if (digits) {
+    const byDoc = customers.filter(
+      (customer) => String(customer.document || '').replace(/\D/g, '') === digits
+    );
+    if (byDoc.length) return byDoc.slice(0, limit);
+  }
+
+  return customers
+    .filter((customer) => normalize(customer.name).includes(query))
+    .slice(0, limit);
+}
+
+function findCustomer(customers: Customer[], term: string): Customer | null {
+  return findCustomers(customers, term, 1)[0] || null;
+}
+
+async function loadFiscalConfig(ctx: AgentContext): Promise<FiscalConfig | null> {
+  const rows = (await ctx.repo.getTable(ctx.companyId, 'fiscal_config')) as FiscalConfig[];
+  return rows.find((row) => row && (row as any).id !== '__seed__') || rows[0] || null;
+}
+
+async function persistDraftPatch(ctx: AgentContext, patch: Partial<SaleDraftSlots>): Promise<SaleDraftSlots> {
+  const next = mergeSaleDraft(ctx.saleDraft, patch);
+  ctx.saleDraft = next;
+  if (ctx.persistSaleDraft) await ctx.persistSaleDraft(next);
+  return next;
 }
 
 function findOrder(orders: SaleOrder[], reference: string): SaleOrder | null {
@@ -309,20 +353,54 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
 
     case 'buscar_cliente': {
       const customers = (await ctx.repo.getTable(ctx.companyId, 'customers')) as Customer[];
-      const customer = findCustomer(customers, String(args.termo || ''));
-      if (!customer) return { kind: 'data', data: { encontrado: false } };
+      const matches = findCustomers(customers, String(args.termo || ''), 3);
+      if (!matches.length) {
+        return {
+          kind: 'data',
+          data: {
+            encontrado: false,
+            quantidade: 0,
+            mensagem:
+              'Não cadastro cliente pelo Telegram. Cadastra no ERP e me chama de novo.'
+          }
+        };
+      }
 
+      if (matches.length > 1) {
+        return {
+          kind: 'data',
+          data: {
+            encontrado: true,
+            quantidade: matches.length,
+            precisaoEscolha: true,
+            opcoes: matches.map((customer) => ({
+              id: customer.id,
+              nome: customer.name,
+              documento: customer.document,
+              cidade: customer.city
+            })),
+            mensagem: 'Achei mais de um. Qual desses é?'
+          }
+        };
+      }
+
+      const customer = matches[0];
       const [orders, transactions] = await Promise.all([
         ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
         ctx.repo.getTable(ctx.companyId, 'transactions') as Promise<Transaction[]>
       ]);
 
       const open = listOpenInstallments(transactions, { customerId: customer.id });
+      await persistDraftPatch(ctx, {
+        customerId: customer.id,
+        customerLabel: `${customer.name}${customer.document ? `, CNPJ/CPF ${customer.document}` : ''}`
+      });
 
       return {
         kind: 'data',
         data: {
           encontrado: true,
+          quantidade: 1,
           id: customer.id,
           nome: customer.name,
           documento: customer.document,
@@ -332,7 +410,8 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           pedidos: orders
             .filter((order) => order.customerId === customer.id)
             .slice(-5)
-            .map((order) => ({ referencia: order.reference, total: order.total, status: order.status }))
+            .map((order) => ({ referencia: order.reference, total: order.total, status: order.status })),
+          mensagem: `É ${customer.name}${customer.document ? `, documento ${customer.document}` : ''}?`
         }
       };
     }
@@ -400,13 +479,61 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         data: {
           encontrado: true,
           referencia: order.reference,
+          statusPedido: order.status,
           nfeStatus: order.nfeStatus || 'nao_emitida',
           numero: order.nfeNumero,
           chave: order.nfeChave,
-          erro: order.nfeErro,
-          observacao: 'A emissão de NF-e é feita apenas pelo ERP, não pelo Telegram.'
+          erro: order.nfeErro
         }
       };
+    }
+
+    case 'validar_aptidao_nfe': {
+      const [orders, customers] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>
+      ]);
+      const order = findOrder(orders, String(args.pedidoRef || ctx.saleDraft?.pedidoRef || ''));
+      if (!order) return { kind: 'data', data: { apto: false, faltas: ['Pedido não encontrado.'] } };
+      const customer = customers.find((item) => item.id === order.customerId);
+      if (!customer) return { kind: 'data', data: { apto: false, faltas: ['Cliente do pedido não encontrado.'] } };
+      const config = await loadFiscalConfig(ctx);
+      const aptidao = avaliarAptidaoNfe({
+        order,
+        customer,
+        config,
+        naturezaOverride: args.natureza || ctx.saleDraft?.natureza,
+        cfopOverride: args.cfop || ctx.saleDraft?.cfop
+      });
+      return { kind: 'data', data: aptidao };
+    }
+
+    case 'atualizar_rascunho_venda': {
+      const patch: Partial<SaleDraftSlots> = {};
+      if (args.intent) patch.intent = args.intent;
+      if (args.customerId) patch.customerId = String(args.customerId);
+      if (args.customerLabel) patch.customerLabel = String(args.customerLabel);
+      if (args.destino) patch.destino = args.destino;
+      if (args.emitirNfe != null) patch.emitirNfe = Boolean(args.emitirNfe);
+      if (args.aceitarEstoqueCritico != null) patch.aceitarEstoqueCritico = Boolean(args.aceitarEstoqueCritico);
+      if (args.observacao != null) patch.observacao = String(args.observacao);
+      if (args.frete != null) patch.frete = args.frete;
+      if (args.natureza) patch.natureza = String(args.natureza);
+      if (args.cfop) patch.cfop = String(args.cfop);
+      if (args.pedidoRef) patch.pedidoRef = String(args.pedidoRef);
+      if (Array.isArray(args.itens)) {
+        patch.itens = args.itens.map((line: any) => ({
+          productId: String(line.productId || line.produtoId || ''),
+          productName: line.productName || line.produto,
+          quantity: toNumber(line.quantity ?? line.quantidade),
+          unit: line.unit || line.unidade,
+          unitPrice: line.unitPrice != null || line.precoUnitario != null
+            ? toNumber(line.unitPrice ?? line.precoUnitario)
+            : undefined
+        }));
+      }
+      const next = await persistDraftPatch(ctx, patch);
+      return { kind: 'data', data: { ok: true, rascunho: next } };
     }
 
     case 'conferir_lancamentos': {
@@ -442,8 +569,20 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>
       ]);
 
-      const customer = findCustomer(customers, String(args.clienteNome || ''));
-      if (!customer) throw new Error(`Não encontrei o cliente ${args.clienteNome}. Cadastre-o no ERP antes.`);
+      const customerMatches = findCustomers(customers, String(args.clienteNome || ''), 3);
+      if (!customerMatches.length) {
+        throw new Error(
+          `Não encontrei o cliente ${args.clienteNome}. Não cadastro cliente pelo Telegram — cadastra no ERP e me chama de novo.`
+        );
+      }
+      if (customerMatches.length > 1) {
+        throw new Error(
+          `Achei mais de um cliente. Qual desses?\n${customerMatches
+            .map((c, i) => `${i + 1}) ${c.name}${c.document ? ` — ${c.document}` : ''}`)
+            .join('\n')}`
+        );
+      }
+      const customer = customerMatches[0];
 
       const lines = Array.isArray(args.itens) ? args.itens : [];
       if (!lines.length) throw new Error('Informe ao menos um produto com quantidade.');
@@ -462,7 +601,21 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         };
       });
 
-      // Monta só para validar e mostrar o total; o pedido real nasce na confirmação.
+      const stock = assessStockForItems(items, inventory);
+      const stockIssues = stock.filter((row) => row.insufficient || row.criticalAfter);
+      if (stockIssues.length && !args.aceitarEstoqueCritico && !ctx.saleDraft?.aceitarEstoqueCritico) {
+        const detail = stockIssues
+          .map((row) =>
+            row.insufficient
+              ? `${row.productName}: pediu ${row.quantity}, tem ${row.available}`
+              : `${row.productName}: depois da venda fica em ${row.available - row.quantity} (mínimo ${row.minStock})`
+          )
+          .join('; ');
+        throw new Error(
+          `Estoque apertado (${detail}). Pergunte se pode seguir mesmo assim e só então chame de novo com aceitarEstoqueCritico=true.`
+        );
+      }
+
       const preview = buildBudgetOrder({
         companyId: ctx.companyId,
         customer,
@@ -480,8 +633,26 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           (item) => `• ${item.quantity} ${item.unit} de ${item.productName} a ${formatBRL(item.unitPrice)}`
         ),
         `Total: ${formatBRL(preview.total)}`,
-        'Entra como Orçamento: não baixa estoque nem gera financeiro até ser confirmado no ERP.'
+        'Baixa estoque: não',
+        'Gera parcela: não',
+        'Envia NF-e à SEFAZ: não'
       ].join('\n');
+
+      await persistDraftPatch(ctx, {
+        customerId: customer.id,
+        customerLabel: customer.name,
+        itens: items.map((item, index) => ({
+          productId: item.productId,
+          productName: preview.items[index]?.productName,
+          quantity: item.quantity,
+          unit: preview.items[index]?.unit,
+          unitPrice: item.unitPrice ?? preview.items[index]?.unitPrice
+        })),
+        destino: 'orcamento',
+        emitirNfe: false,
+        observacao: args.observacao,
+        aceitarEstoqueCritico: Boolean(args.aceitarEstoqueCritico)
+      });
 
       return {
         kind: 'confirm',
@@ -495,6 +666,278 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       };
     }
 
+    case 'confirmar_pedido': {
+      requirePermission(ctx, 'orders');
+      requireWrites(ctx);
+
+      const [orders, customers, inventory] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>
+      ]);
+
+      const order = findOrder(orders, String(args.pedidoRef || ''));
+      if (!order) throw new Error('Pedido/orçamento não encontrado.');
+      if (order.status !== OrderStatus.BUDGET) {
+        throw new Error(`Só confirmo orçamento. ${order.reference} está como ${order.status}.`);
+      }
+
+      const customer = customers.find((item) => item.id === order.customerId);
+      if (!customer) throw new Error('Cliente do pedido não encontrado.');
+
+      const stock = assessStockForItems(
+        (order.items || []).map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        inventory
+      );
+      const stockIssues = stock.filter((row) => row.insufficient || row.criticalAfter);
+      if (stockIssues.length && !args.aceitarEstoqueCritico && !ctx.saleDraft?.aceitarEstoqueCritico) {
+        throw new Error(
+          `Estoque apertado. Pergunte se pode seguir e chame de novo com aceitarEstoqueCritico=true. Detalhe: ${stockIssues
+            .map((row) => row.productName)
+            .join(', ')}`
+        );
+      }
+
+      const summary = [
+        `Confirmar pedido ${order.reference}`,
+        `Cliente: ${customer.name}`,
+        ...order.items.map(
+          (item) => `• ${item.quantity} ${item.unit} de ${item.productName} a ${formatBRL(item.unitPrice)}`
+        ),
+        `Total: ${formatBRL(order.total)}`,
+        'Baixa estoque: sim',
+        'Gera parcela: sim',
+        'Envia NF-e à SEFAZ: não'
+      ].join('\n');
+
+      return {
+        kind: 'confirm',
+        action: 'confirmar_pedido',
+        payload: { orderId: order.id, pedidoRef: order.reference },
+        summary
+      };
+    }
+
+    case 'emitir_nfe': {
+      requirePermission(ctx, 'fiscal');
+      requireWrites(ctx);
+
+      const [orders, customers] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>
+      ]);
+      const order = findOrder(orders, String(args.pedidoRef || ''));
+      if (!order) throw new Error('Pedido não encontrado.');
+      const customer = customers.find((item) => item.id === order.customerId);
+      if (!customer) throw new Error('Cliente do pedido não encontrado.');
+      const config = await loadFiscalConfig(ctx);
+      const aptidao = avaliarAptidaoNfe({
+        order,
+        customer,
+        config,
+        naturezaOverride: args.natureza,
+        cfopOverride: args.cfop
+      });
+      if (!aptidao.apto) {
+        throw new Error(`Não dá para emitir ainda:\n• ${aptidao.faltas.join('\n• ')}`);
+      }
+
+      const summary = [
+        `Emitir NF-e do pedido ${order.reference}`,
+        `Cliente: ${customer.name}`,
+        `Total: ${formatBRL(order.total)}`,
+        `Natureza: ${aptidao.naturezaDisponivel}`,
+        `CFOP: ${aptidao.cfopDisponivel}`,
+        'Baixa estoque: (já feita na confirmação)',
+        'Gera parcela: (já feita na confirmação)',
+        'Envia NF-e à SEFAZ: sim'
+      ].join('\n');
+
+      return {
+        kind: 'confirm',
+        action: 'emitir_nfe',
+        payload: {
+          orderId: order.id,
+          pedidoRef: order.reference,
+          natureza: args.natureza || aptidao.naturezaDisponivel || null,
+          cfop: args.cfop || aptidao.cfopDisponivel || null
+        },
+        summary
+      };
+    }
+
+    case 'propor_ciclo_venda': {
+      requirePermission(ctx, 'orders');
+      requireWrites(ctx);
+
+      const destino = (args.destino || ctx.saleDraft?.destino || 'orcamento') as 'orcamento' | 'confirmado';
+      const emitirNfe = Boolean(args.emitirNfe ?? ctx.saleDraft?.emitirNfe);
+      if (emitirNfe && destino !== 'confirmado' && !args.pedidoRef && !ctx.saleDraft?.pedidoRef) {
+        throw new Error(
+          'Para emitir NF-e o destino precisa ser pedido confirmado. Confirme se pode faturar/emitir.'
+        );
+      }
+      if (emitirNfe) requirePermission(ctx, 'fiscal');
+
+      const [customers, inventory, orders] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>
+      ]);
+
+      let existingOrder: SaleOrder | null = null;
+      const pedidoRef = String(args.pedidoRef || ctx.saleDraft?.pedidoRef || '');
+      if (pedidoRef) {
+        existingOrder = findOrder(orders, pedidoRef);
+        if (!existingOrder) throw new Error(`Pedido ${pedidoRef} não encontrado.`);
+      }
+
+      let customer: Customer | undefined;
+      let createPayload: any = null;
+      let previewOrder: SaleOrder | null = existingOrder;
+
+      if (!existingOrder) {
+        const customerId = String(args.customerId || ctx.saleDraft?.customerId || '');
+        const customerTerm = String(args.clienteNome || ctx.saleDraft?.customerLabel || '');
+        customer =
+          (customerId ? customers.find((item) => item.id === customerId) : undefined) ||
+          (customerTerm ? findCustomers(customers, customerTerm, 1)[0] : undefined);
+        if (!customer) {
+          throw new Error(
+            'Cliente não identificado no cadastro. Não cadastro cliente pelo Telegram — cadastra no ERP e me chama de novo.'
+          );
+        }
+
+        const rawItems = Array.isArray(args.itens)
+          ? args.itens
+          : ctx.saleDraft?.itens || [];
+        if (!rawItems.length) throw new Error('Faltam os itens do pedido.');
+
+        const items = rawItems.map((line: any) => {
+          const term = normalize(String(line.produto || line.productId || line.productName || ''));
+          const product =
+            inventory.find((item) => item.id === line.productId) ||
+            inventory.find((item) => normalize(item.id) === term) ||
+            inventory.find((item) => normalize(item.name) === term) ||
+            inventory.find((item) => normalize(item.name).includes(term));
+          if (!product) throw new Error(`Produto "${line.produto || line.productName}" não existe no estoque.`);
+          const unitPrice =
+            line.precoUnitario != null || line.unitPrice != null
+              ? toNumber(line.precoUnitario ?? line.unitPrice)
+              : undefined;
+          if (unitPrice == null && !(toNumber(product.unitPrice) > 0)) {
+            throw new Error(`Produto ${product.name} sem preço na tabela. Informe o preço ou cadastre no ERP.`);
+          }
+          return {
+            productId: product.id,
+            quantity: toNumber(line.quantidade ?? line.quantity),
+            unitPrice
+          };
+        });
+
+        const stock = assessStockForItems(items, inventory);
+        const stockIssues = stock.filter((row) => row.insufficient || row.criticalAfter);
+        if (
+          (destino === 'confirmado' || emitirNfe) &&
+          stockIssues.length &&
+          !args.aceitarEstoqueCritico &&
+          !ctx.saleDraft?.aceitarEstoqueCritico
+        ) {
+          throw new Error(
+            `Estoque apertado (${stockIssues
+              .map((row) => row.productName)
+              .join(', ')}). Pergunte se segue e use aceitarEstoqueCritico=true.`
+          );
+        }
+
+        previewOrder = buildBudgetOrder({
+          companyId: ctx.companyId,
+          customer,
+          items,
+          inventory,
+          existingOrders: orders,
+          sellerName: ctx.user.name,
+          notes: args.observacao || ctx.saleDraft?.observacao
+        });
+        createPayload = {
+          customerId: customer.id,
+          items,
+          notes: args.observacao || ctx.saleDraft?.observacao || null
+        };
+      } else {
+        customer = customers.find((item) => item.id === existingOrder!.customerId);
+        if (!customer) throw new Error('Cliente do pedido não encontrado.');
+      }
+
+      if (!previewOrder || !customer) throw new Error('Não consegui montar o pedido.');
+
+      let emitirPayload: any = null;
+      if (emitirNfe) {
+        const config = await loadFiscalConfig(ctx);
+        const orderForCheck =
+          destino === 'confirmado' || existingOrder?.status === OrderStatus.FINALIZED
+            ? { ...previewOrder, status: OrderStatus.FINALIZED }
+            : previewOrder;
+        const aptidao = avaliarAptidaoNfe({
+          order: orderForCheck,
+          customer,
+          config,
+          naturezaOverride: args.natureza || ctx.saleDraft?.natureza,
+          cfopOverride: args.cfop || ctx.saleDraft?.cfop
+        });
+        // Ignora a falta de "precisa estar confirmado" se vamos confirmar neste ciclo.
+        const faltas = aptidao.faltas.filter(
+          (f) => !(destino === 'confirmado' && /precisa estar confirmado/i.test(f))
+        );
+        if (faltas.length) {
+          throw new Error(`Não dá para emitir ainda:\n• ${faltas.join('\n• ')}`);
+        }
+        emitirPayload = {
+          natureza: args.natureza || ctx.saleDraft?.natureza || aptidao.naturezaDisponivel || null,
+          cfop: args.cfop || ctx.saleDraft?.cfop || aptidao.cfopDisponivel || null
+        };
+      }
+
+      const willConfirm = destino === 'confirmado' || Boolean(emitirNfe);
+      const willCreate = Boolean(createPayload);
+      const willEmit = Boolean(emitirPayload);
+
+      const title =
+        (willCreate ? 'Criar orçamento' : '') +
+        (willCreate && willConfirm ? ' → ' : '') +
+        (willConfirm ? 'confirmar pedido' : '') +
+        (willEmit ? ' → emitir NF-e' : '');
+
+      const cleanSummary = [
+        title.charAt(0).toUpperCase() + title.slice(1),
+        `Cliente: ${customer.name}`,
+        ...previewOrder.items.map(
+          (item) => `• ${item.quantity} ${item.unit} de ${item.productName} a ${formatBRL(item.unitPrice)}`
+        ),
+        `Total: ${formatBRL(previewOrder.total)}`,
+        `Baixa estoque: ${willConfirm ? 'sim' : 'não'}`,
+        `Gera parcela: ${willConfirm ? 'sim' : 'não'}`,
+        `Envia NF-e à SEFAZ: ${willEmit ? 'sim' : 'não'}`,
+        willEmit && emitirPayload?.natureza ? `Natureza: ${emitirPayload.natureza}` : null,
+        willEmit && emitirPayload?.cfop ? `CFOP: ${emitirPayload.cfop}` : null
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      return {
+        kind: 'confirm',
+        action: 'ciclo_venda',
+        payload: {
+          criarOrcamento: createPayload,
+          confirmarPedido: willConfirm
+            ? { orderId: existingOrder?.id || null, aceitarEstoqueCritico: true }
+            : null,
+          emitirNfe: willEmit ? emitirPayload : null
+        },
+        summary: cleanSummary
+      };
+    }
+
     default:
       throw new Error(`Ferramenta desconhecida: ${name}`);
   }
@@ -505,8 +948,58 @@ export async function commitAction(
   action: string,
   payload: any,
   ctx: AgentContext
-): Promise<{ message: string; records: { table: string; id: string }[] }> {
+): Promise<CommitResult> {
   requireWrites(ctx);
+
+  if (action === 'ciclo_venda') {
+    const messages: string[] = [];
+    const records: CommitResult['records'] = [];
+    let document: CommitResult['document'];
+    let orderId: string | undefined = payload?.confirmarPedido?.orderId || undefined;
+    let pedidoRef: string | undefined;
+
+    if (payload?.criarOrcamento) {
+      const created = await commitAction('criar_orcamento', payload.criarOrcamento, ctx);
+      messages.push(created.message);
+      records.push(...created.records);
+      orderId = created.records.find((row) => row.table === 'sales_orders')?.id || orderId;
+    }
+
+    if (payload?.confirmarPedido) {
+      const confirmPayload = {
+        ...payload.confirmarPedido,
+        orderId: payload.confirmarPedido.orderId || orderId
+      };
+      const confirmed = await commitAction('confirmar_pedido', confirmPayload, ctx);
+      messages.push(confirmed.message);
+      records.push(...confirmed.records);
+      orderId = confirmed.records.find((row) => row.table === 'sales_orders')?.id || orderId;
+      const match = confirmed.message.match(/Pedido\s+(\S+)/i);
+      if (match) pedidoRef = match[1];
+    }
+
+    if (payload?.emitirNfe) {
+      try {
+        const emitPayload = {
+          ...payload.emitirNfe,
+          orderId: payload.emitirNfe.orderId || orderId,
+          pedidoRef: payload.emitirNfe.pedidoRef || pedidoRef
+        };
+        const emitted = await commitAction('emitir_nfe', emitPayload, ctx);
+        messages.push(emitted.message);
+        records.push(...emitted.records);
+        if (emitted.document) document = emitted.document;
+      } catch (error: any) {
+        messages.push(
+          `Pedido ficou gravado, mas a NF-e não saiu: ${error?.message || 'erro na NotaAs/SEFAZ'}.`
+        );
+      }
+    }
+
+    if (ctx.clearSaleDraft) await ctx.clearSaleDraft().catch(() => undefined);
+
+    return { message: messages.join('\n'), records, document };
+  }
 
   if (action === 'registrar_abatimento' || action === 'registrar_recebimento') {
     requirePermission(ctx, 'financial');
@@ -599,8 +1092,102 @@ export async function commitAction(
     return {
       message: `Orçamento ${order.reference} criado para ${customer.name}, total ${formatBRL(
         order.total
-      )}. Confirme a venda no ERP para baixar estoque e gerar o financeiro.`,
+      )}.`,
       records: [{ table: 'sales_orders', id: order.id }]
+    };
+  }
+
+  if (action === 'confirmar_pedido') {
+    requirePermission(ctx, 'orders');
+
+    const [orders, customers, inventory, accounts] = await Promise.all([
+      ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+      ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+      ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+      ctx.repo.getTable(ctx.companyId, 'financial_accounts') as Promise<FinancialAccount[]>
+    ]);
+
+    const order =
+      (payload.orderId && orders.find((item) => item.id === payload.orderId)) ||
+      (payload.pedidoRef ? findOrder(orders, String(payload.pedidoRef)) : null);
+    if (!order) throw new Error('Pedido não encontrado. Nada foi confirmado.');
+    if (order.status === OrderStatus.FINALIZED) {
+      return {
+        message: `Pedido ${order.reference} já estava confirmado.`,
+        records: [{ table: 'sales_orders', id: order.id }]
+      };
+    }
+
+    const customer = customers.find((item) => item.id === order.customerId);
+    if (!customer) throw new Error('Cliente do pedido não encontrado.');
+
+    const effects = buildConfirmSaleEffects({
+      order,
+      inventory,
+      accounts,
+      customer,
+      today: ctx.today
+    });
+
+    const records: CommitResult['records'] = [];
+    await ctx.repo.upsert(ctx.companyId, 'sales_orders', { ...effects.order, origin: 'telegram' });
+    records.push({ table: 'sales_orders', id: effects.order.id });
+
+    for (const patch of effects.inventoryPatches) {
+      await ctx.repo.upsert(ctx.companyId, 'inventory', { ...patch, origin: 'telegram' });
+      records.push({ table: 'inventory', id: patch.id });
+    }
+    for (const tx of effects.transactions) {
+      await ctx.repo.upsert(ctx.companyId, 'transactions', { ...tx, origin: 'telegram' });
+      records.push({ table: 'transactions', id: tx.id });
+    }
+    await ctx.repo.upsert(ctx.companyId, 'customers', { ...effects.customerPatch, origin: 'telegram' });
+    records.push({ table: 'customers', id: effects.customerPatch.id });
+
+    return {
+      message: `Pedido ${effects.order.reference} confirmado para ${customer.name}. Estoque baixado e parcela gerada (total ${formatBRL(
+        effects.order.total
+      )}).`,
+      records
+    };
+  }
+
+  if (action === 'emitir_nfe') {
+    requirePermission(ctx, 'fiscal');
+
+    const [orders, customers] = await Promise.all([
+      ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+      ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>
+    ]);
+
+    const order =
+      (payload.orderId && orders.find((item) => item.id === payload.orderId)) ||
+      (payload.pedidoRef ? findOrder(orders, String(payload.pedidoRef)) : null);
+    if (!order) throw new Error('Pedido não encontrado. Nada foi emitido.');
+
+    const customer = customers.find((item) => item.id === order.customerId);
+    if (!customer) throw new Error('Cliente do pedido não encontrado.');
+
+    const config = await loadFiscalConfig(ctx);
+    if (!config) throw new Error('Configuração fiscal da empresa não encontrada no ERP.');
+
+    const result = await emitirNfeParaPedidoTelegram({
+      order,
+      customer,
+      config,
+      natureza: payload.natureza || undefined,
+      cfop: payload.cfop || undefined
+    });
+
+    await ctx.repo.upsert(ctx.companyId, 'sales_orders', { ...result.order, origin: 'telegram' });
+
+    return {
+      message: result.message,
+      records: [{ table: 'sales_orders', id: result.order.id }],
+      document:
+        result.danfeBuffer && result.danfeFilename
+          ? { buffer: result.danfeBuffer, filename: result.danfeFilename, mimeType: 'application/pdf' }
+          : undefined
     };
   }
 
@@ -615,10 +1202,19 @@ export const READ_ONLY_TOOLS = [
   'consultar_estoque',
   'listar_vendas',
   'status_nfe_pedido',
+  'validar_aptidao_nfe',
+  'atualizar_rascunho_venda',
   'conferir_lancamentos'
 ];
 
-export const WRITE_TOOLS = ['registrar_abatimento', 'registrar_recebimento', 'criar_orcamento'];
+export const WRITE_TOOLS = [
+  'registrar_abatimento',
+  'registrar_recebimento',
+  'criar_orcamento',
+  'confirmar_pedido',
+  'emitir_nfe',
+  'propor_ciclo_venda'
+];
 
 /** Declarações no formato de function calling do Gemini. */
 export const toolDeclarations = [
@@ -649,7 +1245,8 @@ export const toolDeclarations = [
   },
   {
     name: 'buscar_cliente',
-    description: 'Dados do cliente, saldo devedor e últimos pedidos.',
+    description:
+      'Busca cliente no cadastro (nome ou documento). Devolve 0, 1 ou até 3 opções. Nunca cadastra cliente.',
     parameters: {
       type: 'OBJECT',
       properties: { termo: { type: 'STRING', description: 'Nome ou documento do cliente.' } },
@@ -678,11 +1275,45 @@ export const toolDeclarations = [
   },
   {
     name: 'status_nfe_pedido',
-    description: 'Situação fiscal da NF-e de um pedido. Consulta apenas: a emissão é feita no ERP.',
+    description: 'Situação fiscal da NF-e de um pedido (consulta).',
     parameters: {
       type: 'OBJECT',
       properties: { pedidoRef: { type: 'STRING' } },
       required: ['pedidoRef']
+    }
+  },
+  {
+    name: 'validar_aptidao_nfe',
+    description: 'Lista o que falta para emitir NF-e de um pedido (documento, endereço, CFOP, chave API).',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoRef: { type: 'STRING' },
+        natureza: { type: 'STRING' },
+        cfop: { type: 'STRING' }
+      }
+    }
+  },
+  {
+    name: 'atualizar_rascunho_venda',
+    description:
+      'Atualiza os slots da entrevista de venda (intent, cliente, itens, destino, emitirNfe). Não grava no ERP.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        intent: { type: 'STRING' },
+        customerId: { type: 'STRING' },
+        customerLabel: { type: 'STRING' },
+        destino: { type: 'STRING', description: 'orcamento ou confirmado' },
+        emitirNfe: { type: 'BOOLEAN' },
+        aceitarEstoqueCritico: { type: 'BOOLEAN' },
+        observacao: { type: 'STRING' },
+        frete: { type: 'STRING' },
+        natureza: { type: 'STRING' },
+        cfop: { type: 'STRING' },
+        pedidoRef: { type: 'STRING' },
+        itens: { type: 'ARRAY', items: { type: 'OBJECT' } }
+      }
     }
   },
   {
@@ -725,7 +1356,7 @@ export const toolDeclarations = [
   {
     name: 'criar_orcamento',
     description:
-      'Prepara um orçamento de venda. Não grava nada: devolve um resumo para o usuário confirmar no botão. O orçamento vira venda dentro do ERP.',
+      'Prepara um orçamento de venda. Não grava nada até o botão Confirmar. Não baixa estoque nem gera financeiro.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -742,9 +1373,68 @@ export const toolDeclarations = [
             required: ['produto', 'quantidade']
           }
         },
-        observacao: { type: 'STRING' }
+        observacao: { type: 'STRING' },
+        aceitarEstoqueCritico: { type: 'BOOLEAN' }
       },
       required: ['clienteNome', 'itens']
+    }
+  },
+  {
+    name: 'confirmar_pedido',
+    description:
+      'Prepara a confirmação de um orçamento existente (baixa estoque + gera parcela). Exige botão Confirmar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoRef: { type: 'STRING' },
+        aceitarEstoqueCritico: { type: 'BOOLEAN' }
+      },
+      required: ['pedidoRef']
+    }
+  },
+  {
+    name: 'emitir_nfe',
+    description:
+      'Prepara emissão de NF-e de um pedido já confirmado. Exige botão Confirmar. Usa cadastro fiscal da empresa.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoRef: { type: 'STRING' },
+        natureza: { type: 'STRING' },
+        cfop: { type: 'STRING' }
+      },
+      required: ['pedidoRef']
+    }
+  },
+  {
+    name: 'propor_ciclo_venda',
+    description:
+      'Fecha o ciclo em um único Confirmar: criar orçamento e/ou confirmar pedido e/ou emitir NF-e. Default destino=orcamento; só confirma/emite se o operador pediu explicitamente.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        clienteNome: { type: 'STRING' },
+        customerId: { type: 'STRING' },
+        pedidoRef: { type: 'STRING', description: 'Se já existe orçamento/pedido, use a referência.' },
+        itens: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              produto: { type: 'STRING' },
+              productId: { type: 'STRING' },
+              quantidade: { type: 'NUMBER' },
+              precoUnitario: { type: 'NUMBER' }
+            }
+          }
+        },
+        destino: { type: 'STRING', description: 'orcamento (default) ou confirmado' },
+        emitirNfe: { type: 'BOOLEAN' },
+        observacao: { type: 'STRING' },
+        natureza: { type: 'STRING' },
+        cfop: { type: 'STRING' },
+        aceitarEstoqueCritico: { type: 'BOOLEAN' }
+      }
     }
   }
 ];

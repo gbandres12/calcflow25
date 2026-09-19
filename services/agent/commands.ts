@@ -16,6 +16,8 @@ export interface CommandReply {
 
 export const HELP_TEXT = [
   'Posso responder em texto, áudio ou foto — é só falar comigo normalmente.',
+  'Dá para montar pedido, confirmar venda e emitir NF-e: eu pergunto o essencial e você confirma no botão.',
+  'Cliente novo precisa estar cadastrado no ERP antes.',
   '',
   'Se preferir comandos diretos (funcionam mesmo se a IA estiver fora do ar):',
   '/saldo — saldo das contas',

@@ -32,18 +32,22 @@ Não coloque service_role no frontend.
 
 ## Agente financeiro no Telegram
 
-Assessor que atende pelo Telegram em texto, áudio ou foto: consulta caixa, recebíveis, estoque e vendas, registra abatimentos e recebimentos e cria orçamentos. Toda gravação passa por um botão de confirmação no chat, e NF-e continua sendo emitida só pelo app.
+Assessor que atende pelo Telegram em texto, áudio ou foto: consulta caixa, recebíveis, estoque e vendas; registra abatimentos e recebimentos; cria orçamentos; confirma pedidos (estoque + financeiro); e pode emitir NF-e pela mesma integração NotaAs do ERP. Toda gravação passa por um botão de confirmação no chat.
 
-O bot **não altera o núcleo financeiro**: ele grava o recibo no pedido e o pagamento na parcela escolhida, e o `receiptId` impede o app de lançar de novo. Venda criada pelo chat nasce como Orçamento, que não baixa estoque nem gera financeiro até ser confirmada no ERP.
+Fluxo de venda por voz: entrevista curta (cliente → itens → orçamento ou pedido confirmado → NF-e se pedir). Cliente e produto precisam já estar no cadastro — o bot **não cadastra cliente**. Default é orçamento; só confirma/fatura/emite se o operador pedir explicitamente.
+
+O bot **não altera o núcleo financeiro** nos lançamentos de baixa: ele grava o recibo no pedido e o pagamento na parcela escolhida, e o `receiptId` impede o app de lançar de novo. Confirmação de pedido pelo chat espelha a regra do `finalizeSale` do app (estoque clampado + parcela SALE).
 
 ### Configuração
 
-1. Rode a migration `008_telegram_agent.sql` no SQL Editor do Supabase.
+1. Rode as migrations `008_telegram_agent.sql` e `009_telegram_sale_drafts.sql` no SQL Editor do Supabase.
 2. Defina na Vercel: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_USERNAME`, `GEMINI_API_KEY` e `SUPABASE_SERVICE_ROLE_KEY`.
 3. Registre o webhook: `npx tsx scripts/telegram-set-webhook.ts https://calcflow25.vercel.app`
 4. No ERP, em **Usuários e Acessos**, use o card "Conectar Telegram" e mande `/vincular CODIGO` para o bot.
 
 `TELEGRAM_AGENT_WRITES` começa desligado: o bot sobe só como consulta. Coloque `true` quando quiser liberar os lançamentos.
+
+Permissões do vínculo (copiadas do perfil ERP): `orders` para criar/confirmar pedido; `fiscal` para emitir NF-e; `financial` para baixas/abatimentos. Se a permissão estiver `false`, a ação é bloqueada.
 
 ### Comandos sem IA
 

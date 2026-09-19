@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   Customer,
+  FinancialAccount,
   InventoryItem,
   OrderStatus,
   SaleOrder,
@@ -13,7 +14,9 @@ import {
   DEDUCTION_METHOD,
   appendReceiptToOrder,
   applyPaymentToTransaction,
+  assessStockForItems,
   buildBudgetOrder,
+  buildConfirmSaleEffects,
   buildPaymentReceipt,
   listOpenInstallments,
   reconcileReceiptsAgainstPayments
@@ -297,5 +300,87 @@ describe('telegram: conferência de recibos contra pagamentos', () => {
     ];
 
     assert.deepEqual(reconcileReceiptsAgainstPayments(orders, [transaction]), []);
+  });
+});
+
+describe('telegram: confirmação de pedido (estoque + financeiro)', () => {
+  const inventory: InventoryItem[] = [
+    {
+      id: 'moido',
+      name: 'Calcário Agrícola Moído (Granel)',
+      quantity: 100,
+      unitPrice: 180,
+      minStock: 50,
+      unit: 'Ton'
+    }
+  ];
+  const accounts: FinancialAccount[] = [
+    { id: 'acc-1', name: 'Caixa', type: 'caixa' as any, initialBalance: 0 }
+  ];
+  const customer = { id: 'cust-1', name: 'Fazenda', totalSpent: 1000 } as Customer;
+
+  it('detecta estoque insuficiente e crítico', () => {
+    const checks = assessStockForItems([{ productId: 'moido', quantity: 120 }], inventory);
+    assert.equal(checks[0].insufficient, true);
+    assert.equal(checks[0].criticalAfter, true);
+
+    const okish = assessStockForItems([{ productId: 'moido', quantity: 60 }], inventory);
+    assert.equal(okish[0].insufficient, false);
+    assert.equal(okish[0].criticalAfter, true);
+  });
+
+  it('confirma orçamento: baixa estoque, gera parcela e soma totalSpent', () => {
+    const budget = buildBudgetOrder({
+      companyId: 'comp-1',
+      customer,
+      items: [{ productId: 'moido', quantity: 10 }],
+      inventory,
+      existingOrders: []
+    });
+
+    const effects = buildConfirmSaleEffects({
+      order: budget,
+      inventory,
+      accounts,
+      customer,
+      today: '2026-09-19'
+    });
+
+    assert.equal(effects.order.status, OrderStatus.FINALIZED);
+    assert.equal(effects.inventoryPatches[0].quantity, 90);
+    assert.equal(effects.transactions.length, 1);
+    assert.equal(effects.transactions[0].type, TransactionType.SALE);
+    assert.equal(effects.transactions[0].amount, budget.total);
+    assert.equal(effects.customerPatch.totalSpent, 1000 + budget.total);
+  });
+
+  it('recusa confirmar pedido já finalizado', () => {
+    assert.throws(
+      () =>
+        buildConfirmSaleEffects({
+          order: baseOrder(),
+          inventory,
+          accounts,
+          customer
+        }),
+      /já está confirmado/
+    );
+  });
+
+  it('clampa estoque em zero quando a quantidade pedida passa do disponível', () => {
+    const budget = buildBudgetOrder({
+      companyId: 'comp-1',
+      customer,
+      items: [{ productId: 'moido', quantity: 150 }],
+      inventory,
+      existingOrders: []
+    });
+    const effects = buildConfirmSaleEffects({
+      order: budget,
+      inventory,
+      accounts,
+      customer
+    });
+    assert.equal(effects.inventoryPatches[0].quantity, 0);
   });
 });
