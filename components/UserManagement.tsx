@@ -8,6 +8,7 @@ import {
   DollarSign, Package, Truck, Trash2, Sliders
 } from 'lucide-react';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { TelegramAccessCard } from './TelegramAccessCard';
 
 export const getDefaultPermissions = (role: UserRole): UserPermissions => {
   switch (role) {
@@ -258,6 +259,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
           </div>
         </div>
       </div>
+
+      <TelegramAccessCard />
 
       <div className="grid grid-cols-1 md:flex gap-4">
         <div className="relative flex-1">
