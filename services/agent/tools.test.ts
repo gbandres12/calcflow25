@@ -206,6 +206,40 @@ describe('agente: orçamento', () => {
     assert.match((proposal as any).summary, /Gabriel Lima Andres/);
     assert.match((proposal as any).summary, /8\.000,00|8000/);
   });
+
+  it('grava pedido de venda, baixa estoque, abre parcela e devolve PDF', async () => {
+    const seed = seedData();
+    seed.customers[0].name = 'Gabriel Lima Andres';
+    const repo = fakeRepo(seed);
+    const ctx = makeContext(repo);
+
+    const proposal = await executeTool(
+      'criar_pedido_venda',
+      {
+        clienteNome: 'GABRIEL ANDRES',
+        itens: [{ produto: 'calcário dolomítico', quantidade: 50, precoUnitario: 160 }]
+      },
+      ctx
+    );
+    assert.equal(proposal.kind, 'confirm');
+    assert.equal((proposal as any).action, 'criar_pedido_venda');
+    assert.match((proposal as any).summary, /Confira o PEDIDO DE VENDA/);
+    assert.equal(repo.tables.sales_orders.length, 1, 'propor não pode gravar o pedido');
+    assert.equal(repo.tables.inventory[0].quantity, 500);
+
+    const committed = await commitAction((proposal as any).action, (proposal as any).payload, ctx);
+    const created = repo.tables.sales_orders.find((order: any) => order.origin === 'telegram');
+    assert.ok(created, 'o pedido precisa existir como venda confirmada');
+    assert.equal(created.total, 8000);
+    assert.equal(repo.tables.inventory[0].quantity, 450);
+    assert.equal(repo.tables.transactions.length, 2);
+    const saleTx = repo.tables.transactions.find((item: any) => item.orderId === created.id);
+    assert.equal(saleTx.status, TransactionStatus.PENDENTE);
+    assert.equal(saleTx.amount, 8000);
+    assert.ok(committed.document, 'precisa devolver o PDF');
+    assert.match(committed.document!.filename, /PED-2026-/);
+    assert.equal(Buffer.from(committed.document!.bytes.subarray(0, 4)).toString(), '%PDF');
+  });
 });
 
 describe('agente: comandos determinísticos, o fallback sem IA', () => {

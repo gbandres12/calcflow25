@@ -10,7 +10,7 @@ import {
   TransactionStatus,
   TransactionType
 } from '../../types.js';
-import { newId, nextQuoteReference } from '../ids.js';
+import { newId, nextOrderReference, nextQuoteReference } from '../ids.js';
 
 /**
  * Regras de escrita do agente do Telegram.
@@ -225,16 +225,10 @@ export interface BuildBudgetOrderInput {
   date?: string;
 }
 
-/**
- * Pedido em Orçamento: não baixa estoque nem gera financeiro, porque o
- * handleAddOrder do app só chama finalizeSale quando o status é FINALIZED.
- * A conversão em venda confirmada continua sendo feita dentro do app.
- */
-export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
-  if (!input.customer?.id) throw new Error('Informe o cliente do orçamento.');
+function buildOrderItems(input: { items: BudgetItemInput[]; inventory: InventoryItem[] }): SaleOrderItem[] {
   if (!input.items?.length) throw new Error('Informe ao menos um produto.');
 
-  const items: SaleOrderItem[] = input.items.map((line) => {
+  return input.items.map((line) => {
     const product = (input.inventory || []).find((item) => item.id === line.productId);
     if (!product) throw new Error(`Produto ${line.productId} não encontrado no estoque.`);
 
@@ -259,7 +253,15 @@ export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
       cst: product.cst
     };
   });
+}
 
+/**
+ * Pedido em Orçamento: não baixa estoque nem gera financeiro, porque o
+ * handleAddOrder do app só chama finalizeSale quando o status é FINALIZED.
+ */
+export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
+  if (!input.customer?.id) throw new Error('Informe o cliente do orçamento.');
+  const items = buildOrderItems(input);
   const subtotal = round2(items.reduce((sum, item) => sum + toNumber(item.total), 0));
   const date = input.date || new Date().toISOString().split('T')[0];
 
@@ -280,6 +282,104 @@ export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
     withdrawals: [],
     notes: input.notes,
     companyId: input.companyId
+  };
+}
+
+export interface BuildSaleOrderInput extends BuildBudgetOrderInput {
+  accountId?: string;
+  paymentMethod?: string;
+}
+
+/**
+ * Pedido de venda confirmado: mesma regra do finalizeSale do app.
+ * Quem grava estoque e financeiro é o commitAction, com as funções puras abaixo.
+ */
+export function buildSaleOrder(input: BuildSaleOrderInput): SaleOrder {
+  if (!input.customer?.id) throw new Error('Informe o cliente do pedido.');
+  const items = buildOrderItems(input);
+  const subtotal = round2(items.reduce((sum, item) => sum + toNumber(item.total), 0));
+  const date = input.date || new Date().toISOString().split('T')[0];
+  const accountId = input.accountId || 'acc-1';
+
+  return {
+    id: newId('ord'),
+    reference: nextOrderReference(input.existingOrders || []),
+    customerId: input.customer.id,
+    sellerName: input.sellerName || 'Agente Telegram',
+    date,
+    items,
+    subtotal,
+    discount: 0,
+    shipping: 0,
+    total: subtotal,
+    status: OrderStatus.FINALIZED,
+    paymentMethod: input.paymentMethod || 'A combinar',
+    paymentStatus: 'pendente',
+    paidAmount: 0,
+    remainingAmount: subtotal,
+    payments: [
+      {
+        id: newId('pay'),
+        amount: subtotal,
+        paidAmount: 0,
+        date,
+        status: TransactionStatus.PENDENTE,
+        accountId,
+        description: 'Saldo em aberto da venda',
+        paymentMethod: input.paymentMethod
+      }
+    ],
+    receipts: [],
+    withdrawals: [],
+    notes: input.notes,
+    companyId: input.companyId
+  };
+}
+
+export function applySaleStock(inventory: InventoryItem[], items: SaleOrderItem[]): InventoryItem[] {
+  const used = new Map<string, number>();
+  for (const item of items || []) {
+    used.set(item.productId, round2((used.get(item.productId) || 0) + toNumber(item.quantity)));
+  }
+
+  return (inventory || []).map((product) => {
+    const qty = used.get(product.id);
+    if (!qty) return product;
+    return { ...product, quantity: Math.max(0, round2(toNumber(product.quantity) - qty)) };
+  });
+}
+
+export function stockAfterSale(inventory: InventoryItem[], items: SaleOrderItem[], productId: string): number {
+  const product = (inventory || []).find((item) => item.id === productId);
+  const used = (items || [])
+    .filter((item) => item.productId === productId)
+    .reduce((sum, item) => sum + toNumber(item.quantity), 0);
+  return Math.max(0, round2(toNumber(product?.quantity) - used));
+}
+
+export function buildOpenSaleTransaction(order: SaleOrder, accountId: string, date: string): Transaction {
+  return {
+    id: newId('tx'),
+    accountId: accountId || 'acc-1',
+    costCenterId: 'cc4',
+    date,
+    dueDate: date,
+    type: TransactionType.SALE,
+    status: TransactionStatus.PENDENTE,
+    description: `Venda Faturada #${order.reference}`,
+    category: 'Venda Calcário Moído Granel',
+    amount: round2(toNumber(order.total)),
+    paidAmount: 0,
+    customerId: order.customerId,
+    orderId: order.id,
+    payments: []
+  };
+}
+
+export function applySaleToCustomer(customer: Customer, order: SaleOrder): Customer {
+  return {
+    ...customer,
+    totalSpent: round2(toNumber(customer.totalSpent) + toNumber(order.total))
   };
 }
 

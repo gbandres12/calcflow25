@@ -2,7 +2,6 @@ import {
   Customer,
   FinancialAccount,
   InventoryItem,
-  OrderStatus,
   SaleOrder,
   Transaction,
   TransactionStatus,
@@ -13,13 +12,19 @@ import {
   PaymentKind,
   appendReceiptToOrder,
   applyPaymentToTransaction,
+  applySaleStock,
+  applySaleToCustomer,
   buildBudgetOrder,
+  buildOpenSaleTransaction,
   buildPaymentReceipt,
+  buildSaleOrder,
   formatBRL,
   listOpenInstallments,
   newReceiptId,
-  reconcileReceiptsAgainstPayments
+  reconcileReceiptsAgainstPayments,
+  stockAfterSale
 } from '../domain/telegramWrites.js';
+import { buildSalesOrderPdf } from '../domain/salesOrderPdf.js';
 import { formatSuggestions, pickUnique, rankNamed } from './search.js';
 
 export interface ErpRepo {
@@ -144,6 +149,28 @@ function resolveProduct(inventory: InventoryItem[], term: string): InventoryItem
   if (exactId) return exactId;
   const ranked = rankNamed(inventory, query, (item) => `${item.name} ${item.id} ${item.code || ''}`);
   return pickUnique(ranked);
+}
+
+function parseOrderLines(inventory: InventoryItem[], lines: any[]) {
+  if (!Array.isArray(lines) || !lines.length) throw new Error('Informe ao menos um produto com quantidade.');
+
+  return lines.map((line: any) => {
+    const term = String(line.produto || line.productId || '');
+    const product = resolveProduct(inventory, term);
+    if (!product) {
+      const ranked = rankNamed(inventory, term, (item) => `${item.name} ${item.id} ${item.code || ''}`);
+      const names = formatSuggestions(ranked, (item) => item.name);
+      if (names.length) {
+        throw new Error(`Produto "${term}" não é único. Encontrei: ${names.join('; ')}. Qual deles?`);
+      }
+      throw new Error(`Produto "${term}" não existe no estoque.`);
+    }
+    return {
+      productId: product.id,
+      quantity: toNumber(line.quantidade),
+      unitPrice: line.precoUnitario != null ? toNumber(line.precoUnitario) : undefined
+    };
+  });
 }
 
 function findOrder(orders: SaleOrder[], reference: string): SaleOrder | null {
@@ -510,26 +537,7 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       const customer = resolvedCustomer.customer;
       if (!customer) throw missingCustomerError(String(args.clienteNome || ''), resolvedCustomer.suggestions);
 
-      const lines = Array.isArray(args.itens) ? args.itens : [];
-      if (!lines.length) throw new Error('Informe ao menos um produto com quantidade.');
-
-      const items = lines.map((line: any) => {
-        const term = String(line.produto || line.productId || '');
-        const product = resolveProduct(inventory, term);
-        if (!product) {
-          const ranked = rankNamed(inventory, term, (item) => `${item.name} ${item.id} ${item.code || ''}`);
-          const names = formatSuggestions(ranked, (item) => item.name);
-          if (names.length) {
-            throw new Error(`Produto "${term}" não é único. Encontrei: ${names.join('; ')}. Qual deles?`);
-          }
-          throw new Error(`Produto "${term}" não existe no estoque.`);
-        }
-        return {
-          productId: product.id,
-          quantity: toNumber(line.quantidade),
-          unitPrice: line.precoUnitario != null ? toNumber(line.precoUnitario) : undefined
-        };
-      });
+      const items = parseOrderLines(inventory, args.itens);
 
       // Monta só para validar e mostrar o total; o pedido real nasce na confirmação.
       const preview = buildBudgetOrder({
@@ -564,6 +572,73 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       };
     }
 
+    case 'criar_pedido_venda': {
+      requirePermission(ctx, 'orders');
+      requireWrites(ctx);
+
+      const [customers, inventory, orders, accounts] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'financial_accounts') as Promise<FinancialAccount[]>
+      ]);
+
+      const resolvedCustomer = resolveCustomer(customers, String(args.clienteNome || ''));
+      const customer = resolvedCustomer.customer;
+      if (!customer) throw missingCustomerError(String(args.clienteNome || ''), resolvedCustomer.suggestions);
+
+      const items = parseOrderLines(inventory, args.itens);
+      const accountId = accounts[0]?.id || 'acc-1';
+      const preview = buildSaleOrder({
+        companyId: ctx.companyId,
+        customer,
+        items,
+        inventory,
+        existingOrders: orders,
+        sellerName: ctx.user.name,
+        notes: args.observacao,
+        accountId,
+        paymentMethod: args.formaPagamento
+      });
+
+      const summary = [
+        'Confira o PEDIDO DE VENDA antes de gravar:',
+        '',
+        `Cliente: ${customer.name}`,
+        customer.document ? `Documento: ${customer.document}` : null,
+        customer.city ? `Cidade: ${customer.city}${customer.state ? `/${customer.state}` : ''}` : null,
+        ...preview.items.map((item) => {
+          const remaining = stockAfterSale(inventory, preview.items, item.productId);
+          return [
+            `Produto: ${item.productName}`,
+            `Quantidade: ${item.quantity} ${item.unit} x ${formatBRL(item.unitPrice)}`,
+            `Subtotal: ${formatBRL(item.total)}`,
+            `Estoque depois: ${remaining} ${item.unit}`
+          ].join('\n');
+        }),
+        `Total: ${formatBRL(preview.total)}`,
+        `Pagamento: ${preview.paymentMethod || 'A combinar'} (parcela em aberto no financeiro)`,
+        `Vendedor: ${preview.sellerName}`,
+        '',
+        'Se estiver certo, toque em Confirmar. Vou gravar o pedido e te mandar o PDF para encaminhar no WhatsApp.'
+      ]
+        .filter((line) => line !== null)
+        .join('\n');
+
+      return {
+        kind: 'confirm',
+        action: 'criar_pedido_venda',
+        payload: {
+          customerId: customer.id,
+          items,
+          notes: args.observacao || null,
+          paymentMethod: args.formaPagamento || null,
+          accountId
+        },
+        summary
+      };
+    }
+
     default:
       throw new Error(`Ferramenta desconhecida: ${name}`);
   }
@@ -574,7 +649,11 @@ export async function commitAction(
   action: string,
   payload: any,
   ctx: AgentContext
-): Promise<{ message: string; records: { table: string; id: string }[] }> {
+): Promise<{
+  message: string;
+  records: { table: string; id: string }[];
+  document?: { filename: string; bytes: Uint8Array; caption: string };
+}> {
   requireWrites(ctx);
 
   if (action === 'registrar_abatimento' || action === 'registrar_recebimento') {
@@ -673,6 +752,87 @@ export async function commitAction(
     };
   }
 
+  if (action === 'criar_pedido_venda') {
+    requirePermission(ctx, 'orders');
+
+    const [customers, inventory, orders, accounts, fiscalRows] = await Promise.all([
+      ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+      ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+      ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+      ctx.repo.getTable(ctx.companyId, 'financial_accounts') as Promise<FinancialAccount[]>,
+      ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+    ]);
+
+    const customer = customers.find((item) => item.id === payload.customerId);
+    if (!customer) throw new Error('Cliente não encontrado. Nada foi criado.');
+
+    const accountId = payload.accountId || accounts[0]?.id || 'acc-1';
+    const order = buildSaleOrder({
+      companyId: ctx.companyId,
+      customer,
+      items: payload.items,
+      inventory,
+      existingOrders: orders,
+      sellerName: ctx.user.name,
+      notes: payload.notes || undefined,
+      date: ctx.today,
+      accountId,
+      paymentMethod: payload.paymentMethod || undefined
+    });
+
+    const nextInventory = applySaleStock(inventory, order.items);
+    const transaction = buildOpenSaleTransaction(order, accountId, ctx.today);
+    const nextCustomer = applySaleToCustomer(customer, order);
+    const records: { table: string; id: string }[] = [];
+
+    await ctx.repo.upsert(ctx.companyId, 'sales_orders', { ...order, origin: 'telegram' });
+    records.push({ table: 'sales_orders', id: order.id });
+
+    await ctx.repo.upsert(ctx.companyId, 'transactions', { ...transaction, origin: 'telegram' });
+    records.push({ table: 'transactions', id: transaction.id });
+
+    await ctx.repo.upsert(ctx.companyId, 'customers', nextCustomer);
+    records.push({ table: 'customers', id: nextCustomer.id });
+
+    for (const product of nextInventory) {
+      const original = inventory.find((item) => item.id === product.id);
+      if (original && original.quantity !== product.quantity) {
+        await ctx.repo.upsert(ctx.companyId, 'inventory', product);
+        records.push({ table: 'inventory', id: product.id });
+      }
+    }
+
+    const fiscal = Array.isArray(fiscalRows) ? fiscalRows[0] : null;
+    let document: { filename: string; bytes: Uint8Array; caption: string } | undefined;
+    try {
+      const bytes = await buildSalesOrderPdf({
+        order,
+        customer: nextCustomer,
+        companyName: fiscal?.razaoSocial || fiscal?.nomeFantasia || 'CBA Mineração',
+        companyDocument: fiscal?.cnpjEmitente,
+        companyPhone: fiscal?.telefoneEmitente,
+        companyCity: fiscal?.cidadeEmitente && fiscal?.ufEmitente ? `${fiscal.cidadeEmitente}/${fiscal.ufEmitente}` : undefined
+      });
+      document = {
+        filename: `Pedido-${order.reference}.pdf`,
+        bytes,
+        caption: `Pedido ${order.reference} · ${customer.name} · ${formatBRL(order.total)}\nBaixe e encaminhe no WhatsApp.`
+      };
+    } catch (error: any) {
+      console.warn('[TELEGRAM] Falha ao gerar PDF do pedido:', error?.message);
+    }
+
+    return {
+      message: [
+        `Pedido ${order.reference} gravado para ${customer.name}.`,
+        `Total ${formatBRL(order.total)}. Estoque e financeiro atualizados.`,
+        document ? 'O PDF vai em seguida, para você baixar e mandar no WhatsApp.' : 'O pedido está no ERP; o PDF não saiu agora.'
+      ].join(' '),
+      records,
+      document
+    };
+  }
+
   throw new Error(`Ação desconhecida: ${action}`);
 }
 
@@ -687,7 +847,7 @@ export const READ_ONLY_TOOLS = [
   'conferir_lancamentos'
 ];
 
-export const WRITE_TOOLS = ['registrar_abatimento', 'registrar_recebimento', 'criar_orcamento'];
+export const WRITE_TOOLS = ['registrar_abatimento', 'registrar_recebimento', 'criar_orcamento', 'criar_pedido_venda'];
 
 /** Declarações no formato de function calling do Gemini. */
 export const toolDeclarations = [
@@ -812,6 +972,32 @@ export const toolDeclarations = [
             required: ['produto', 'quantidade']
           }
         },
+        observacao: { type: 'STRING' }
+      },
+      required: ['clienteNome', 'itens']
+    }
+  },
+  {
+    name: 'criar_pedido_venda',
+    description:
+      'Prepara um PEDIDO DE VENDA real (não orçamento). Confira cliente, produto, quantidade, preço e total. Não grava nada até o usuário tocar em Confirmar. Depois gera o PDF para WhatsApp.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        clienteNome: { type: 'STRING' },
+        itens: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              produto: { type: 'STRING' },
+              quantidade: { type: 'NUMBER' },
+              precoUnitario: { type: 'NUMBER' }
+            },
+            required: ['produto', 'quantidade']
+          }
+        },
+        formaPagamento: { type: 'STRING', description: 'PIX, boleto, a prazo...' },
         observacao: { type: 'STRING' }
       },
       required: ['clienteNome', 'itens']

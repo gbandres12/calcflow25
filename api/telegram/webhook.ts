@@ -4,6 +4,7 @@ import {
   downloadFileAsBase64,
   editMessageReplyMarkup,
   sendChatAction,
+  sendDocument,
   sendMessage
 } from '../_lib/telegramApi.js';
 import {
@@ -232,9 +233,14 @@ async function deliver(
     ? `${reply.text.trim()}\n\n${reply.pending.summary}`
     : reply.pending.summary;
 
-  await sendMessage(chatId, `${body}\n\nConfirma o lançamento?`, [
+  const confirmPrompt =
+    reply.pending.action === 'criar_pedido_venda'
+      ? 'Confere esses dados. Se estiver certo, toque em Confirmar. Aí eu gravo o pedido e mando o PDF.'
+      : 'Confirma o lançamento?';
+
+  await sendMessage(chatId, `${body}\n\n${confirmPrompt}`, [
     [
-      { text: 'Confirmar', callback_data: `ok:${pendingId}` },
+      { text: reply.pending.action === 'criar_pedido_venda' ? 'Confirmar pedido' : 'Confirmar', callback_data: `ok:${pendingId}` },
       { text: 'Cancelar', callback_data: `no:${pendingId}` }
     ]
   ]);
@@ -295,6 +301,18 @@ async function handleCallback(callback: any): Promise<void> {
       result: 'confirmado'
     });
     await sendMessage(chatId, result.message);
+    if (result.document) {
+      await sendChatAction(chatId, 'upload_document');
+      try {
+        await sendDocument(chatId, result.document, result.document.caption);
+      } catch (error: any) {
+        console.error('[TELEGRAM] Pedido gravado, PDF não saiu:', error);
+        await sendMessage(
+          chatId,
+          'O pedido foi gravado no ERP, mas o PDF não foi. Abra o pedido no sistema e imprima por lá.'
+        );
+      }
+    }
   } catch (error: any) {
     console.error('[TELEGRAM] Falha ao gravar:', error);
     await writeAudit({

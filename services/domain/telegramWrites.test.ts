@@ -13,8 +13,11 @@ import {
   DEDUCTION_METHOD,
   appendReceiptToOrder,
   applyPaymentToTransaction,
+  applySaleStock,
   buildBudgetOrder,
+  buildOpenSaleTransaction,
   buildPaymentReceipt,
+  buildSaleOrder,
   listOpenInstallments,
   reconcileReceiptsAgainstPayments
 } from './telegramWrites';
@@ -229,6 +232,32 @@ describe('telegram: orçamento', () => {
     assert.equal(order.total, 5400);
     assert.equal(order.items[0].unit, 'Ton');
     assert.deepEqual(order.payments, []);
+  });
+
+  it('pedido de venda usa PED, baixa estoque e abre parcela', () => {
+    const order = buildSaleOrder({
+      companyId: 'comp-1',
+      customer: { id: 'cust-1', name: 'Gabriel Lima Andres' } as Customer,
+      items: [{ productId: 'moido', quantity: 50, unitPrice: 160 }],
+      inventory,
+      existingOrders: [{ reference: 'PED-2026-0012' } as SaleOrder],
+      accountId: 'acc-1'
+    });
+
+    assert.equal(order.status, OrderStatus.FINALIZED);
+    assert.equal(order.reference, 'PED-2026-0013');
+    assert.equal(order.total, 8000);
+    assert.equal(order.payments[0].status, TransactionStatus.PENDENTE);
+    assert.equal(order.payments[0].amount, 8000);
+
+    const nextStock = applySaleStock(inventory, order.items);
+    assert.equal(nextStock[0].quantity, 450);
+
+    const tx = buildOpenSaleTransaction(order, 'acc-1', '2026-09-19');
+    assert.equal(tx.type, TransactionType.SALE);
+    assert.equal(tx.amount, 8000);
+    assert.equal(tx.paidAmount, 0);
+    assert.equal(tx.orderId, order.id);
   });
 
   it('recusa produto fora do estoque cadastrado', () => {

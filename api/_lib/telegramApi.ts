@@ -41,6 +41,32 @@ export async function sendMessage(
   });
 }
 
+export async function sendDocument(
+  chatId: string | number,
+  file: { bytes: Uint8Array; filename: string; mimeType?: string },
+  caption?: string
+): Promise<void> {
+  const token = botToken();
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  form.append(
+    'document',
+    new Blob([Buffer.from(file.bytes)], { type: file.mimeType || 'application/pdf' }),
+    file.filename
+  );
+  if (caption) form.append('caption', caption.slice(0, 1024));
+
+  const response = await fetch(`${API_BASE}/bot${token}/sendDocument`, {
+    method: 'POST',
+    body: form
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!json?.ok) {
+    console.warn('[TELEGRAM] sendDocument falhou:', json?.description || response.status);
+    throw new Error(json?.description || 'Não consegui enviar o PDF.');
+  }
+}
+
 export async function sendChatAction(chatId: string | number, action = 'typing'): Promise<void> {
   await callApi('sendChatAction', { chat_id: chatId, action });
 }
