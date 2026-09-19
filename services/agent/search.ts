@@ -72,8 +72,11 @@ export function rankNamed<T>(items: T[], query: string, nameOf: (item: T) => str
 export function pickUnique<T>(ranked: Ranked<T>[], minScore = 50): T | null {
   if (!ranked.length) return null;
   if (ranked.length === 1 && ranked[0].score >= 20) return ranked[0].item;
+  const lead = ranked[0].score - ranked[1].score;
+  // Nome quase idêntico só ganha se o segundo não estiver colado.
+  if (ranked[0].score >= 90 && lead >= 8) return ranked[0].item;
   if (ranked[0].score < minScore) return null;
-  if (ranked[0].score - ranked[1].score >= 15) return ranked[0].item;
+  if (lead >= 10) return ranked[0].item;
   return null;
 }
 

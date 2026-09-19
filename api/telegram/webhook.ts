@@ -10,6 +10,7 @@ import {
 import {
   TelegramLink,
   claimUpdate,
+  consumeLatestPending,
   consumePairingCode,
   consumePendingAction,
   getLink,
@@ -155,6 +156,14 @@ async function handleMessage(message: any): Promise<void> {
   await touchLink(chatId);
   const ctx = buildContext(link);
 
+  if (isAffirmative(text)) {
+    const pending = await consumeLatestPending(chatId);
+    if (pending) {
+      await fulfillPending(chatId, link, pending);
+      return;
+    }
+  }
+
   const agent = await loadAgentModules();
   if (agent.isCommand(text)) {
     const reply = await agent.runCommand(text, ctx);
@@ -201,11 +210,7 @@ async function handleMessage(message: any): Promise<void> {
     console.error('[TELEGRAM] Falha no agente:', error);
     await sendMessage(
       chatId,
-      [
-        'A IA não respondeu agora. Os comandos diretos continuam funcionando:',
-        '',
-        agent.HELP_TEXT
-      ].join('\n')
+      'Não fechei essa agora. Manda de novo o produto certinho (como está no estoque), quantidade e preço.'
     );
   }
 }
@@ -288,7 +293,22 @@ async function handleCallback(callback: any): Promise<void> {
   }
 
   await answerCallbackQuery(callback.id, 'Lançando...');
+  await fulfillPending(chatId, link, pending);
+}
 
+function isAffirmative(text: string): boolean {
+  const clean = String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .trim();
+  return /^(ok|sim|s|pode|fechou|isso|confirmo|confirmado|confirma|pode confirmar|pode mandar|manda|isso mesmo|pode gravar)$/.test(
+    clean
+  );
+}
+
+async function fulfillPending(chatId: string, link: TelegramLink, pending: { action: string; payload: any }): Promise<void> {
   try {
     const { commitAction } = await loadAgentModules();
     const result = await commitAction(pending.action, pending.payload, buildContext(link));

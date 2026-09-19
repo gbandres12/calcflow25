@@ -25,8 +25,8 @@ export interface AgentReply {
   pending?: { action: string; payload: any; summary: string };
 }
 
-const PRIMARY_MODEL = 'gemini-2.5-flash';
-const FALLBACK_MODEL = 'gemini-2.5-flash-lite';
+const PRIMARY_MODEL = 'gemini-3.5-flash';
+const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 const MAX_TOOL_ROUNDS = 6;
 
 const systemInstruction = (ctx: AgentContext) => `
@@ -41,7 +41,7 @@ Como se comportar:
 - Produto incompleto também: se "calcário dolomítico" não bater certo, chame consultar_estoque e ofereça as opções.
 - Pedido de venda / "fazer um pedido" = ferramenta criar_pedido_venda. NÃO use criar_orcamento a não ser que a pessoa peça orçamento explicitamente.
 - Antes de criar_pedido_venda, chame buscar_cliente e confira produto, quantidade e preço. Repita TODOS os números no texto: cliente, produto, quantidade, preço unitário e total.
-- Só chame criar_pedido_venda quando esses dados estiverem fechados. A ferramenta devolve um resumo; o usuário confirma no botão. Depois o PDF do pedido vai para o chat, para encaminhar no WhatsApp.
+- Só chame criar_pedido_venda quando cliente e produto estiverem fechados. NUNCA diga "toque em Confirmar" sem ter chamado a ferramenta: o botão só aparece depois dela. Se a pessoa responder "confirmado", "sim" ou o nome exato do produto, chame criar_pedido_venda de novo com esses dados.
 - criar_orcamento continua existindo só para orçamento, sem baixar estoque.
 - Antes de qualquer abatimento ou recebimento, use listar_recebiveis_em_aberto para pegar o parcelaId.
 - Se houver mais de uma parcela em aberto, PERGUNTE ao usuário em qual aplicar. Não escolha sozinho.
@@ -64,16 +64,19 @@ function getApiKey(): string {
   return key;
 }
 
-const isOverloaded = (error: any): boolean => {
+const isRetryableModelError = (error: any): boolean => {
   const status = Number(error?.status || error?.code || 0);
   const message = String(error?.message || '').toLowerCase();
   return (
+    status === 404 ||
     status === 429 ||
     status === 503 ||
     message.includes('overloaded') ||
     message.includes('rate limit') ||
     message.includes('quota') ||
-    message.includes('unavailable')
+    message.includes('unavailable') ||
+    message.includes('no longer available') ||
+    message.includes('not found')
   );
 };
 
@@ -87,8 +90,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function generateWithFallback(ai: GoogleGenAI, params: any): Promise<any> {
   const attempts: { model: string; waitMs: number }[] = [
     { model: PRIMARY_MODEL, waitMs: 0 },
-    { model: PRIMARY_MODEL, waitMs: 1200 },
-    { model: FALLBACK_MODEL, waitMs: 800 }
+    { model: PRIMARY_MODEL, waitMs: 800 },
+    { model: FALLBACK_MODEL, waitMs: 400 }
   ];
 
   let lastError: any;
@@ -98,7 +101,7 @@ async function generateWithFallback(ai: GoogleGenAI, params: any): Promise<any> 
       return await ai.models.generateContent({ ...params, model: attempt.model });
     } catch (error: any) {
       lastError = error;
-      if (!isOverloaded(error)) throw error;
+      if (!isRetryableModelError(error)) throw error;
       console.warn(`[AGENTE] ${attempt.model} indisponível, tentando de novo:`, error?.message);
     }
   }

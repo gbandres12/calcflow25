@@ -260,6 +260,23 @@ export async function consumePendingAction(id: string, chatId: string): Promise<
   };
 }
 
+/** Confirmação por texto ("sim", "confirmado") pega o rascunho mais recente do chat. */
+export async function consumeLatestPending(chatId: string): Promise<PendingAction | null> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('telegram_pending_actions')
+    .select('*')
+    .eq('chat_id', String(chatId))
+    .is('consumed_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return consumePendingAction(data.id, chatId);
+}
+
 export interface ChatTurn {
   role: 'user' | 'model';
   text: string;

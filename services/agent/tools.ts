@@ -147,6 +147,8 @@ function resolveProduct(inventory: InventoryItem[], term: string): InventoryItem
   if (!query) return null;
   const exactId = inventory.find((item) => normalize(item.id) === normalize(query));
   if (exactId) return exactId;
+  const exactName = inventory.find((item) => normalize(item.name) === normalize(query));
+  if (exactName) return exactName;
   const ranked = rankNamed(inventory, query, (item) => `${item.name} ${item.id} ${item.code || ''}`);
   return pickUnique(ranked);
 }

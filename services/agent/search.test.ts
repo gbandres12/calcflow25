@@ -50,4 +50,19 @@ describe('agente: casar nome digitado no Telegram com o cadastro', () => {
     assert.equal(pickUnique(ranked), null);
     assert.equal(ranked.length, 2);
   });
+
+  it('nome específico do agrícola dolomítico ganha entre vários calcários', () => {
+    const ranked = rankNamed(
+      [
+        { name: 'Calcário Dolomítico a Granel' },
+        { name: 'Calcário Agrícola Dolomítico (Granel)' },
+        { name: 'Calcário Premium' },
+        { name: 'Calcário Fino / Filler Ensacado' },
+        { name: 'Calcário Britado / Cascalho Industrial' }
+      ],
+      'Calcário Agrícola Dolomítico (granel)',
+      (item) => item.name
+    );
+    assert.equal(pickUnique(ranked)?.name, 'Calcário Agrícola Dolomítico (Granel)');
+  });
 });
