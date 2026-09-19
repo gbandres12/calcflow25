@@ -173,6 +173,39 @@ describe('agente: orçamento', () => {
     assert.equal(created.total, 3600);
     assert.deepEqual(created.payments, [], 'orçamento não nasce com financeiro');
   });
+
+  it('casa nome parcial e devolve sugestão em vez de mandar cadastrar', async () => {
+    const seed = seedData();
+    seed.customers[0].name = 'Gabriel Lima Andres';
+    const ctx = makeContext(fakeRepo(seed));
+
+    const found = await executeTool('buscar_cliente', { termo: 'GABRIEL ANDRES' }, ctx);
+    assert.equal((found as any).data.encontrado, true);
+    assert.equal((found as any).data.nome, 'Gabriel Lima Andres');
+
+    const missing = await executeTool('buscar_cliente', { termo: 'Cliente Inexistente XYZ' }, ctx);
+    assert.equal((missing as any).data.encontrado, false);
+    assert.deepEqual((missing as any).data.sugestoes, []);
+  });
+
+  it('orçamento aceita o mesmo nome pela metade', async () => {
+    const seed = seedData();
+    seed.customers[0].name = 'Gabriel Lima Andres';
+    const repo = fakeRepo(seed);
+    const ctx = makeContext(repo);
+
+    const proposal = await executeTool(
+      'criar_orcamento',
+      {
+        clienteNome: 'GABRIEL ANDRES',
+        itens: [{ produto: 'calcário dolomítico', quantidade: 50, precoUnitario: 160 }]
+      },
+      ctx
+    );
+    assert.equal(proposal.kind, 'confirm');
+    assert.match((proposal as any).summary, /Gabriel Lima Andres/);
+    assert.match((proposal as any).summary, /8\.000,00|8000/);
+  });
 });
 
 describe('agente: comandos determinísticos, o fallback sem IA', () => {

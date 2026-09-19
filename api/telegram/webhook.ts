@@ -12,6 +12,8 @@ import {
   consumePairingCode,
   consumePendingAction,
   getLink,
+  loadChatHistory,
+  saveChatTurn,
   savePendingAction,
   touchLink,
   writeAudit
@@ -156,6 +158,13 @@ async function handleMessage(message: any): Promise<void> {
   if (agent.isCommand(text)) {
     const reply = await agent.runCommand(text, ctx);
     if (reply) {
+      await saveChatTurn({
+        chatId,
+        companyId: link.companyId,
+        userId: link.userId,
+        userText: text,
+        assistantText: reply.text
+      });
       await deliver(chatId, link, reply);
       return;
     }
@@ -177,7 +186,15 @@ async function handleMessage(message: any): Promise<void> {
   }
 
   try {
-    const reply = await agent.runAgent({ text, attachments, ctx });
+    const history = await loadChatHistory(chatId);
+    const reply = await agent.runAgent({ text, attachments, history, ctx });
+    await saveChatTurn({
+      chatId,
+      companyId: link.companyId,
+      userId: link.userId,
+      userText: text || (attachments.length ? '(áudio ou foto)' : ''),
+      assistantText: reply.text
+    });
     await deliver(chatId, link, reply);
   } catch (error: any) {
     console.error('[TELEGRAM] Falha no agente:', error);

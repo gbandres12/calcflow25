@@ -20,6 +20,7 @@ import {
   newReceiptId,
   reconcileReceiptsAgainstPayments
 } from '../domain/telegramWrites.js';
+import { formatSuggestions, pickUnique, rankNamed } from './search.js';
 
 export interface ErpRepo {
   getTable(companyId: string, table: string): Promise<any[]>;
@@ -106,17 +107,43 @@ function requireWrites(ctx: AgentContext) {
   }
 }
 
-function findCustomer(customers: Customer[], term: string): Customer | null {
-  const query = normalize(term);
-  if (!query) return null;
-  const digits = query.replace(/\D/g, '');
+function resolveCustomer(
+  customers: Customer[],
+  term: string
+): { customer: Customer | null; suggestions: Customer[] } {
+  const query = String(term || '').trim();
+  if (!query) return { customer: null, suggestions: [] };
 
-  return (
-    customers.find((customer) => normalize(customer.name) === query) ||
-    (digits ? customers.find((customer) => String(customer.document || '').replace(/\D/g, '') === digits) : null) ||
-    customers.find((customer) => normalize(customer.name).includes(query)) ||
-    null
-  );
+  const digits = query.replace(/\D/g, '');
+  if (digits.length >= 11) {
+    const byDocument = customers.find((customer) => String(customer.document || '').replace(/\D/g, '') === digits);
+    if (byDocument) return { customer: byDocument, suggestions: [byDocument] };
+  }
+
+  const ranked = rankNamed(customers, query, (customer) => customer.name);
+  return {
+    customer: pickUnique(ranked),
+    suggestions: ranked.slice(0, 5).map((entry) => entry.item)
+  };
+}
+
+function missingCustomerError(term: string, suggestions: Customer[]): Error {
+  const names = suggestions.map((customer) => customer.name).filter(Boolean);
+  if (names.length) {
+    return new Error(
+      `Não achei um cliente único para "${term}". Encontrei: ${names.join('; ')}. Confirme o nome como está no cadastro.`
+    );
+  }
+  return new Error(`Não encontrei o cliente ${term}. Cadastre-o no ERP ou me passe o nome exatamente como está no cadastro.`);
+}
+
+function resolveProduct(inventory: InventoryItem[], term: string): InventoryItem | null {
+  const query = String(term || '').trim();
+  if (!query) return null;
+  const exactId = inventory.find((item) => normalize(item.id) === normalize(query));
+  if (exactId) return exactId;
+  const ranked = rankNamed(inventory, query, (item) => `${item.name} ${item.id} ${item.code || ''}`);
+  return pickUnique(ranked);
 }
 
 function findOrder(orders: SaleOrder[], reference: string): SaleOrder | null {
@@ -160,8 +187,9 @@ async function resolveInstallment(
   const order = args.pedidoRef ? findOrder(orders, args.pedidoRef) : null;
   if (args.pedidoRef && !order) throw new Error(`Não encontrei o pedido ${args.pedidoRef}.`);
 
-  const customer = args.clienteNome ? findCustomer(customers, args.clienteNome) : null;
-  if (args.clienteNome && !customer) throw new Error(`Não encontrei o cliente ${args.clienteNome}.`);
+  const resolvedCustomer = args.clienteNome ? resolveCustomer(customers, args.clienteNome) : { customer: null, suggestions: [] };
+  const customer = resolvedCustomer.customer;
+  if (args.clienteNome && !customer) throw missingCustomerError(args.clienteNome, resolvedCustomer.suggestions);
 
   const open = listOpenInstallments(transactions, {
     orderId: order?.id,
@@ -262,7 +290,19 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       ]);
 
       const order = args.pedidoRef ? findOrder(orders, args.pedidoRef) : null;
-      const customer = args.clienteNome ? findCustomer(customers, args.clienteNome) : null;
+      const resolvedCustomer = args.clienteNome ? resolveCustomer(customers, args.clienteNome) : { customer: null, suggestions: [] };
+      const customer = resolvedCustomer.customer;
+      if (args.clienteNome && !customer) {
+        return {
+          kind: 'data',
+          data: {
+            total: 0,
+            quantidade: 0,
+            parcelas: [],
+            sugestoes: resolvedCustomer.suggestions.map((item) => item.name)
+          }
+        };
+      }
       const open = listOpenInstallments(transactions, { orderId: order?.id, customerId: customer?.id });
 
       return {
@@ -309,8 +349,21 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
 
     case 'buscar_cliente': {
       const customers = (await ctx.repo.getTable(ctx.companyId, 'customers')) as Customer[];
-      const customer = findCustomer(customers, String(args.termo || ''));
-      if (!customer) return { kind: 'data', data: { encontrado: false } };
+      const resolved = resolveCustomer(customers, String(args.termo || ''));
+      const customer = resolved.customer;
+      if (!customer) {
+        return {
+          kind: 'data',
+          data: {
+            encontrado: false,
+            sugestoes: resolved.suggestions.map((item) => ({
+              nome: item.name,
+              documento: item.document,
+              cidade: item.city
+            }))
+          }
+        };
+      }
 
       const [orders, transactions] = await Promise.all([
         ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
@@ -339,10 +392,9 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
 
     case 'consultar_estoque': {
       const inventory = (await ctx.repo.getTable(ctx.companyId, 'inventory')) as InventoryItem[];
-      const term = normalize(String(args.termo || ''));
-      const items = term
-        ? inventory.filter((item) => normalize(item.name).includes(term) || normalize(item.id).includes(term))
-        : inventory;
+      const term = String(args.termo || '').trim();
+      const ranked = term ? rankNamed(inventory, term, (item) => `${item.name} ${item.id} ${item.code || ''}`) : [];
+      const items = term ? ranked.map((entry) => entry.item) : inventory;
 
       return {
         kind: 'data',
@@ -366,7 +418,19 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>
       ]);
 
-      const customer = args.clienteNome ? findCustomer(customers, args.clienteNome) : null;
+      const resolvedCustomer = args.clienteNome
+        ? resolveCustomer(customers, args.clienteNome)
+        : { customer: null, suggestions: [] as Customer[] };
+      if (args.clienteNome && !resolvedCustomer.customer) {
+        return {
+          kind: 'data',
+          data: {
+            pedidos: [],
+            sugestoes: resolvedCustomer.suggestions.map((item) => item.name)
+          }
+        };
+      }
+      const customer = resolvedCustomer.customer;
       const limit = Math.min(Number(args.limite) || 10, 25);
 
       const filtered = orders
@@ -442,19 +506,24 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>
       ]);
 
-      const customer = findCustomer(customers, String(args.clienteNome || ''));
-      if (!customer) throw new Error(`Não encontrei o cliente ${args.clienteNome}. Cadastre-o no ERP antes.`);
+      const resolvedCustomer = resolveCustomer(customers, String(args.clienteNome || ''));
+      const customer = resolvedCustomer.customer;
+      if (!customer) throw missingCustomerError(String(args.clienteNome || ''), resolvedCustomer.suggestions);
 
       const lines = Array.isArray(args.itens) ? args.itens : [];
       if (!lines.length) throw new Error('Informe ao menos um produto com quantidade.');
 
       const items = lines.map((line: any) => {
-        const term = normalize(String(line.produto || line.productId || ''));
-        const product =
-          inventory.find((item) => normalize(item.id) === term) ||
-          inventory.find((item) => normalize(item.name) === term) ||
-          inventory.find((item) => normalize(item.name).includes(term));
-        if (!product) throw new Error(`Produto "${line.produto}" não existe no estoque.`);
+        const term = String(line.produto || line.productId || '');
+        const product = resolveProduct(inventory, term);
+        if (!product) {
+          const ranked = rankNamed(inventory, term, (item) => `${item.name} ${item.id} ${item.code || ''}`);
+          const names = formatSuggestions(ranked, (item) => item.name);
+          if (names.length) {
+            throw new Error(`Produto "${term}" não é único. Encontrei: ${names.join('; ')}. Qual deles?`);
+          }
+          throw new Error(`Produto "${term}" não existe no estoque.`);
+        }
         return {
           productId: product.id,
           quantity: toNumber(line.quantidade),
@@ -649,7 +718,8 @@ export const toolDeclarations = [
   },
   {
     name: 'buscar_cliente',
-    description: 'Dados do cliente, saldo devedor e últimos pedidos.',
+    description:
+      'Localiza cliente por nome parcial ou documento. "GABRIEL ANDRES" encontra "Gabriel Lima Andres". Se não for único, devolve sugestões.',
     parameters: {
       type: 'OBJECT',
       properties: { termo: { type: 'STRING', description: 'Nome ou documento do cliente.' } },

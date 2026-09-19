@@ -260,6 +260,59 @@ export async function consumePendingAction(id: string, chatId: string): Promise<
   };
 }
 
+export interface ChatTurn {
+  role: 'user' | 'model';
+  text: string;
+}
+
+/** Últimas falas visíveis do chat, para o agente não tratar cada mensagem como conversa nova. */
+export async function loadChatHistory(chatId: string, limit = 6): Promise<ChatTurn[]> {
+  try {
+    const supabase = requireSupabase();
+    const { data, error } = await supabase
+      .from('telegram_audit')
+      .select('payload, result, created_at')
+      .eq('chat_id', String(chatId))
+      .eq('action', 'chat_turn')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error || !data?.length) return [];
+
+    const turns: ChatTurn[] = [];
+    for (const row of [...data].reverse()) {
+      const user = String(row.payload?.user || '').trim();
+      const assistant = String(row.result || '').trim();
+      if (user) turns.push({ role: 'user', text: user.slice(0, 800) });
+      if (assistant) turns.push({ role: 'model', text: assistant.slice(0, 800) });
+    }
+    return turns;
+  } catch (error: any) {
+    console.warn('[TELEGRAM] Falha ao ler histórico:', error?.message);
+    return [];
+  }
+}
+
+export async function saveChatTurn(input: {
+  chatId: string;
+  companyId: string;
+  userId?: string;
+  userText: string;
+  assistantText: string;
+}): Promise<void> {
+  const user = String(input.userText || '').trim();
+  const assistant = String(input.assistantText || '').trim();
+  if (!user && !assistant) return;
+  await writeAudit({
+    chatId: input.chatId,
+    companyId: input.companyId,
+    userId: input.userId,
+    action: 'chat_turn',
+    payload: { user: user.slice(0, 1000) },
+    result: assistant.slice(0, 1000)
+  });
+}
+
 export async function writeAudit(input: {
   chatId?: string;
   companyId: string;
