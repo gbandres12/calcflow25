@@ -428,6 +428,15 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                       <p className="text-base font-black">{formatBRL(row.nfe.total)}</p>
                       <div className="flex justify-end gap-2 flex-wrap">
                         <button
+                          onClick={() => {
+                            setSelectedDanfeLinkedNfeId(row.nfe.id);
+                            setSelectedDanfeOrder(row.order);
+                          }}
+                          className="px-4 py-2 bg-white border border-amber-200 text-amber-900 rounded-2xl text-xs font-black flex items-center gap-1.5"
+                        >
+                          <FileText size={13} /> Prévia PDF
+                        </button>
+                        <button
                           onClick={() => openEmitFromOrder(row.order, {
                             avulsa: row.nfe.tipo === 'avulsa',
                             transferencia: row.nfe.tipo === 'transferencia',
@@ -538,7 +547,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       )}
 
       {/* Modal de Visualização de DANFE */}
-      {selectedDanfeOrder && (
+      {selectedDanfeOrder && config && (
         <DanfeModal
           order={selectedDanfeOrder}
           linkedNfeId={selectedDanfeLinkedNfeId}

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
+import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
@@ -533,6 +534,29 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
   const isPreview = step === 'preview';
+  const previewOrder: SaleOrder = useMemo(() => ({
+    ...buildOrderWithEdits(
+      items.filter((it) => (Number(it.quantity) || 0) > 0),
+      order.nfeReferenciaExterna || order.reference
+    ),
+    nfeStatus: 'rascunho',
+    nfeNumero: String(currentConfig.proxNumeroNFe || order.nfeNumero || ''),
+    nfeSerie: String(currentConfig.serieNFe || order.nfeSerie || '1'),
+  }), [
+    items,
+    discountEfetivo,
+    freteValorEfetivo,
+    totalComFrete,
+    itemsSubtotal,
+    frete,
+    naturezaOperacao,
+    infCpl,
+    order,
+    isDevolucao,
+    isTransferencia,
+    currentConfig.proxNumeroNFe,
+    currentConfig.serieNFe,
+  ]);
   const nfeTitle = isPreview
     ? 'Prévia do rascunho da NF-e'
     : isDevolucao
@@ -652,10 +676,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {isPreview && (
             <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950 mb-3">
               <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Eye size={14} /> Prévia do rascunho — revise antes de transmitir
+                <Eye size={14} /> Prévia em PDF do rascunho — revise antes de transmitir
               </p>
               <p className="text-xs font-medium mt-1">
                 {items.length} item(ns) · Total {formatBRL(totalComFrete)} · {naturezaOperacao}
+              </p>
+              <p className="text-[11px] text-emerald-800 mt-1">
+                Este PDF é uma prévia interna (RASCUNHO / SEM VALOR FISCAL). O DANFE oficial só existe depois da autorização da SEFAZ.
               </p>
             </div>
           )}
@@ -712,6 +739,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
           </div>
 
+          {isPreview && (
+            <div className="mb-3">
+              <NfeDraftPdfPreview
+                order={previewOrder}
+                customer={activeCustomer}
+                config={currentConfig}
+                company={company}
+              />
+            </div>
+          )}
+
+          {!isPreview && (
           <div className="space-y-2.5">
             <FlowSection
               title="Emitente"
@@ -981,6 +1020,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               />
             </FlowSection>
           </div>
+          )}
 
           {errorMsg && (
             <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2">

@@ -197,6 +197,19 @@ export function overlayNfeFields(order: SaleOrder, nfe: SaleOrderLinkedNfe): Sal
   };
 }
 
+/** Cabeçalho + itens/totais da NF-e vinculada — usado na prévia PDF do rascunho. */
+export function overlayLinkedNfeDocument(order: SaleOrder, nfe: SaleOrderLinkedNfe): SaleOrder {
+  return {
+    ...overlayNfeFields(order, nfe),
+    items: nfe.items?.length ? nfe.items : order.items,
+    subtotal: Number.isFinite(Number(nfe.subtotal)) ? Number(nfe.subtotal) : order.subtotal,
+    discount: Number.isFinite(Number(nfe.discount)) ? Number(nfe.discount) : order.discount,
+    shipping: Number.isFinite(Number(nfe.shipping)) ? Number(nfe.shipping) : order.shipping,
+    total: Number.isFinite(Number(nfe.total)) ? Number(nfe.total) : order.total,
+    frete: nfe.frete ?? order.frete,
+  };
+}
+
 function extractHeaderNfe(order: SaleOrder): Partial<SaleOrderLinkedNfe> {
   return {
     nfeStatus: order.nfeStatus,

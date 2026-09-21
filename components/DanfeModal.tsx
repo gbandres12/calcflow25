@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SaleOrder, Customer, FiscalConfig, Company } from '../types';
 import { fiscalService } from '../services/fiscalService';
-import { commitLinkedNfeSync, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
+import { commitLinkedNfeSync, overlayLinkedNfeDocument, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
+import { buildNfeDraftPdf, draftPdfFileName } from '../services/domain/nfeDraftPdf';
 import {
   Printer, Download, AlertTriangle, Ban, RefreshCw, FileX, Copy
 } from 'lucide-react';
@@ -24,13 +25,14 @@ const STATUS_LABEL: Record<string, string> = {
   rejeitada: 'Rejeitada',
   processando: 'Processando na SEFAZ',
   nao_emitida: 'Não emitida',
+  rascunho: 'Rascunho',
 };
 
 export const DanfeModal: React.FC<DanfeModalProps> = ({
   order,
-  customer: _customer,
+  customer,
   config,
-  company: _company,
+  company,
   onClose,
   onOrderUpdated,
   linkedNfeId,
@@ -38,10 +40,10 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
 }) => {
   const invoiceView = (() => {
     const linked = findLinkedNfe(order, linkedNfeId);
-    return linked ? overlayNfeFields(order, linked) : order;
+    return linked ? overlayLinkedNfeDocument(order, linked) : order;
   })();
   const [current, setCurrent] = useState<SaleOrder>(invoiceView);
-  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState(invoiceView.nfeStatus !== 'rascunho');
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const blobRef = useRef<string | null>(null);
+  const isDraft = (current.nfeStatus || invoiceView.nfeStatus) === 'rascunho';
 
   const revokeBlob = () => {
     if (blobRef.current) {
@@ -59,6 +62,31 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   };
 
   const loadPdf = async (invoice: SaleOrder) => {
+    if (invoice.nfeStatus === 'rascunho') {
+      setLoadingPdf(true);
+      setPdfError(null);
+      try {
+        const bytes = await buildNfeDraftPdf({
+          order: invoice,
+          customer,
+          config,
+          company,
+        });
+        revokeBlob();
+        const blob = new Blob([Uint8Array.from(bytes)], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        blobRef.current = url;
+        setPdfUrl(url);
+      } catch (e: any) {
+        revokeBlob();
+        setPdfUrl(null);
+        setPdfError(e?.message || 'Não foi possível gerar a prévia em PDF.');
+      } finally {
+        setLoadingPdf(false);
+      }
+      return;
+    }
+
     const invoiceId = (invoice.nfeId || '').trim();
     const canPdf = invoice.nfeStatus === 'autorizada' || invoice.nfeStatus === 'cancelada';
     if (!invoiceId || !canPdf) {
@@ -115,6 +143,11 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   };
 
   useEffect(() => {
+    if (invoiceView.nfeStatus === 'rascunho') {
+      setLoadingStatus(false);
+      loadPdf(invoiceView);
+      return () => revokeBlob();
+    }
     refreshFromSefaz(true);
     return () => revokeBlob();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,7 +167,9 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     if (!pdfUrl) return;
     const link = document.createElement('a');
     link.href = pdfUrl;
-    link.download = `DANFE_${current.nfeNumero || current.nfeChave || current.reference}.pdf`;
+    link.download = isDraft
+      ? draftPdfFileName(current)
+      : `DANFE_${current.nfeNumero || current.nfeChave || current.reference}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -203,7 +238,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
 
   return (
     <FlowSheet
-      title="DANFE oficial"
+      title={isDraft ? 'Prévia do rascunho' : 'DANFE oficial'}
       wide
       zIndexClass="z-[200]"
       padded={false}
@@ -214,15 +249,18 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
             <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
               {STATUS_LABEL[status] || status}
             </span>
-            <span>NF-e Nº <b>{current.nfeNumero || '—'}</b> · Série <b>{current.nfeSerie || '—'}</b></span>
+            <span>NF-e Nº <b>{current.nfeNumero || config.proxNumeroNFe || '—'}</b> · Série <b>{current.nfeSerie || config.serieNFe || '—'}</b></span>
           </div>
           <p className="font-mono text-[10px] truncate">
-            {current.nfeChave || 'Chave ainda não retornada pela SEFAZ'}
+            {isDraft
+              ? 'Prévia interna · SEM VALOR FISCAL · sem chave de acesso'
+              : (current.nfeChave || 'Chave ainda não retornada pela SEFAZ')}
           </p>
         </div>
       }
       footer={
         <div className="flex flex-wrap gap-2">
+          {!isDraft && (
           <button
             type="button"
             onClick={() => refreshFromSefaz()}
@@ -231,6 +269,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           >
             <RefreshCw size={14} className={loadingStatus ? 'animate-spin' : ''} /> Atualizar
           </button>
+          )}
           <button
             type="button"
             onClick={handlePrintDanfe}
@@ -247,6 +286,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           >
             <Download size={15} /> PDF
           </button>
+          {!isDraft && (
           <button
             type="button"
             onClick={handleDownloadXml}
@@ -255,6 +295,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           >
             <Download size={15} /> XML
           </button>
+          )}
           {onDuplicate && (
             <button
               type="button"
@@ -315,15 +356,15 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
         {loadingStatus || loadingPdf ? (
           <div className="h-full min-h-[52dvh] flex flex-col items-center justify-center gap-3 text-slate-600 px-4">
             <RefreshCw className="animate-spin" size={26} />
-            <p className="text-sm font-bold text-center">{loadingStatus ? 'Consultando status na SEFAZ…' : 'Carregando DANFE…'}</p>
+            <p className="text-sm font-bold text-center">{loadingStatus ? 'Consultando status na SEFAZ…' : isDraft ? 'Gerando prévia em PDF…' : 'Carregando DANFE…'}</p>
           </div>
         ) : pdfUrl ? (
-          <iframe title="DANFE oficial" src={pdfUrl} className="w-full h-full min-h-[52dvh] sm:min-h-[62vh] border-0 bg-white" />
+          <iframe title={isDraft ? 'Prévia PDF do rascunho da NF-e' : 'DANFE oficial'} src={pdfUrl} className="w-full h-full min-h-[52dvh] sm:min-h-[62vh] border-0 bg-white" />
         ) : (
           <div className="h-full min-h-[52dvh] flex flex-col items-center justify-center gap-3 p-6 text-center">
             <FileX size={32} className="text-slate-400" />
-            <p className="text-sm font-black text-slate-800">DANFE oficial indisponível</p>
-            <p className="text-xs font-medium text-slate-600 max-w-md">{pdfError || 'O PDF da NotaAs ainda não está pronto.'}</p>
+            <p className="text-sm font-black text-slate-800">{isDraft ? 'Prévia indisponível' : 'DANFE oficial indisponível'}</p>
+            <p className="text-xs font-medium text-slate-600 max-w-md">{pdfError || (isDraft ? 'Não foi possível gerar o PDF do rascunho.' : 'O PDF da NotaAs ainda não está pronto.')}</p>
           </div>
         )}
       </div>

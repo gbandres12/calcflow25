@@ -13,6 +13,7 @@ import {
   CreditCard, Info, HelpCircle, Copy, Save, Eye, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
+import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -356,6 +357,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     nfeInfCpl: resolvedInfCpl
   }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
 
+  const previewOrder: SaleOrder = useMemo(() => ({
+    ...syntheticOrder,
+    nfeStatus: 'rascunho',
+    nfeNumero: String(config?.proxNumeroNFe || ''),
+    nfeSerie: String(config?.serieNFe || '1'),
+  }), [syntheticOrder, config?.proxNumeroNFe, config?.serieNFe]);
+
   const validation = fiscalService.validarDadosFiscais(syntheticOrder, activeCustomer);
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const isPreview = step === 'preview';
@@ -629,10 +637,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           {isPreview && (
             <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950">
               <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Eye size={14} /> Prévia do rascunho — revise antes de transmitir
+                <Eye size={14} /> Prévia em PDF do rascunho — revise antes de transmitir
               </p>
               <p className="text-xs font-medium mt-1">
                 Destinatário: <b>{activeCustomer.name}</b> · {items.length} item(ns) · Total {formatBRL(total)}
+              </p>
+              <p className="text-[11px] text-emerald-800 mt-1">
+                Este PDF é uma prévia interna (RASCUNHO / SEM VALOR FISCAL). O DANFE oficial só existe depois da autorização da SEFAZ.
               </p>
             </div>
           )}
@@ -664,6 +675,17 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
             </div>
           </div>
 
+          {isPreview && (
+            <NfeDraftPdfPreview
+              order={previewOrder}
+              customer={activeCustomer}
+              config={config}
+              company={company}
+            />
+          )}
+
+          {!isPreview && (
+          <>
           {/* Seção 1: Destinatário */}
           <div className="space-y-4 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
@@ -1019,6 +1041,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               <p className="text-2xl font-black text-emerald-400">{formatBRL(total)}</p>
             </div>
           </div>
+          </>
+          )}
 
           {errorMsg && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-bold flex items-center gap-2">
