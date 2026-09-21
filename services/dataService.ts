@@ -216,6 +216,10 @@ const persistPendingUpserts = async (
   const operational = stripSeedDocs(records);
   if (operational.length === 0) return;
 
+  try {
+    await supabase.auth.getSession();
+  } catch {}
+
   const { error } = await supabase
     .from('app_records')
     .upsert(createSupabaseRows(tableName, companyId, operational), {
@@ -236,6 +240,11 @@ const persistPendingDeletes = async (
 ) => {
   const supabase = getSupabase();
   if (!supabase || ids.length === 0) return;
+
+  try {
+    await supabase.auth.getSession();
+  } catch {}
+
   for (const id of ids) {
     const { error } = await supabase
       .from('app_records')
@@ -416,6 +425,12 @@ export const db = {
     const supabase = getSupabase();
     if (supabase) {
       try {
+        if (!demo) {
+          try {
+            await supabase.auth.getSession();
+          } catch {}
+        }
+
         const { data, error } = await supabase
           .from('app_records')
           .select('id, data, updated_at')
@@ -462,6 +477,12 @@ export const db = {
               );
             }
             return safeRecords;
+          }
+
+          if (!demo) {
+            console.warn(`[Supabase] Tabela '${tableName}' vazia na nuvem para a empresa '${compKey}'. Preservando estado local.`);
+            const localData = storage.get(storageKey) || [];
+            return stripSeedDocs(localData);
           }
 
           const initialData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);

@@ -6,11 +6,13 @@ import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplic
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
-  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit
+  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit, X
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
+import { DateFilterControl } from './ui/DateFilterControl';
+import { DatePreset, getDatePresetRange, isDateInRange } from '../utils/dateFilterUtils';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -56,6 +58,40 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [duplicateDraft, setDuplicateDraft] = useState<NfeDuplicateDraft | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [activeDatePreset, setActiveDatePreset] = useState<DatePreset>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH') => {
+    setActiveDatePreset(preset);
+    const range = getDatePresetRange(preset);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+  };
+
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    setActiveDatePreset('CUSTOM');
+    if (type === 'start') setStartDate(value);
+    if (type === 'end') setEndDate(value);
+  };
+
+  const handleResetDateFilter = () => {
+    applyDatePreset('ALL');
+  };
+
+  const handleResetAllFilters = () => {
+    setSearchQuery('');
+    setFilterStatus('all');
+    applyDatePreset('ALL');
+  };
+
+  const hasActiveFilters = 
+    Boolean(searchQuery.trim()) ||
+    filterStatus !== 'all' ||
+    activeDatePreset !== 'ALL' ||
+    Boolean(startDate) ||
+    Boolean(endDate);
+
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
 
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -173,7 +209,21 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     (o) => totalRemainingQuantity(o) > 0.0001
   );
 
-  const filteredEmittedOrders = emittedOrders.filter((row) => {
+  const emittedInDateRange = emittedOrders.filter((row) => {
+    const d = row.nfe.nfeEmissao || row.nfe.createdAt || row.order.date;
+    return isDateInRange(d, startDate, endDate);
+  });
+
+  const pendingInDateRange = pendingEmissionOrders.filter((o) => {
+    return isDateInRange(o.date, startDate, endDate);
+  });
+
+  const draftsInDateRange = draftRows.filter((r) => {
+    const d = r.nfe.createdAt || r.order.date;
+    return isDateInRange(d, startDate, endDate);
+  });
+
+  const filteredEmittedOrders = emittedInDateRange.filter((row) => {
     const o = row.overlay;
     const cust = safeCustomers.find((c) => c.id === o.customerId);
     const q = searchQuery.toLowerCase();
@@ -188,11 +238,35 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     return matchesSearch && row.nfe.nfeStatus === filterStatus;
   });
 
-  const totalNfeAutorizadas = nfeRows.filter((r) => r.nfe.nfeStatus === 'autorizada').length;
-  const totalValorFaturado = nfeRows
+  const filteredPendingEmissionOrders = pendingInDateRange.filter((o) => {
+    if (!searchQuery.trim()) return true;
+    const cust = safeCustomers.find((c) => c.id === o.customerId);
+    const q = searchQuery.toLowerCase();
+    return (
+      (o.reference || '').toLowerCase().includes(q) ||
+      (cust?.name || '').toLowerCase().includes(q) ||
+      (cust?.document || '').includes(searchQuery)
+    );
+  });
+
+  const filteredDraftRows = draftsInDateRange.filter((r) => {
+    if (!searchQuery.trim()) return true;
+    const o = r.overlay;
+    const cust = safeCustomers.find((c) => c.id === o.customerId);
+    const q = searchQuery.toLowerCase();
+    return (
+      (o.reference || '').toLowerCase().includes(q) ||
+      (r.nfe.reference || '').toLowerCase().includes(q) ||
+      (cust?.name || '').toLowerCase().includes(q) ||
+      (cust?.document || '').includes(searchQuery)
+    );
+  });
+
+  const totalNfeAutorizadas = emittedInDateRange.filter((r) => r.nfe.nfeStatus === 'autorizada').length;
+  const totalValorFaturado = emittedInDateRange
     .filter((r) => r.nfe.nfeStatus === 'autorizada')
     .reduce((acc, r) => acc + (r.nfe.total || 0), 0);
-  const totalValorPendente = pendingEmissionOrders.reduce((acc, o) => acc + (o.total || 0), 0);
+  const totalValorPendente = pendingInDateRange.reduce((acc, o) => acc + (o.total || 0), 0);
 
   if (!config) {
     return (
@@ -258,14 +332,37 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fila de Emissão</span>
-          <p className="text-2xl font-black text-amber-600">{pendingEmissionOrders.length} Vendas</p>
+          <p className="text-2xl font-black text-amber-600">{pendingInDateRange.length} Vendas</p>
           <p className="text-xs text-slate-400">{formatBRL(totalValorPendente)}</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1 cursor-pointer hover:border-amber-300 transition-colors" onClick={() => setActiveTab('rascunhos')}>
           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rascunhos</span>
-          <p className="text-2xl font-black text-amber-700">{draftRows.length} Notas</p>
+          <p className="text-2xl font-black text-amber-700">{draftsInDateRange.length} Notas</p>
           <p className="text-xs text-slate-400">Salvas para revisar e emitir</p>
         </div>
+      </div>
+
+      {/* Painel de Filtro de Período e Ações */}
+      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
+        <DateFilterControl
+          activePreset={activeDatePreset}
+          startDate={startDate}
+          endDate={endDate}
+          onSelectPreset={applyDatePreset}
+          onCustomDateChange={handleCustomDateChange}
+          onReset={handleResetDateFilter}
+          colorTheme="purple"
+        />
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleResetAllFilters}
+            className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+          >
+            <X size={13} /> Limpar Filtros
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 flex-wrap">
@@ -273,19 +370,19 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           onClick={() => setActiveTab('notas_emitidas')}
           className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'notas_emitidas' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border'}`}
         >
-          Notas Emitidas ({emittedOrders.length})
+          Notas Emitidas ({emittedInDateRange.length})
         </button>
         <button
           onClick={() => setActiveTab('fila_emissao')}
           className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'fila_emissao' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border'}`}
         >
-          Fila ({pendingEmissionOrders.length})
+          Fila ({pendingInDateRange.length})
         </button>
         <button
           onClick={() => setActiveTab('rascunhos')}
           className={`px-5 py-3 rounded-2xl font-black text-xs uppercase ${activeTab === 'rascunhos' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border'}`}
         >
-          Rascunhos ({draftRows.length})
+          Rascunhos ({draftsInDateRange.length})
         </button>
       </div>
 
@@ -299,8 +396,17 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               placeholder="Buscar por número, chave ou cliente..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={13} />
+              </button>
+            )}
             </div>
             <button
               type="button"
@@ -314,7 +420,22 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
             </button>
           </div>
           {filteredEmittedOrders.length === 0 ? (
-            <p className="text-sm font-bold text-slate-500 py-10 text-center">Nenhuma nota encontrada.</p>
+            <div className="text-center py-10 space-y-2">
+              <p className="text-sm font-bold text-slate-500">
+                {emittedOrders.length === 0
+                  ? 'Nenhuma nota fiscal emitida até o momento.'
+                  : 'Nenhuma nota encontrada para os filtros e período selecionados.'}
+              </p>
+              {emittedOrders.length > 0 && hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetAllFilters}
+                  className="text-xs font-bold text-purple-600 hover:text-purple-700 underline inline-block"
+                >
+                  Limpar filtros de data e busca
+                </button>
+              )}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -385,10 +506,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {activeTab === 'fila_emissao' && (
         <div className="bg-white rounded-[2.5rem] border border-slate-200/80 p-6 space-y-3">
-          {pendingEmissionOrders.length === 0 ? (
-            <p className="text-sm font-bold text-slate-500 py-10 text-center">Nenhuma venda pendente de NF-e.</p>
+          {filteredPendingEmissionOrders.length === 0 ? (
+            <div className="text-center py-10 space-y-2">
+              <p className="text-sm font-bold text-slate-500">
+                {pendingEmissionOrders.length === 0
+                  ? 'Nenhum pedido aguardando emissão.'
+                  : 'Nenhum pedido aguardando emissão no período selecionado.'}
+              </p>
+              {pendingEmissionOrders.length > 0 && hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetAllFilters}
+                  className="text-xs font-bold text-purple-600 hover:text-purple-700 underline inline-block"
+                >
+                  Limpar filtros de data e busca
+                </button>
+              )}
+            </div>
           ) : (
-            pendingEmissionOrders.map((order) => {
+            filteredPendingEmissionOrders.map((order) => {
               const customer = safeCustomers.find((c) => c.id === order.customerId);
               const validation = fiscalService.validarDadosFiscais(order, customer);
               return (
@@ -433,12 +569,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {activeTab === 'rascunhos' && (
         <div className="bg-white rounded-[2.5rem] border border-slate-200/80 p-6 space-y-3">
-          {draftRows.length === 0 ? (
-            <p className="text-sm font-bold text-slate-500 py-10 text-center">
-              Nenhum rascunho de NF-e. Ao emitir, use &quot;Salvar rascunho&quot; para guardar e revisar depois.
-            </p>
+          {filteredDraftRows.length === 0 ? (
+            <div className="text-center py-10 space-y-2">
+              <p className="text-sm font-bold text-slate-500">
+                {draftRows.length === 0
+                  ? 'Nenhum rascunho de NF-e. Ao emitir, use "Salvar rascunho" para guardar e revisar depois.'
+                  : 'Nenhum rascunho encontrado no período selecionado.'}
+              </p>
+              {draftRows.length > 0 && hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetAllFilters}
+                  className="text-xs font-bold text-amber-600 hover:text-amber-700 underline inline-block"
+                >
+                  Limpar filtros de data e busca
+                </button>
+              )}
+            </div>
           ) : (
-            draftRows.map((row) => {
+            filteredDraftRows.map((row) => {
               const customer = safeCustomers.find((c) => c.id === row.order.customerId);
               return (
                 <div key={`${row.order.id}-${row.nfe.id}`} className="p-5 bg-amber-50/60 border border-amber-200 rounded-3xl space-y-3">

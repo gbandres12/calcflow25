@@ -31,6 +31,8 @@ import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
 import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { FlowSheet } from './ui/FlowSheet';
+import { DateFilterControl } from './ui/DateFilterControl';
+import { DatePreset, getDatePresetRange, isDateInRange } from '../utils/dateFilterUtils';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes, isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
@@ -194,6 +196,40 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     isQuotesView ? 'BUDGET' : 'ALL'
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeDatePreset, setActiveDatePreset] = useState<DatePreset>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH') => {
+    setActiveDatePreset(preset);
+    const range = getDatePresetRange(preset);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+  };
+
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    setActiveDatePreset('CUSTOM');
+    if (type === 'start') setStartDate(value);
+    if (type === 'end') setEndDate(value);
+  };
+
+  const handleResetDateFilter = () => {
+    applyDatePreset('ALL');
+  };
+
+  const handleResetAllFilters = () => {
+    setActiveFilter(isQuotesView ? 'BUDGET' : 'ALL');
+    setSearchQuery('');
+    applyDatePreset('ALL');
+  };
+
+  const hasActiveFilters = 
+    (isQuotesView ? activeFilter !== 'BUDGET' : activeFilter !== 'ALL') ||
+    Boolean(searchQuery.trim()) ||
+    activeDatePreset !== 'ALL' ||
+    Boolean(startDate) ||
+    Boolean(endDate);
+
   const [isQuickCustomerModalOpen, setIsQuickCustomerModalOpen] = useState(false);
   
   // Modals de Ação Principal
@@ -674,14 +710,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const totalOutstandingGlobal = Math.max(0, totalOrdersAmount - totalPaidGlobal);
 
-  // Contadores para abas de status de pagamento
-  const { countPaid, countPartial, countPending, countBudget } = useMemo(() => {
+  // Contadores para abas de status de pagamento (respeitando o período selecionado se ativo)
+  const { countPaid, countPartial, countPending, countBudget, totalInDateRange } = useMemo(() => {
     let paid = 0;
     let partial = 0;
     let pending = 0;
     let budget = 0;
+    let inRange = 0;
 
     orders.forEach(o => {
+      if (!isDateInRange(o.date, startDate, endDate)) return;
+      inRange++;
       if (o.status === OrderStatus.BUDGET) {
         budget++;
       } else {
@@ -692,32 +731,45 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       }
     });
 
-    return { countPaid: paid, countPartial: partial, countPending: pending, countBudget: budget };
-  }, [orders]);
+    return { countPaid: paid, countPartial: partial, countPending: pending, countBudget: budget, totalInDateRange: inRange };
+  }, [orders, startDate, endDate]);
 
   // Filtragem dos Pedidos
-  const filteredOrders = orders.filter(o => {
-    const { paymentStatus } = calculateOrderPayment(o);
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (!isDateInRange(o.date, startDate, endDate)) return false;
 
-    if (activeFilter === 'FINALIZED' && o.status !== OrderStatus.FINALIZED) return false;
-    if (activeFilter === 'PAID' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PAGO')) return false;
-    if (activeFilter === 'PARTIAL' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PARCIAL')) return false;
-    if (activeFilter === 'PENDING' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PENDENTE')) return false;
-    if (activeFilter === 'BUDGET' && o.status !== OrderStatus.BUDGET) return false;
+      const { paymentStatus } = calculateOrderPayment(o);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const customer = customers.find(c => c.id === o.customerId);
-      const name = String(customer?.name || '').toLowerCase();
-      const doc = String(customer?.document || '').toLowerCase();
-      const ref = String(o.reference || '').toLowerCase();
-      const matchCust = name.includes(q) || doc.includes(q);
-      const matchRef = ref.includes(q);
-      const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
-      return matchCust || matchRef || matchPaymentStatus;
-    }
-    return true;
-  });
+      if (activeFilter === 'FINALIZED' && o.status !== OrderStatus.FINALIZED) return false;
+      if (activeFilter === 'PAID' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PAGO')) return false;
+      if (activeFilter === 'PARTIAL' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PARCIAL')) return false;
+      if (activeFilter === 'PENDING' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PENDENTE')) return false;
+      if (activeFilter === 'BUDGET' && o.status !== OrderStatus.BUDGET) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const customer = customers.find(c => c.id === o.customerId);
+        const name = String(customer?.name || '').toLowerCase();
+        const doc = String(customer?.document || '').toLowerCase();
+        const ref = String(o.reference || '').toLowerCase();
+        const matchCust = name.includes(q) || doc.includes(q);
+        const matchRef = ref.includes(q);
+        const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
+        return matchCust || matchRef || matchPaymentStatus;
+      }
+      return true;
+    });
+  }, [orders, startDate, endDate, activeFilter, searchQuery, customers]);
+
+  const filteredVolumeTon = useMemo(() => 
+    filteredOrders.reduce((acc, o) => acc + o.items.reduce((sum, it) => sum + (it.quantity || 0), 0), 0),
+    [filteredOrders]
+  );
+  const filteredTotalAmount = useMemo(() =>
+    filteredOrders.reduce((acc, o) => acc + (Number(o.total) || 0), 0),
+    [filteredOrders]
+  );
 
   return (
     <div className="space-y-6 pb-28 lg:pb-0">
@@ -795,83 +847,130 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         </div>
       </div>
 
-      {/* Barra de Filtros por Status de Pagamento e Busca */}
-      <div className="bg-white p-3 md:p-4 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex flex-col xl:flex-row gap-3 md:gap-4 items-center justify-between print:hidden">
+      {/* Barra de Filtros por Status de Pagamento, Data e Busca */}
+      <div className="bg-white p-3 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm space-y-3.5 print:hidden">
         
-        {/* Abas com badges de contagem */}
-        <div className="flex flex-nowrap overflow-x-auto p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1 custom-scrollbar">
-          <button
-            onClick={() => setActiveFilter('ALL')}
-            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-              activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Todos <span className="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 text-[10px]">{orders.length}</span>
-          </button>
+        {/* Linha Superior: Status e Busca */}
+        <div className="flex flex-col xl:flex-row gap-3 md:gap-4 items-center justify-between">
+          {/* Abas com badges de contagem */}
+          <div className="flex flex-nowrap overflow-x-auto p-1.5 bg-slate-100/90 rounded-2xl w-full xl:w-auto gap-1 custom-scrollbar">
+            <button
+              onClick={() => setActiveFilter('ALL')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Todos <span className="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 text-[10px]">{totalInDateRange}</span>
+            </button>
 
-          <button
-            onClick={() => setActiveFilter('PAID')}
-            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeFilter === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'
-            }`}
-          >
-            <CheckCircle2 size={13} className={activeFilter === 'PAID' ? 'text-white' : 'text-emerald-600'} />
-            Pagos / Quitados
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-              {countPaid}
-            </span>
-          </button>
+            <button
+              onClick={() => setActiveFilter('PAID')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeFilter === 'PAID' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-emerald-700'
+              }`}
+            >
+              <CheckCircle2 size={13} className={activeFilter === 'PAID' ? 'text-white' : 'text-emerald-600'} />
+              Pagos / Quitados
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                {countPaid}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveFilter('PARTIAL')}
-            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeFilter === 'PARTIAL' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'
-            }`}
-          >
-            <Clock size={13} className={activeFilter === 'PARTIAL' ? 'text-white' : 'text-amber-600'} />
-            Parciais
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PARTIAL' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
-              {countPartial}
-            </span>
-          </button>
+            <button
+              onClick={() => setActiveFilter('PARTIAL')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeFilter === 'PARTIAL' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-amber-700'
+              }`}
+            >
+              <Clock size={13} className={activeFilter === 'PARTIAL' ? 'text-white' : 'text-amber-600'} />
+              Parciais
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PARTIAL' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
+                {countPartial}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveFilter('PENDING')}
-            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeFilter === 'PENDING' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-rose-700'
-            }`}
-          >
-            <AlertTriangle size={13} className={activeFilter === 'PENDING' ? 'text-white' : 'text-rose-600'} />
-            Débitos Pendentes
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PENDING' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'}`}>
-              {countPending}
-            </span>
-          </button>
+            <button
+              onClick={() => setActiveFilter('PENDING')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeFilter === 'PENDING' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-rose-700'
+              }`}
+            >
+              <AlertTriangle size={13} className={activeFilter === 'PENDING' ? 'text-white' : 'text-rose-600'} />
+              Débitos Pendentes
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PENDING' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'}`}>
+                {countPending}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveFilter('BUDGET')}
-            className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeFilter === 'BUDGET' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FileText size={13} />
-            Orçamentos
-            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'BUDGET' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              {countBudget}
-            </span>
-          </button>
+            <button
+              onClick={() => setActiveFilter('BUDGET')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeFilter === 'BUDGET' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText size={13} />
+              Orçamentos
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'BUDGET' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                {countBudget}
+              </span>
+            </button>
+          </div>
+
+          {/* Input de Busca com Botão Limpar */}
+          <div className="relative flex-1 w-full xl:w-auto max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar por cliente, CPF/CNPJ, ref ou status..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-11 pr-10 py-3 min-h-11 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-sm focus:border-emerald-600"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                title="Limpar busca"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Input de Busca */}
-        <div className="relative flex-1 w-full xl:w-auto max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por cliente, CPF/CNPJ, ref ou status..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 min-h-11 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-sm focus:border-emerald-600"
+        {/* Linha Inferior: Filtro de Período e Resumo de Pedidos Filtrados */}
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <DateFilterControl
+            activePreset={activeDatePreset}
+            startDate={startDate}
+            endDate={endDate}
+            onSelectPreset={applyDatePreset}
+            onCustomDateChange={handleCustomDateChange}
+            onReset={handleResetDateFilter}
+            colorTheme="emerald"
           />
+
+          <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end text-xs">
+            <span className="text-slate-500 font-bold">
+              Exibindo <strong className="text-slate-800">{filteredOrders.length}</strong> de {orders.length} pedidos
+              {filteredOrders.length > 0 && (
+                <span className="hidden sm:inline text-slate-400 font-medium ml-1">
+                  ({filteredVolumeTon.toFixed(1)} TON · {formatBRL(filteredTotalAmount)})
+                </span>
+              )}
+            </span>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetAllFilters}
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+              >
+                <X size={13} /> Limpar Filtros
+              </button>
+            )}
+          </div>
         </div>
 
       </div>
@@ -880,21 +979,34 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       <div className="space-y-4 print:hidden">
         {filteredOrders.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-4 max-w-xl mx-auto my-8">
-            <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-              <ShoppingCart size={32} />
+            <div className="w-16 h-16 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              {orders.length === 0 ? <ShoppingCart size={32} /> : <AlertTriangle size={32} className="text-amber-500" />}
             </div>
             <div className="space-y-1">
-              <h3 className="text-base font-black text-slate-800">Nenhum pedido de venda registrado</h3>
+              <h3 className="text-base font-black text-slate-800">
+                {orders.length === 0 ? 'Nenhum pedido de venda registrado' : 'Nenhum pedido encontrado'}
+              </h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Comece emitindo um novo pedido de venda ou orçamento comercial para faturamento e expedição de calcário.
+                {orders.length === 0
+                  ? 'Comece emitindo um novo pedido de venda ou orçamento comercial para faturamento e expedição de calcário.'
+                  : 'Nenhum pedido corresponde aos filtros de data, status ou termo de busca selecionados.'}
               </p>
             </div>
-            <button
-              onClick={openNewOrder}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
-            >
-              <Plus size={16} /> {isQuotesView ? 'Emitir Primeiro Orçamento' : 'Emitir Primeiro Pedido'}
-            </button>
+            {orders.length === 0 ? (
+              <button
+                onClick={openNewOrder}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
+              >
+                <Plus size={16} /> {isQuotesView ? 'Emitir Primeiro Orçamento' : 'Emitir Primeiro Pedido'}
+              </button>
+            ) : (
+              <button
+                onClick={handleResetAllFilters}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black transition-all shadow-md"
+              >
+                <X size={15} /> Limpar Todos os Filtros
+              </button>
+            )}
           </div>
         ) : (
           filteredOrders.slice().reverse().map(order => {

@@ -239,6 +239,13 @@ const App: React.FC = () => {
       const epoch = dataEpochRef.current;
       setSyncing(true);
       try {
+        const supabase = getSupabase();
+        if (supabase) {
+          try {
+            await supabase.auth.getSession();
+          } catch {}
+        }
+
         const [
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
@@ -643,30 +650,29 @@ const App: React.FC = () => {
   // Pedidos e Vendas
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'reference'>) => {
     const incoming = orderData as SaleOrder;
-    const fiscalOnly = isFiscalOnlyOrder(incoming);
+    const isAvulsa = incoming.isAvulsa || incoming.reference?.startsWith('NFA-');
     const reference = incoming.reference
-      || (fiscalOnly ? nextAvulsaReference(orders) : nextOrderReference(orders));
+      || (isAvulsa ? nextAvulsaReference(orders) : nextOrderReference(orders));
     const newOrder: SaleOrder = {
       ...incoming,
       id: incoming.id || newId('ord'),
       reference,
       companyId: activeCompanyId,
-      sellerName: incoming.sellerName || currentUser?.name || 'Vendedor',
-      ...(fiscalOnly ? { isAvulsa: true, payments: [] } : {})
+      sellerName: incoming.sellerName || currentUser?.name || 'Vendedor'
     };
     setOrders(prev => {
       const exists = prev.some(o => o.id === newOrder.id);
       return exists ? prev.map(o => o.id === newOrder.id ? newOrder : o) : [...prev, newOrder];
     });
     persistCloud('sales_orders', newOrder);
-    if (!fiscalOnly && !newOrder.withoutFinance && newOrder.status === OrderStatus.FINALIZED) {
+    if (!newOrder.withoutFinance && newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    if (isFiscalOnlyOrder(order) || order.withoutFinance) return;
+    if (order.withoutFinance) return;
     (Array.isArray(order.items) ? order.items : []).forEach(item => {
       if (!item?.productId) return;
       processStockChange(String(item.productId), -(Number(item.quantity) || 0));
@@ -860,18 +866,27 @@ const App: React.FC = () => {
     if (!originalOrder) {
       setOrders(prev => [...prev, tagged]);
       voidCancelledNfeFinance(tagged);
-      return persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
+      const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
+      if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
+        const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
+        if (!hasTx) {
+          finalizeSale(tagged, tagged.payments || []);
+          (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+        }
+      }
+      return persist;
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
     if (
-      originalOrder.status === OrderStatus.BUDGET
-      && tagged.status === OrderStatus.FINALIZED
-      && !isFiscalOnlyOrder(tagged)
+      tagged.status === OrderStatus.FINALIZED
       && !tagged.withoutFinance
     ) {
-      finalizeSale(tagged, tagged.payments || []);
-      (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+      const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
+      if (!hasTx || originalOrder.status === OrderStatus.BUDGET) {
+        finalizeSale(tagged, tagged.payments || []);
+        (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+      }
     }
     voidCancelledNfeFinance(tagged);
     return persist;

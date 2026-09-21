@@ -50,6 +50,9 @@ interface AvulsaItem {
   informacoesComplementares?: string;
 }
 
+const getLocalDateStr = (d: Date = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   customers = [],
   inventory = [],
@@ -109,6 +112,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   // Vínculo com Pedido de Venda e Dados do Carregamento
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [generateFinance, setGenerateFinance] = useState<boolean>(false);
+  const [financeDueDate, setFinanceDueDate] = useState<string>(getLocalDateStr());
   const [placaCaminhao, setPlacaCaminhao] = useState<string>('');
   const [nomeMotorista, setNomeMotorista] = useState<string>('');
   const [ticketBalanca, setTicketBalanca] = useState<string>('');
@@ -334,7 +338,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     reference: avulsaReferenceRef.current,
     customerId: activeCustomer.id,
     sellerName: currentUser?.name || 'Emissão Fiscal Direta',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateStr(),
     isAvulsa: true,
     items: items.map(it => ({
       productId: it.productId,
@@ -365,15 +369,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     payments: generateFinance && !selectedOrderId ? [{
       id: `pay-${Date.now()}`,
       amount: total,
-      date: new Date().toISOString().split('T')[0],
-      status: TransactionStatus.PAGO,
+      date: financeDueDate || getLocalDateStr(),
+      status: TransactionStatus.PENDENTE,
       accountId: 'acc-1',
-      description: 'Pagamento NF-e Avulsa'
+      description: 'Contas a Receber - NF-e Avulsa'
     }] : [],
     receipts: [],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, selectedOrderId]);
+  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, financeDueDate, selectedOrderId]);
 
   const previewOrder: SaleOrder = useMemo(() => ({
     ...syntheticOrder,
@@ -560,7 +564,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               id: `RET-${Date.now()}`,
               orderId: linkedOrder.id,
               orderReference: linkedOrder.reference,
-              date: new Date().toISOString().split('T')[0],
+              date: getLocalDateStr(),
               driverName: nomeMotorista.trim() || 'Motorista',
               plateNumber: placaCaminhao.trim().toUpperCase() || 'PLACA',
               quantityWithdrawn: thisQty,
@@ -1168,26 +1172,39 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
               {/* Opção de Geração Financeira */}
               {!selectedOrderId && (
-                <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl flex items-center justify-between gap-3 mt-2">
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-black text-slate-900 block">
-                      Lançar entrada no Caixa / Contas a Receber?
-                    </span>
-                    <p className="text-[10px] text-slate-500">
-                      {generateFinance 
-                        ? 'Aviso: Gerará lançamento com status PAGO no caixa diário.' 
-                        : 'Recomendado: Desativado. A emissão não polui o caixa e não cria receita fictícia.'}
-                    </p>
+                <div className="space-y-2 mt-2">
+                  <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-black text-slate-900 block">
+                        Lançar no Contas a Receber (Pendente)?
+                      </span>
+                      <p className="text-[10px] text-slate-600">
+                        {generateFinance 
+                          ? 'Cria lançamento no Contas a Receber como PENDENTE. O valor só entrará no saldo do caixa/banco após a confirmação do recebimento no Financeiro.' 
+                          : 'Desativado: Não cria título no financeiro (ideal quando o faturamento for controlado à parte).'}
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input 
+                        type="checkbox" 
+                        checked={generateFinance} 
+                        onChange={e => setGenerateFinance(e.target.checked)} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input 
-                      type="checkbox" 
-                      checked={generateFinance} 
-                      onChange={e => setGenerateFinance(e.target.checked)} 
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
+                  {generateFinance && (
+                    <div className="p-3 bg-white border border-blue-100 rounded-xl flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                      <label className="text-xs font-bold text-slate-700">Data de Vencimento do Título:</label>
+                      <input
+                        type="date"
+                        value={financeDueDate}
+                        onChange={e => setFinanceDueDate(e.target.value)}
+                        className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

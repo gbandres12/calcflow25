@@ -37,5 +37,7 @@ testsprite_tests/frontend_test_plan.json
 testsprite_tests/backend_test_plan.json
 testsprite_tests/TestSprite_MCP_Test_Report.md
 testsprite_tests/TestSprite_MCP_Test_Report.html
-testsprite_tests/TC*.py
+# Local maintenance scripts
+scripts/verifyFinancials.ts
+scripts/reconcileNfeAvulsaFinance.ts
 .vercel
