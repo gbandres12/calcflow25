@@ -4,7 +4,7 @@ import { db, resolveCompanyKey } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
-import { INF_ADPROD_MAX } from './nfeComplementares';
+import { INF_ADPROD_MAX, buildNfeInfCpl } from './nfeComplementares';
 
 /**
  * URL Base Oficial da API NotaAs (NF-e modelo 55)
@@ -582,15 +582,15 @@ export const fiscalService = {
 
     const cstIcmsPadrao = (config.cstIcmsPadrao || '40').trim();
     const items: NotaAsItemPayload[] = (order.items || []).map((it, idx) => {
-      const cleanNcm = onlyDigits(it.ncm);
+      const cleanNcm = onlyDigits(String(it.ncm ?? ''));
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
-      const cleanCfop = onlyDigits(it.cfop);
+      const cleanCfop = onlyDigits(String(it.cfop ?? ''));
       const safeCfop = (isDevolucao || isTransferencia) 
-        ? onlyDigits(cfopPadrao) 
-        : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(cfopPadrao));
+        ? onlyDigits(String(cfopPadrao ?? '')) 
+        : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(String(cfopPadrao ?? '')));
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
-      const itemCst = (it.cst || it.csosn || cstIcmsPadrao).trim();
+      const itemCst = String(it.cst || it.csosn || cstIcmsPadrao).trim();
 
       const row: NotaAsItemPayload = {
         descricao: it.productName || 'Calcário Agrícola Corretivo',
@@ -627,12 +627,6 @@ export const fiscalService = {
     const tipoPagamento = semPagamento
       ? '90'
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
-
-    // Recolher informações complementares pré-definidas dos produtos incluídos
-    const productComplementares = (order.items || [])
-      .map(it => it.informacoesComplementares)
-      .filter((txt): txt is string => Boolean(txt && txt.trim()));
-    const uniqueProductComplementares = Array.from(new Set(productComplementares));
 
     // ---- Frete / transporte (modFrete SEFAZ: 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2 terceiros · 3/4 próprio) ----
     const freteModalidadeRaw = order.frete?.modalidade ?? (order.shipping && !semPagamento ? 0 : 9);
@@ -689,20 +683,21 @@ export const fiscalService = {
       if (veic?.placa?.trim()) freteInfParts.push(`Placa: ${veic.placa.trim().toUpperCase()}`);
     }
 
-    // Montar observações fiscais e complementares da nota
-    const infParts = [
-      order.nfeInfCpl, // Informação complementar editada/customizada da nota
-      config.observacoesFiscaisPadrao,
-      ...uniqueProductComplementares,
-      ...freteInfParts,
-      order.reference
-        ? (order.isAvulsa || (order.nfeReferenciaExterna || '').includes('#AV#')
-          ? `Pedido: ${order.reference} | NF-e avulsa (parcial, não é a nota do pedido completo)`
-          : `Pedido: ${order.reference}`)
-        : '',
-      isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
-      isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
-    ].filter(Boolean);
+    // infCpl: texto do modal ou cláusulas do produto. NFA avulsa não recebe Pedido/NFA/disclaimer.
+    const isAvulsaNote = Boolean(order.isAvulsa) || (order.nfeReferenciaExterna || '').includes('#AV#');
+    const infCpl = buildNfeInfCpl({
+      nfeInfCpl: order.nfeInfCpl,
+      observacoesFiscaisPadrao: config.observacoesFiscaisPadrao,
+      items: order.items,
+      extras: isAvulsaNote
+        ? []
+        : [
+            ...freteInfParts,
+            order.reference ? `Pedido: ${order.reference}` : '',
+            isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
+            isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
+          ]
+    });
 
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
@@ -719,7 +714,7 @@ export const fiscalService = {
       finalidade: isDevolucao ? 4 : 1,
       consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
-      infCpl: infParts.join(' | ').trim(),
+      infCpl: infCpl,
       referenciaExterna: order.nfeReferenciaExterna || order.reference || `ORDER-${order.id}`
     };
 

@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { NfeDuplicateDraft } from '../services/nfeDuplicate';
+import { assembleAutoInfCpl } from '../services/nfeComplementares';
 import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
@@ -58,6 +59,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
+  const avulsaReferenceRef = useRef(`NFA-${Math.floor(1000 + Math.random() * 9000)}`);
   const seedCustomer = (Array.isArray(customers) ? customers : []).find((c) => c && c.id === duplicateFrom?.customerId);
 
   // Destinatário
@@ -89,6 +91,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   // Frete / transporte (modFrete SEFAZ): 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2/3/4
   const [frete, setFrete] = useState<FreteInfo>(duplicateFrom?.frete || { modalidade: 9, valor: 0 });
   const [infCplCustom, setInfCplCustom] = useState<string>(duplicateFrom?.infCpl || '');
+  const [infCplTouched, setInfCplTouched] = useState(Boolean(duplicateFrom?.infCpl?.trim()));
 
   // Itens da Nota
   const [items, setItems] = useState<AvulsaItem[]>(() => {
@@ -291,25 +294,17 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const total = subtotal + shippingVal;
   const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
 
-  // Informações complementares reunidas
-  const productComplementares = useMemo(() => {
-    return items
-      .map(it => it.informacoesComplementares)
-      .filter((txt): txt is string => Boolean(txt && txt.trim()));
-  }, [items]);
+  const autoInfCpl = useMemo(
+    () => assembleAutoInfCpl(config?.observacoesFiscaisPadrao, items),
+    [config?.observacoesFiscaisPadrao, items]
+  );
 
-  const resolvedInfCpl = useMemo(() => {
-    if (infCplCustom.trim()) return infCplCustom;
-    return [
-      config?.observacoesFiscaisPadrao,
-      ...Array.from(new Set(productComplementares))
-    ].filter(Boolean).join(' | ');
-  }, [infCplCustom, config?.observacoesFiscaisPadrao, productComplementares]);
+  const resolvedInfCpl = infCplTouched ? infCplCustom : autoInfCpl;
 
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
     id: `order_avulsa_${Date.now()}`,
-    reference: `NFA-${Math.floor(1000 + Math.random() * 9000)}`,
+    reference: avulsaReferenceRef.current,
     customerId: activeCustomer.id,
     sellerName: currentUser?.name || 'Emissão Fiscal Direta',
     date: new Date().toISOString().split('T')[0],
@@ -794,13 +789,16 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </span>
 
               <p className="text-[10px] text-slate-500">
-                Texto impresso nos Dados Adicionais da NF-e. Inclui automaticamente cláusulas pré-definidas dos produtos selecionados:
+                Só este texto vai para os Dados Adicionais da NF-e. As cláusulas cadastradas no produto entram automaticamente; edite ou apague à vontade.
               </p>
 
               <textarea 
                 rows={5}
-                value={infCplCustom || resolvedInfCpl}
-                onChange={e => setInfCplCustom(e.target.value)}
+                value={resolvedInfCpl}
+                onChange={e => {
+                  setInfCplTouched(true);
+                  setInfCplCustom(e.target.value);
+                }}
                 className="w-full p-3 bg-white border border-slate-200 rounded-2xl text-xs outline-none focus:border-purple-500 resize-none font-medium text-slate-700"
                 placeholder="Observações legais, convênios, prazos..."
               />

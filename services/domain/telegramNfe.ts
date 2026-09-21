@@ -12,6 +12,7 @@ import {
   saleItemKey,
   upsertLinkedNfe
 } from '../saleNfe.js';
+import { buildNfeInfCpl } from '../nfeComplementares.js';
 
 const NOTAAS_API_BASE = 'https://platform.notaas.com.br/api/v1';
 const SANTAREM_IBGE = 1506807;
@@ -262,15 +263,13 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
   const freteModalidade = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9)) as 0 | 1 | 2 | 3 | 4 | 9;
   const freteValor = Math.max(0, Number(order.frete?.valor ?? order.shipping ?? 0) || 0);
   const hasFrete = freteValor > 0 && freteModalidade !== 9;
-  const infParts = [
-    order.nfeInfCpl,
-    config.observacoesFiscaisPadrao,
-    order.reference
-      ? order.isAvulsa || String(order.nfeReferenciaExterna || '').includes('#AV#')
-        ? `Pedido: ${order.reference} | NF-e avulsa (parcial, não é a nota do pedido completo)`
-        : `Pedido: ${order.reference}`
-      : ''
-  ].filter(Boolean);
+  const isAvulsaNote = Boolean(order.isAvulsa) || String(order.nfeReferenciaExterna || '').includes('#AV#');
+  const infCpl = buildNfeInfCpl({
+    nfeInfCpl: order.nfeInfCpl,
+    observacoesFiscaisPadrao: config.observacoesFiscaisPadrao,
+    items: order.items,
+    extras: isAvulsaNote ? [] : [order.reference ? `Pedido: ${order.reference}` : '']
+  });
 
   const payload: any = {
     modelo: 55,
@@ -283,7 +282,7 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
     finalidade: 1,
     consumidorFinal: isPF ? 1 : 0,
     presencaComprador: 1,
-    infCpl: infParts.join(' | ').trim(),
+    infCpl: infCpl,
     referenciaExterna: order.nfeReferenciaExterna || order.reference || `ORDER-${order.id}`
   };
   if (hasFrete) payload.valorFrete = freteValor;

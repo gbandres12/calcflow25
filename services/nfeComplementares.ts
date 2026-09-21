@@ -37,6 +37,24 @@ export function appendOperationalInfCpl(
   return joinInfCplParts([baseInfCpl, ...extras]);
 }
 
+/**
+ * infCpl enviado à SEFAZ.
+ * Se o modal já definiu o texto (inclusive vazio), usa só esse texto.
+ * Se nfeInfCpl for omitido, monta com observações da empresa + cláusulas cadastradas nos produtos.
+ */
+export function buildNfeInfCpl(input: {
+  nfeInfCpl?: string | null;
+  observacoesFiscaisPadrao?: string;
+  items?: Array<{ informacoesComplementares?: string } | null | undefined>;
+  extras?: Array<string | undefined | null>;
+}): string {
+  const hasCustom = typeof input.nfeInfCpl === 'string';
+  const base = hasCustom
+    ? (input.nfeInfCpl || '').trim()
+    : assembleAutoInfCpl(input.observacoesFiscaisPadrao, input.items);
+  return appendOperationalInfCpl(base, input.extras || []);
+}
+
 export type SaleOrderItem = SaleOrder['items'][number];
 
 export function hydrateSaleItemsFromCatalog(

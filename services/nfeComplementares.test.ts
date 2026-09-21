@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assembleAutoInfCpl, hydrateSaleItemsFromCatalog, joinInfCplParts } from './nfeComplementares';
+import { assembleAutoInfCpl, buildNfeInfCpl, hydrateSaleItemsFromCatalog, joinInfCplParts } from './nfeComplementares';
 import { fiscalService } from './fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
 import { Customer, SaleOrder } from '../types';
@@ -95,7 +95,11 @@ assert.equal(payload.transporte?.modalidadeFrete, 9);
 assert.equal(payload.transporte?.volumes, undefined);
 
 const withFreight = fiscalService.montarPayloadNotaAs(
-  { ...order, shipping: 800 } as SaleOrder,
+  {
+    ...order,
+    shipping: 800,
+    frete: { modalidade: 0, valor: 800, volumes: { quantidade: 1, especie: 'GRANEL', pesoLiquido: 7500 } }
+  } as SaleOrder,
   customer,
   DEFAULT_FISCAL_CONFIG
 );
@@ -117,5 +121,45 @@ const numericNcmOrder = {
 const numericPayload = fiscalService.montarPayloadNotaAs(numericNcmOrder, customer, DEFAULT_FISCAL_CONFIG);
 assert.equal(numericPayload.items[0].ncm, '25181000');
 assert.equal(numericPayload.items[0].cfop, '5101');
+
+assert.equal(
+  buildNfeInfCpl({
+    observacoesFiscaisPadrao: companyPadrao,
+    items: [{ informacoesComplementares: doloClause }]
+  }),
+  `${companyPadrao} | ${doloClause}`
+);
+
+const autoPayload = fiscalService.montarPayloadNotaAs(
+  { ...order, nfeInfCpl: undefined } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.ok(autoPayload.infCpl?.includes(doloClause), 'sem texto no modal, usa a cláusula cadastrada no produto');
+assert.ok(autoPayload.infCpl?.includes('Pedido: PV-100'));
+
+const avulsaPayload = fiscalService.montarPayloadNotaAs(
+  { ...order, isAvulsa: true, reference: 'NFA-4455', nfeInfCpl: undefined } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.ok(avulsaPayload.infCpl?.includes(doloClause), 'NFA deve levar a cláusula do produto');
+assert.ok(!avulsaPayload.infCpl?.includes('NFA-4455'), 'não imprimir o código NFA nos dados adicionais');
+assert.ok(!/avulsa/i.test(avulsaPayload.infCpl || ''), 'não imprimir o rótulo de nota avulsa nos dados adicionais');
+assert.ok(!avulsaPayload.infCpl?.includes('Pedido:'));
+
+const avulsaCleared = fiscalService.montarPayloadNotaAs(
+  { ...order, isAvulsa: true, reference: 'NFA-4455', nfeInfCpl: '' } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(avulsaCleared.infCpl, '');
+
+const avulsaEdited = fiscalService.montarPayloadNotaAs(
+  { ...order, isAvulsa: true, reference: 'NFA-4455', nfeInfCpl: doloClause } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(avulsaEdited.infCpl, doloClause);
 
 console.log('nfeComplementares tests ok');
