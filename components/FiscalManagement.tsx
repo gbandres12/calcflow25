@@ -59,6 +59,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [sefazStatus, setSefazStatus] = useState<{ status: string; mensagem: string; loading: boolean } | null>(null);
 
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   useEffect(() => {
     fiscalService.getConfig(companyId).then((c) => {
@@ -125,7 +126,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
   const syncFromSefaz = async (order: SaleOrder, linkedNfeId?: string) => {
     if (!config) return;
-    setSyncingId(order.id);
+    setSyncingId(linkedNfeId || order.id);
     try {
       const linked = findLinkedNfe(order, linkedNfeId);
       const view = linked ? overlayNfeFields(order, linked) : order;
@@ -133,6 +134,25 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       onUpdateOrder(commitLinkedNfeSync(order, updated, linkedNfeId));
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const syncAuthorizedFromSefaz = async () => {
+    if (!config || syncingAll) return;
+    const targets = emittedOrders.filter((row) => row.nfe.nfeStatus === 'autorizada' && row.nfe.nfeId);
+    if (targets.length === 0) return;
+    setSyncingAll(true);
+    try {
+      for (const row of targets) {
+        setSyncingId(row.nfe.id);
+        const linked = findLinkedNfe(row.order, row.nfe.id);
+        const view = linked ? overlayNfeFields(row.order, linked) : row.order;
+        const updated = await fiscalService.sincronizarPedidoComSefaz(view, config);
+        onUpdateOrder(commitLinkedNfeSync(row.order, updated, row.nfe.id));
+      }
+    } finally {
+      setSyncingId(null);
+      setSyncingAll(false);
     }
   };
 
@@ -271,7 +291,8 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       {activeTab === 'notas_emitidas' && (
         <div className="bg-white rounded-[2.5rem] border border-slate-200/80 p-6 space-y-4">
-          <div className="relative max-w-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative max-w-sm flex-1 min-w-[220px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input
               type="text"
@@ -280,6 +301,17 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
             />
+            </div>
+            <button
+              type="button"
+              onClick={syncAuthorizedFromSefaz}
+              disabled={syncingAll}
+              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-[10px] font-black disabled:opacity-50 inline-flex items-center gap-1"
+              title="Consulta a SEFAZ e atualiza notas que ainda aparecem como autorizadas"
+            >
+              <RefreshCw size={12} className={syncingAll ? 'animate-spin' : ''} />
+              {syncingAll ? 'Atualizando…' : 'Atualizar status'}
+            </button>
           </div>
           {filteredEmittedOrders.length === 0 ? (
             <p className="text-sm font-bold text-slate-500 py-10 text-center">Nenhuma nota encontrada.</p>
@@ -312,16 +344,16 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                           <p className="text-[10px] font-bold text-slate-400">{row.order.reference}</p>
                         </td>
                         <td className="px-4 py-3">{customer?.name || 'Cliente Geral'}</td>
-                        <td className="px-4 py-3">{nfeStatusLabel(row.nfe.nfeStatus)}</td>
+                        <td className={`px-4 py-3 ${row.nfe.nfeStatus === 'cancelada' ? 'font-black text-rose-700' : ''}`}>{nfeStatusLabel(row.nfe.nfeStatus)}</td>
                         <td className="px-4 py-3 text-right font-black">{formatBRL(row.nfe.total)}</td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => syncFromSefaz(row.order, row.nfe.id)}
-                              disabled={syncingId === row.order.id}
+                              disabled={syncingId === row.nfe.id || syncingAll}
                               className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black disabled:opacity-50"
                             >
-                              {syncingId === row.order.id ? '…' : 'SEFAZ'}
+                              {syncingId === row.nfe.id ? '…' : 'SEFAZ'}
                             </button>
                             <button
                               onClick={() => {

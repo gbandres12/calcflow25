@@ -207,18 +207,27 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     try {
       const res = await fiscalService.cancelarNFe(current.nfeId || current.nfeChave || '', cancelJustificativa, config);
       if (res.success) {
-        const updated = {
-          ...current,
-          nfeStatus: 'cancelada' as const,
-        };
-        const synced = await fiscalService.sincronizarPedidoComSefaz(updated, config);
+        const marked = { ...current, nfeStatus: 'cancelada' as const };
+        let synced = marked;
+        try {
+          synced = await fiscalService.sincronizarPedidoComSefaz(marked, {
+            ...config,
+            companyId: current.companyId || config.companyId,
+          });
+        } catch {}
+        if (synced.nfeStatus !== 'cancelada') {
+          synced = { ...synced, nfeStatus: 'cancelada' };
+        }
         const committed = commitLinkedNfeSync(order, synced, linkedNfeId);
         const linked = findLinkedNfe(committed, linkedNfeId);
         const view = linked ? overlayNfeFields(committed, linked) : committed;
-        setCurrent(view);
-        onOrderUpdated(committed);
+        setCurrent({ ...view, nfeStatus: 'cancelada' });
+        onOrderUpdated({
+          ...committed,
+          ...(committed.isAvulsa ? { nfeStatus: 'cancelada' as const } : {})
+        });
         setIsCanceling(false);
-        await loadPdf(synced);
+        await loadPdf({ ...view, nfeStatus: 'cancelada' });
       } else {
         setCancelError(res.error || 'Erro ao cancelar NF-e.');
       }

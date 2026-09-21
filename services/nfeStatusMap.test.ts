@@ -14,6 +14,39 @@ describe('status NotaAs → ERP', () => {
     assert.equal(mapRemoteNfeStatus('processing'), 'processando');
   });
 
+  it('cancelamento ganha de cStat 100 da autorização original', () => {
+    assert.equal(mapRemoteNfeStatus('cancelled', 200, 100), 'cancelada');
+    assert.equal(mapRemoteNfeStatus('issued', 200, 101), 'cancelada');
+    assert.equal(mapRemoteNfeStatus('issued', 200, 100, { event: 'invoice.canceled' }), 'cancelada');
+    assert.equal(mapRemoteNfeStatus('issued', 200, 100, { cancelledAt: '2026-09-21T12:00:00Z' }), 'cancelada');
+  });
+
+  it('não reabre nota já cancelada no ERP se a consulta ainda devolver issued', () => {
+    const order = {
+      id: 'ord-1',
+      reference: 'NFA-2026-0001',
+      customerId: 'c1',
+      sellerName: 'X',
+      date: '2026-09-18',
+      items: [],
+      subtotal: 60960,
+      discount: 0,
+      shipping: 0,
+      total: 60960,
+      status: OrderStatus.FINALIZED,
+      payments: [],
+      nfeStatus: 'cancelada',
+      nfeId: 'inv-7058',
+    } as SaleOrder;
+
+    const merged = mergeNfeConsulta(order, {
+      success: true,
+      status: 'autorizada',
+      nfe: { invoiceId: 'inv-7058', status: 'autorizada', nNf: 7058 },
+    });
+    assert.equal(merged.nfeStatus, 'cancelada');
+  });
+
   it('grava chave e protocolo da consulta no pedido', () => {
     const order = {
       id: 'ord-1',

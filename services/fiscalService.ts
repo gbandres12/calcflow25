@@ -5,6 +5,9 @@ import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
 import { INF_ADPROD_MAX, buildNfeInfCpl } from './nfeComplementares';
+import { CANCEL_CSTATS, mapRemoteNfeStatus, preferCancelledStatus } from './nfeRemoteStatus';
+
+export { mapRemoteNfeStatus } from './nfeRemoteStatus';
 
 /**
  * URL Base Oficial da API NotaAs (NF-e modelo 55)
@@ -198,29 +201,15 @@ export interface StatusSefazResult {
  * Módulo Auxiliar Fiscal para NotaAs (NF-e 4.0 / SEFAZ)
  */
 
-/** Só marca autorizada se a API fiscal disse issued/autorizada. queued → processando. Nunca mock. */
-export function mapRemoteNfeStatus(raw?: string, httpStatus?: number, cStat?: number): NfeStatus {
-  if (cStat === 100 || cStat === 150) return 'autorizada';
-  const s = (raw || '').toString().toLowerCase().trim();
-  if (['autorizada', 'issued', 'authorized', 'autorizado', 'autorizado_uso'].includes(s)) return 'autorizada';
-  if (['cancelada', 'cancelled', 'canceled', 'cancelado'].includes(s)) return 'cancelada';
-  if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao', 'inutilized', 'inutilizada'].includes(s)) return 'rejeitada';
-  if (
-    ['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending', 'queued'].includes(s)
-    || httpStatus === 202
-  ) return 'processando';
-  return 'rejeitada';
-}
-
 function resolveNfeStatus(
   rawStatus: string | undefined,
   httpStatus: number | undefined,
   _chaveAcesso?: string,
-  cStat?: number
+  cStat?: number,
+  extras?: { event?: string; cancelledAt?: string | null }
 ): NfeStatus {
-  if (cStat === 100 || cStat === 150) return 'autorizada';
-  if (httpStatus === 202) return 'processando';
-  return mapRemoteNfeStatus(rawStatus, httpStatus, cStat);
+  if (httpStatus === 202 && !extras?.cancelledAt) return 'processando';
+  return mapRemoteNfeStatus(rawStatus, httpStatus, cStat, extras);
 }
 
 function unwrapFiscalJson(raw: any): any {
@@ -240,7 +229,10 @@ function unwrapFiscalJson(raw: any): any {
 
 export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): SaleOrder {
   const n = result.nfe;
-  const nfeStatus = result.status && result.status !== 'nao_emitida' ? result.status : order.nfeStatus;
+  const nfeStatus = preferCancelledStatus(
+    order.nfeStatus,
+    result.status && result.status !== 'nao_emitida' ? result.status : undefined
+  ) || order.nfeStatus;
   const nfeErro =
     nfeStatus === 'rejeitada'
       ? (n?.xMotivo || n?.motivoStatus || result.error || order.nfeErro || 'Rejeitada pela SEFAZ')
@@ -286,8 +278,20 @@ export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): 
 function nfeFromStatusPayload(data: any, httpStatus?: number): ConsultarNFeResult {
   const raw = unwrapFiscalJson(data);
   const chaveAcesso = raw.chaveAcesso || raw.chave || raw.nfeKey || '';
-  const cStat = Number(raw.cStat ?? raw.codigoStatus);
-  const st = resolveNfeStatus(raw.status || raw.nfe?.status, httpStatus, chaveAcesso, Number.isFinite(cStat) ? cStat : undefined);
+  const cancelCStat = Number(raw.cancelamento?.cStat ?? raw.cStatCancelamento ?? raw.cStatEvento);
+  const emissionCStat = Number(raw.cStat ?? raw.codigoStatus);
+  const cStat = (Number.isFinite(cancelCStat) && CANCEL_CSTATS.has(cancelCStat))
+    ? cancelCStat
+    : emissionCStat;
+  const cancelledAt = raw.cancelledAt || raw.canceledAt || raw.dataCancelamento
+    || raw.cancelamento?.dhEvento || raw.cancelamento?.data || raw.dhCancelamento || null;
+  const st = resolveNfeStatus(
+    raw.status || raw.nfe?.status || raw.situacao,
+    httpStatus,
+    chaveAcesso,
+    Number.isFinite(cStat) ? cStat : undefined,
+    { event: raw.event || raw.evento || raw.tipoEvento, cancelledAt }
+  );
   const invoiceId = raw.invoiceId || raw.id;
   const nNf = raw.nNf ?? raw.numero;
   const nProt = raw.nProt || raw.protocolo || raw.protocol;

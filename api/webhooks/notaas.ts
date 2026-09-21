@@ -1,38 +1,8 @@
 import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin.js';
 import { applyNfeStatusPatch } from '../../services/saleNfe.js';
+import { mapRemoteNfeStatus } from '../../services/nfeRemoteStatus.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 20 };
-
-const STATUS_MAP: Record<string, string> = {
-  'invoice.authorized': 'autorizada',
-  'invoice.issued': 'autorizada',
-  autorizado: 'autorizada',
-  autorizada: 'autorizada',
-  issued: 'autorizada',
-  authorized: 'autorizada',
-  'nfe.issued': 'autorizada',
-  'nfce.issued': 'autorizada',
-  'invoice.rejected': 'rejeitada',
-  'invoice.error': 'rejeitada',
-  rejeitado: 'rejeitada',
-  rejeitada: 'rejeitada',
-  erro_autorizacao: 'rejeitada',
-  error: 'rejeitada',
-  'nfe.error': 'rejeitada',
-  'nfce.error': 'rejeitada',
-  'invoice.canceled': 'cancelada',
-  cancelado: 'cancelada',
-  cancelada: 'cancelada',
-  cancelled: 'cancelada',
-  canceled: 'cancelada',
-  'nfe.cancelled': 'cancelada',
-  'nfce.cancelled': 'cancelada',
-  'invoice.processing': 'processando',
-  processando_autorizacao: 'processando',
-  processando: 'processando',
-  queued: 'processando',
-  processing: 'processando',
-};
 
 function webhookAuthorized(req: any): boolean {
   const expected = (process.env.NOTAAS_WEBHOOK_SECRET || '').trim();
@@ -87,11 +57,16 @@ export default async function handler(req: any, res: any) {
       '';
 
     const rawStatus = data.status || event;
-    const nfeStatus =
-      STATUS_MAP[String(rawStatus).toLowerCase()] ||
-      STATUS_MAP[String(event).toLowerCase()] ||
-      STATUS_MAP[event] ||
-      'processando';
+    const cStat = Number(data.cStat ?? data.codigoStatus ?? data.cancelamento?.cStat);
+    const nfeStatus = mapRemoteNfeStatus(
+      rawStatus,
+      undefined,
+      Number.isFinite(cStat) ? cStat : undefined,
+      {
+        event: String(event),
+        cancelledAt: data.cancelledAt || data.dataCancelamento || data.cancelamento?.data || null
+      }
+    );
 
     const nfeChave = data.nfeKey || data.chave || data.chaveAcesso || data.chave_nfe || data.chave_acesso || '';
     const nfeProtocolo = data.nProt || data.protocol || data.protocolo || '';

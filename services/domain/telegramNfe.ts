@@ -13,6 +13,7 @@ import {
   upsertLinkedNfe
 } from '../saleNfe.js';
 import { buildNfeInfCpl } from '../nfeComplementares.js';
+import { mapRemoteNfeStatus } from '../nfeRemoteStatus.js';
 
 const NOTAAS_API_BASE = 'https://platform.notaas.com.br/api/v1';
 const SANTAREM_IBGE = 1506807;
@@ -90,23 +91,6 @@ export function setTelegramNfeTransport(next: Partial<TelegramNfeTransport> | nu
 
 export function onlyDigits(value?: string | number | null): string {
   return String(value ?? '').replace(/\D/g, '');
-}
-
-export function mapTelegramNfeStatus(raw?: string, httpStatus?: number, cStat?: number): NfeStatus {
-  if (cStat === 100 || cStat === 150) return 'autorizada';
-  const status = String(raw || '').toLowerCase().trim();
-  if (['autorizada', 'issued', 'authorized', 'autorizado', 'autorizado_uso'].includes(status)) return 'autorizada';
-  if (['cancelada', 'cancelled', 'canceled', 'cancelado'].includes(status)) return 'cancelada';
-  if (['rejeitada', 'rejected', 'erro', 'error', 'erro_autorizacao', 'inutilized', 'inutilizada'].includes(status)) {
-    return 'rejeitada';
-  }
-  if (
-    ['processando', 'processando_autorizacao', 'processing', 'pendente', 'pending', 'queued'].includes(status) ||
-    httpStatus === 202
-  ) {
-    return 'processando';
-  }
-  return 'rejeitada';
 }
 
 export function readFiscalConfig(rows: any[]): FiscalConfig | null {
@@ -299,7 +283,10 @@ function parseEmitBody(data: any, httpStatus: number, fallbackNumero: string, se
   const body = unwrap(data);
   const chave = body.chaveAcesso || body.chave || body.nfeKey || body.chave_acesso || body.chaveNFe || '';
   const cStat = Number(body.cStat || body.cstat);
-  const nfeStatus = mapTelegramNfeStatus(body.status, httpStatus, Number.isFinite(cStat) ? cStat : undefined);
+  const nfeStatus = mapRemoteNfeStatus(body.status, httpStatus, Number.isFinite(cStat) ? cStat : undefined, {
+    event: body.event || body.evento,
+    cancelledAt: body.cancelledAt || body.dataCancelamento || null
+  });
   const error =
     body.xMotivo ||
     body.message ||

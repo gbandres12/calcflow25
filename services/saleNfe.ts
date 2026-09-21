@@ -258,7 +258,7 @@ export function upsertLinkedNfe(order: SaleOrder, linked: SaleOrderLinkedNfe): S
   else nfes.push(merged);
 
   const next: SaleOrder = { ...order, nfes };
-  if (linked.tipo !== 'avulsa') {
+  if (linked.tipo !== 'avulsa' || order.isAvulsa) {
     return {
       ...next,
       nfeStatus: linked.nfeStatus,
@@ -421,6 +421,21 @@ export function buildLinkedNfe(params: {
 }
 
 export function hasAuthorizedFiscalDocument(order: SaleOrder): boolean {
-  if (order.nfeStatus === 'autorizada') return true;
   return listOrderNfes(order).some((n) => n.nfeStatus === 'autorizada');
+}
+
+export function hasCancelledNfe(order: SaleOrder): boolean {
+  if (order.nfeStatus === 'cancelada') return true;
+  return listOrderNfes(order).some((n) => n.nfeStatus === 'cancelada');
+}
+
+/** Totais de NF-e cancelada (centavos) para estornar lançamento fantasma no financeiro. */
+export function cancelledNfeAmountKeys(order: Pick<SaleOrder, 'nfes' | 'nfeStatus' | 'total'>): number[] {
+  const keys = listOrderNfes(order as SaleOrder)
+    .filter((n) => n.nfeStatus === 'cancelada')
+    .map((n) => Math.round((Number(n.total) || 0) * 100));
+  if (order.nfeStatus === 'cancelada') {
+    keys.push(Math.round((Number(order.total) || 0) * 100));
+  }
+  return keys.filter((k) => k > 0);
 }

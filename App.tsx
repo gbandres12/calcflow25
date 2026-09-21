@@ -58,7 +58,7 @@ import { financeService, userService, inventoryService, orderService, db, isDemo
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
-import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder } from './services/saleNfe';
+import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 
 const App: React.FC = () => {
@@ -835,11 +835,31 @@ const App: React.FC = () => {
     persistDelete('sales_orders', orderId);
   };
 
+  const voidCancelledNfeFinance = (order: SaleOrder) => {
+    if (!hasCancelledNfe(order)) return;
+    const fiscalOnly = isFiscalOnlyOrder(order);
+    const amountKeys = new Set(cancelledNfeAmountKeys(order));
+    setTransactions(prev => {
+      const next = prev.filter(transaction => {
+        if (transaction.type !== TransactionType.SALE) return true;
+        if (transaction.receiptId) return true;
+        if (transaction.orderId !== order.id) return true;
+        const amountKey = Math.round((Number(transaction.amount) || 0) * 100);
+        const drop = fiscalOnly || amountKeys.has(amountKey);
+        if (!drop) return true;
+        persistDelete('transactions', transaction.id);
+        return false;
+      });
+      return next;
+    });
+  };
+
   const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean }) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
     if (!originalOrder) {
       setOrders(prev => [...prev, tagged]);
+      voidCancelledNfeFinance(tagged);
       return persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
@@ -852,6 +872,7 @@ const App: React.FC = () => {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }
+    voidCancelledNfeFinance(tagged);
     return persist;
   };
 
