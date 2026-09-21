@@ -650,11 +650,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   // Salvar Retirada de Carga / Romaneio
   const handleSaveWithdrawal = (withdrawal: OrderWithdrawal) => {
     if (!orderForWithdrawal) return;
-    const updatedWithdrawals = [...(orderForWithdrawal.withdrawals || []), withdrawal];
+    const existing = orderForWithdrawal.withdrawals || [];
+    const exists = existing.some(w => w.id === withdrawal.id);
+    const updatedWithdrawals = exists
+      ? existing.map(w => w.id === withdrawal.id ? withdrawal : w)
+      : [...existing, withdrawal];
     const updatedOrder = {
       ...orderForWithdrawal,
       withdrawals: updatedWithdrawals
     };
+    setOrderForWithdrawal(updatedOrder);
     onUpdateOrder(updatedOrder);
   };
 
@@ -2286,10 +2291,31 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md">
                             Ticket {w.weighTicketNumber}
                           </span>
+                          {w.nfeNumero ? (
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">
+                              NF-e {w.nfeNumero}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md">
+                              Sem NF-e
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-500 font-medium pt-0.5">
-                          Motorista: {w.driverName} • {w.date}
-                        </p>
+                        <div className="flex items-center gap-3 pt-0.5">
+                          <p className="text-xs text-slate-500 font-medium">
+                            Motorista: {w.driverName} • {w.date}
+                          </p>
+                          {w.nfeDanfeUrl && (
+                            <a
+                              href={w.nfeDanfeUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-0.5"
+                            >
+                              <FileText size={11} /> Abrir DANFE
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <div className="text-right">
                         <span className="font-black text-blue-700 text-base">{w.quantityWithdrawn} TON</span>
@@ -2334,6 +2360,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           order={orderForWithdrawal}
           customer={customers.find(c => c.id === orderForWithdrawal.customerId)}
           company={company}
+          fiscalConfig={fiscalConfig}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setOrderForWithdrawal(null)}
         />

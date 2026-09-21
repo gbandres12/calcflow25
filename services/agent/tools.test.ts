@@ -25,10 +25,10 @@ function fakeRepo(seed: Record<string, any[]>) {
 
 const seedData = () => ({
   financial_accounts: [{ id: 'acc-1', name: 'Caixa Geral', type: 'caixa', initialBalance: 1000 }],
-  customers: [{ id: 'cust-1', name: 'Fazenda Boa Vista', document: '12345678000190' }],
+  customers: [{ id: 'cust-1', name: 'Fazenda Boa Vista', document: '12345678000190' }] as any[],
   inventory: [
     { id: 'moido', name: 'Calcário Agrícola Moído (Granel)', quantity: 500, unitPrice: 180, minStock: 200, unit: 'Ton' }
-  ],
+  ] as any[],
   sales_orders: [
     {
       id: 'ord-1',

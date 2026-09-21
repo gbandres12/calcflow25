@@ -207,8 +207,8 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     try {
       const res = await fiscalService.cancelarNFe(current.nfeId || current.nfeChave || '', cancelJustificativa, config);
       if (res.success) {
-        const marked = { ...current, nfeStatus: 'cancelada' as const };
-        let synced = marked;
+        const marked: SaleOrder = { ...current, nfeStatus: 'cancelada' };
+        let synced: SaleOrder = marked;
         try {
           synced = await fiscalService.sincronizarPedidoComSefaz(marked, {
             ...config,

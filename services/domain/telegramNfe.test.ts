@@ -71,7 +71,7 @@ const config = {
 
 describe('telegram NF-e: validação e payload', () => {
   it('bloqueia destinatário sem CPF/CNPJ', () => {
-    const validation = validateFiscalForEmit(order, { ...customer, document: '123' });
+    const validation = validateFiscalForEmit(order, { ...customer, document: '123' } as any);
     assert.equal(validation.valid, false);
     assert.match(validation.errors.join(' '), /CPF ou CNPJ/);
   });

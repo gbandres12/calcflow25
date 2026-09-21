@@ -52,9 +52,16 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('fixed');
   const [discountValueStr, setDiscountValueStr] = useState('0');
   
+  const getLocalDateStr = (d: Date = new Date()): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [paidAmountStr, setPaidAmountStr] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateStr());
+  const [dueDate, setDueDate] = useState(getLocalDateStr());
   const [paymentDate, setPaymentDate] = useState('');
   
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
@@ -85,21 +92,21 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
       setDiscountValueStr((editingTransaction.discountValue || editingTransaction.discount || 0).toString());
       setPaidAmountStr((editingTransaction.paidAmount || 0).toString());
       
-      setDate(editingTransaction.date || new Date().toISOString().split('T')[0]);
-      setDueDate(editingTransaction.dueDate || editingTransaction.date || new Date().toISOString().split('T')[0]);
+      setDate(editingTransaction.date || getLocalDateStr());
+      setDueDate(editingTransaction.dueDate || editingTransaction.date || getLocalDateStr());
       setPaymentDate(editingTransaction.paymentDate || '');
       
       setAccountId(editingTransaction.accountId || accounts[0]?.id || '');
       setCostCenterId(editingTransaction.costCenterId || costCenters[0]?.id || '');
       setCostCenterCustom(editingTransaction.costCenter || '');
       setCategory(editingTransaction.category || (editingTransaction.type === TransactionType.SALE ? INFLOW_CATEGORIES[0] : OUTFLOW_CATEGORIES[0]));
-      setStatus(editingTransaction.status || TransactionStatus.PAGO);
+      setStatus(editingTransaction.status);
       
       setCustomerId(editingTransaction.customerId || editingTransaction.contactId || '');
       setContactName(editingTransaction.contactName || '');
       setPaymentMethod(editingTransaction.paymentMethod || 'PIX');
       setNotes(editingTransaction.notes || '');
-      setGenerateReceipt(false);
+      setGenerateReceipt(Boolean(editingTransaction.receiptId));
     } else {
       setType(initialType);
       setDescription('');
@@ -107,7 +114,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
       setDiscountType('fixed');
       setDiscountValueStr('0');
       setPaidAmountStr('');
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateStr();
       setDate(todayStr);
       setDueDate(todayStr);
       setPaymentDate(todayStr);

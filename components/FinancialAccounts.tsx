@@ -24,39 +24,66 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
   const [error, setError] = useState('');
 
   const calculateBalances = (account: FinancialAccount) => {
-    const actualCashAmount = (transaction: Transaction) => {
-      if (transaction.payments && transaction.payments.length > 0) {
-        return transaction.payments
-          .filter(payment => !payment.isDiscountOrDeduction)
-          .filter(payment => (payment.accountId || transaction.accountId) === account.id)
-          .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    let totalIn = 0;
+    let totalOut = 0;
+    let pendingIn = 0;
+    let pendingOut = 0;
+
+    transactions.forEach(t => {
+      const isPaidOrConfirmed = 
+        t.status === TransactionStatus.CONFIRMADO || 
+        t.status === TransactionStatus.PAGO || 
+        t.status === TransactionStatus.PARCIAL;
+
+      const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
+
+      if (hasPayments) {
+        t.payments!.forEach(p => {
+          if (p.isDiscountOrDeduction) return;
+          const pAccId = p.accountId || t.accountId;
+          if (pAccId === account.id) {
+            const pAmt = Number(p.amount || 0);
+            if (t.type === TransactionType.SALE) {
+              totalIn += pAmt;
+            } else {
+              totalOut += pAmt;
+            }
+          }
+        });
+      } else if (isPaidOrConfirmed) {
+        if (t.accountId === account.id) {
+          const paidAmt = Number(
+            t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
+              ? t.paidAmount
+              : (t.status === TransactionStatus.PAGO || t.status === TransactionStatus.CONFIRMADO ? t.amount : 0)
+          ) || 0;
+          if (t.type === TransactionType.SALE) {
+            totalIn += paidAmt;
+          } else {
+            totalOut += paidAmt;
+          }
+        }
       }
-      return Number(transaction.paidAmount || 0);
-    };
 
-    const accTransactions = transactions.filter(t => 
-      t.accountId === account.id && 
-      (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL)
-    );
+      // Saldo pendente (a receber ou a pagar)
+      const isPending = 
+        t.status === TransactionStatus.PENDENTE || 
+        t.status === TransactionStatus.PARCIAL || 
+        t.status === TransactionStatus.ATRASADO;
 
-    const totalIn = accTransactions
-      .filter(t => t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + actualCashAmount(t), 0);
-
-    const totalOut = accTransactions
-      .filter(t => t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + actualCashAmount(t), 0);
+      if (isPending) {
+        if (t.accountId === account.id) {
+          const outstanding = Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0));
+          if (t.type === TransactionType.SALE) {
+            pendingIn += outstanding;
+          } else {
+            pendingOut += outstanding;
+          }
+        }
+      }
+    });
 
     const currentBalance = account.initialBalance + totalIn - totalOut;
-
-    const pendingIn = transactions
-      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
-
-    const pendingOut = transactions
-      .filter(t => t.accountId === account.id && (t.status === TransactionStatus.PENDENTE || t.status === TransactionStatus.PARCIAL) && t.type !== TransactionType.SALE)
-      .reduce((sum, t) => sum + Math.max(0, Number(t.amount || 0) - Number(t.paidAmount || 0)), 0);
-
     return { currentBalance, totalIn, totalOut, projected: currentBalance + pendingIn - pendingOut };
   };
 

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { SaleOrder, OrderWithdrawal, Customer, Company } from '../types';
-import { Printer, CheckCircle, Scale } from 'lucide-react';
+import { SaleOrder, OrderWithdrawal, Customer, Company, FiscalConfig } from '../types';
+import { Truck, Printer, X, CheckCircle, Scale, Calendar, User, FileText, Package, Loader2, AlertCircle } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
+import { fiscalService } from '../services/fiscalService';
 
 interface OrderWithdrawalModalProps {
   order: SaleOrder;
   customer?: Customer;
   company: Company;
+  fiscalConfig?: FiscalConfig;
   onSaveWithdrawal: (withdrawal: OrderWithdrawal) => void;
   onClose: () => void;
 }
@@ -15,6 +17,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   order,
   customer,
   company,
+  fiscalConfig,
   onSaveWithdrawal,
   onClose
 }) => {
@@ -75,6 +78,101 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
     window.print();
   };
 
+  const [isEmittingNfe, setIsEmittingNfe] = useState(false);
+  const [nfeError, setNfeError] = useState<string | null>(null);
+
+  const handleEmitirNfeWithdrawal = async () => {
+    if (!savedWithdrawal || isEmittingNfe) return;
+    if (!customer) {
+      alert('Dados cadastrais do cliente não encontrados para emissão da NF-e.');
+      return;
+    }
+    setIsEmittingNfe(true);
+    setNfeError(null);
+
+    try {
+      const config = fiscalConfig || await fiscalService.getConfig(company.id);
+      const unitPrice = order.items[0]?.unitPrice || 0;
+      const withdrawalTotal = Number((savedWithdrawal.quantityWithdrawn * unitPrice).toFixed(2));
+      const firstItem = order.items[0];
+
+      // Pedido de payload exclusivo deste carregamento (sem financeiro, sem pagamento)
+      const withdrawalOrderPayload: SaleOrder = {
+        ...order,
+        reference: `${order.reference}-${savedWithdrawal.weighTicketNumber || 'CARGA'}`,
+        isAvulsa: false,
+        withoutFinance: true,
+        total: withdrawalTotal,
+        subtotal: withdrawalTotal,
+        shipping: 0,
+        discount: 0,
+        items: [{
+          productId: firstItem?.productId || 'moido',
+          productCode: firstItem?.productCode || 'CALC-01',
+          productName: firstItem?.productName || 'Calcário Agrícola Corretivo',
+          unit: firstItem?.unit || 'TON',
+          quantity: savedWithdrawal.quantityWithdrawn,
+          unitPrice: unitPrice,
+          discount: 0,
+          total: withdrawalTotal,
+          ncm: firstItem?.ncm || '2517.10.00',
+          cfop: firstItem?.cfop,
+          cst: firstItem?.cst,
+          informacoesComplementares: `Carregamento Parcial: ${savedWithdrawal.quantityWithdrawn} Ton. Ticket de Balança: ${savedWithdrawal.weighTicketNumber}. Placa: ${savedWithdrawal.plateNumber}. Motorista: ${savedWithdrawal.driverName || 'N/I'}. Saldo Restante: ${savedWithdrawal.remainingBalanceQuantity} Ton.`
+        }],
+        payments: []
+      };
+
+      const result = await fiscalService.emitirNFe(
+        withdrawalOrderPayload,
+        customer,
+        config,
+        company.id,
+        {
+          semPagamento: true,
+          carregamento: {
+            ticketPesagem: savedWithdrawal.weighTicketNumber,
+            placa: savedWithdrawal.plateNumber,
+            motorista: savedWithdrawal.driverName,
+            driverCpf: savedWithdrawal.driverCpf
+          }
+        }
+      );
+
+      if (result.success) {
+        let finalStatus = result.nfeStatus;
+        if (result.nfeStatus === 'processando' && result.nfeId) {
+          const pollResult = await fiscalService.consultarEAtualizarStatusProcessamento(result.nfeId, config, 3, 2000);
+          if (pollResult.success && pollResult.status && pollResult.status !== 'nao_emitida') {
+            finalStatus = pollResult.status;
+          }
+        }
+
+        const updatedWithdrawal: OrderWithdrawal = {
+          ...savedWithdrawal,
+          nfeStatus: finalStatus,
+          nfeId: result.nfeId,
+          nfeChave: result.nfeChave,
+          nfeNumero: result.nfeNumero,
+          nfeSerie: result.nfeSerie,
+          nfeProtocolo: result.nfeProtocolo,
+          nfeDanfeUrl: result.nfeDanfeUrl,
+          nfeXmlUrl: result.nfeXmlUrl,
+          nfeEmissao: result.nfeEmissao
+        };
+
+        setSavedWithdrawal(updatedWithdrawal);
+        onSaveWithdrawal(updatedWithdrawal);
+      } else {
+        setNfeError(result.nfeErro || 'Rejeição na emissão da NF-e.');
+      }
+    } catch (err: any) {
+      setNfeError(err.message || 'Erro ao emitir NF-e.');
+    } finally {
+      setIsEmittingNfe(false);
+    }
+  };
+
   return (
     <FlowSheet
       title={savedWithdrawal ? 'Ticket de retirada' : 'Registrar retirada'}
@@ -125,6 +223,34 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 <p className="text-xs font-bold text-slate-500 pt-1">Data: {savedWithdrawal.date}</p>
               </div>
             </div>
+
+            {/* Bloco Fiscal do Carregamento */}
+            {savedWithdrawal.nfeNumero && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-emerald-600 text-white rounded-xl">
+                    <CheckCircle size={18} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">NF-e Vinculada ao Carregamento</span>
+                    <p className="text-sm font-black text-slate-900">Nota Fiscal Nº {savedWithdrawal.nfeNumero}</p>
+                    {savedWithdrawal.nfeChave && (
+                      <p className="text-[9px] font-mono text-slate-500 truncate max-w-xs md:max-w-md">Chave: {savedWithdrawal.nfeChave}</p>
+                    )}
+                  </div>
+                </div>
+                {savedWithdrawal.nfeDanfeUrl && (
+                  <a
+                    href={savedWithdrawal.nfeDanfeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 self-start sm:self-auto shrink-0"
+                  >
+                    <FileText size={14} /> Abrir DANFE (PDF)
+                  </a>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
               <div>
@@ -186,6 +312,41 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 <div className="border-t border-slate-400 pt-2 mx-4" />
                 <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{savedWithdrawal.loadedBy || 'Expedição'}</p>
                 <p className="text-[9px] text-slate-400 font-bold uppercase">Operador de Balança / Expedição</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-6 border-t border-slate-100 print:hidden">
+              <div className="w-full sm:w-auto">
+                {isEmittingNfe ? (
+                  <div className="flex items-center gap-2 text-purple-700 bg-purple-50 px-4 py-2.5 rounded-xl border border-purple-200 text-xs font-bold">
+                    <Loader2 size={16} className="animate-spin" /> Transmitindo NF-e à SEFAZ...
+                  </div>
+                ) : nfeError ? (
+                  <div className="flex items-center gap-2 text-rose-700 bg-rose-50 px-4 py-2 rounded-xl border border-rose-200 text-xs font-bold">
+                    <AlertCircle size={16} /> {nfeError}
+                  </div>
+                ) : !savedWithdrawal.nfeNumero ? (
+                  <button
+                    type="button"
+                    onClick={handleEmitirNfeWithdrawal}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <FileText size={15} /> Emitir NF-e Deste Carregamento ({savedWithdrawal.quantityWithdrawn} Ton)
+                  </button>
+                ) : (
+                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
+                    <CheckCircle size={14} /> NF-e Nº {savedWithdrawal.nfeNumero} emitida
+                  </span>
+                )}
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto justify-end">
+                <button onClick={onClose} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all">
+                  Fechar
+                </button>
+                <button onClick={handlePrint} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-200 transition-all flex items-center gap-1.5">
+                  <Printer size={14} /> Imprimir Ticket
+                </button>
               </div>
             </div>
           </div>

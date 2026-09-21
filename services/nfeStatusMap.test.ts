@@ -42,7 +42,7 @@ describe('status NotaAs → ERP', () => {
     const merged = mergeNfeConsulta(order, {
       success: true,
       status: 'autorizada',
-      nfe: { invoiceId: 'inv-7058', status: 'autorizada', nNf: 7058 },
+      nfe: { invoiceId: 'inv-7058', status: 'autorizada', nNf: 7058 } as any,
     });
     assert.equal(merged.nfeStatus, 'cancelada');
   });
@@ -75,7 +75,7 @@ describe('status NotaAs → ERP', () => {
         nProt: '141260000012345',
         nNf: 7038,
         serie: 3,
-      },
+      } as any,
     });
 
     assert.equal(merged.nfeStatus, 'autorizada');

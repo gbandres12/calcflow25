@@ -88,11 +88,18 @@ export const Transactions: React.FC<TransactionsProps> = ({
     return dateStr;
   };
 
+  const getLocalDateStr = (d: Date = new Date()): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Presets de Data
   const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH') => {
     setActiveDatePreset(preset);
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = getLocalDateStr(today);
 
     if (preset === 'ALL') {
       setStartDate('');
@@ -103,13 +110,13 @@ export const Transactions: React.FC<TransactionsProps> = ({
     } else if (preset === '7DAYS') {
       const past7 = new Date();
       past7.setDate(today.getDate() - 7);
-      setStartDate(past7.toISOString().split('T')[0]);
+      setStartDate(getLocalDateStr(past7));
       setEndDate(todayStr);
     } else if (preset === 'THIS_MONTH') {
       const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
       const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setStartDate(firstDay.toISOString().split('T')[0]);
-      setEndDate(lastDay.toISOString().split('T')[0]);
+      setStartDate(getLocalDateStr(firstDay));
+      setEndDate(getLocalDateStr(lastDay));
     }
   };
 
@@ -180,7 +187,11 @@ export const Transactions: React.FC<TransactionsProps> = ({
       if (endDate && t.date > endDate) return false;
 
       if (filterCustomer !== 'ALL' && t.customerId !== filterCustomer && t.contactId !== filterCustomer) return false;
-      if (filterAccount !== 'ALL' && t.accountId !== filterAccount) return false;
+      if (filterAccount !== 'ALL') {
+        const matchesMaster = t.accountId === filterAccount;
+        const matchesPayment = t.payments?.some(p => (p.accountId || t.accountId) === filterAccount);
+        if (!matchesMaster && !matchesPayment) return false;
+      }
       if (filterCostCenter !== 'ALL' && t.costCenterId !== filterCostCenter) return false;
       if (filterStatus !== 'ALL' && t.status !== filterStatus) return false;
 

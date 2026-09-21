@@ -62,11 +62,15 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   onPrintReceipt,
   onVerifyDeletionPassword
 }) => {
-  // Format today's date YYYY-MM-DD
-  const getTodayStr = () => {
-    const d = new Date();
-    return d.toISOString().split('T')[0];
+  // Format date in local timezone YYYY-MM-DD
+  const getLocalDateStr = (d: Date = new Date()): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
+
+  const getTodayStr = () => getLocalDateStr(new Date());
 
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
@@ -98,13 +102,13 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const handlePrevDay = () => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateStr(d));
   };
 
   const handleNextDay = () => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateStr(d));
   };
 
   const handleSetToday = () => {
@@ -114,7 +118,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const handleSetYesterday = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateStr(d));
   };
 
   // Mathematical balance and movement calculations
@@ -224,7 +228,10 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
 
       // Ensure any transaction whose date or paymentDate is targetDate is listed
       const baseDate = t.paymentDate || t.date;
-      if (baseDate === targetDate && (selectedAccountId === 'all' || t.accountId === selectedAccountId)) {
+      const matchesBaseAcc = selectedAccountId === 'all' || 
+        t.accountId === selectedAccountId || 
+        t.payments?.some(p => (p.accountId || t.accountId) === selectedAccountId);
+      if (baseDate === targetDate && matchesBaseAcc) {
         dayTxIds.add(t.id);
       }
     });

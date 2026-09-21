@@ -659,14 +659,14 @@ const App: React.FC = () => {
       return exists ? prev.map(o => o.id === newOrder.id ? newOrder : o) : [...prev, newOrder];
     });
     persistCloud('sales_orders', newOrder);
-    if (!fiscalOnly && newOrder.status === OrderStatus.FINALIZED) {
+    if (!fiscalOnly && !newOrder.withoutFinance && newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    if (isFiscalOnlyOrder(order)) return;
+    if (isFiscalOnlyOrder(order) || order.withoutFinance) return;
     (Array.isArray(order.items) ? order.items : []).forEach(item => {
       if (!item?.productId) return;
       processStockChange(String(item.productId), -(Number(item.quantity) || 0));
@@ -868,6 +868,7 @@ const App: React.FC = () => {
       originalOrder.status === OrderStatus.BUDGET
       && tagged.status === OrderStatus.FINALIZED
       && !isFiscalOnlyOrder(tagged)
+      && !tagged.withoutFinance
     ) {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));

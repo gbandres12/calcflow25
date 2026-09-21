@@ -267,6 +267,16 @@ export interface OrderWithdrawal {
   loadedBy?: string;
   operatorName?: string;
   notes?: string;
+  nfeStatus?: NfeStatus;
+  nfeId?: string;
+  nfeChave?: string;
+  nfeNumero?: string;
+  nfeSerie?: string;
+  nfeProtocolo?: string;
+  nfeDanfeUrl?: string;
+  nfeXmlUrl?: string;
+  nfeEmissao?: string;
+  nfeErro?: string;
 }
 
 export interface SalePayment {
@@ -351,6 +361,11 @@ export interface SaleOrderItem {
   infAdProd?: string;
   /** Texto da coluna Descrição no pedido impresso (se vazio, usa productName). */
   productDescription?: string;
+  /** Garantias comerciais registradas no pedido e impressas no documento. */
+  hasGarantias?: boolean;
+  prntMinimoGarantido?: number;
+  mgoMinimoGarantido?: number;
+  garantiaNota?: string;
 }
 
 /** NF-e vinculada ao pedido (completa, avulsa/parcial, devolução ou transferência). */
@@ -466,6 +481,7 @@ export interface SaleOrder {
   deliveryDate?: string;
   validUntil?: string;
   isAvulsa?: boolean;
+  withoutFinance?: boolean;
   items: SaleOrderItem[];
   /** Notas emitidas a partir desta venda (pedido completo + avulsas parciais). */
   nfes?: SaleOrderLinkedNfe[];

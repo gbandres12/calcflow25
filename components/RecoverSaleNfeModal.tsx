@@ -73,7 +73,7 @@ export const RecoverSaleNfeModal: React.FC<Props> = ({ orders, customers, onClos
 
   return (
     <FlowSheet title="Recuperar NF-e no pedido" subtitle="Vincule uma nota já autorizada pela SEFAZ ao pedido da CBA. Não reemita." onClose={onClose}>
-      <FlowSection>
+      <FlowSection title="Dados da NF-e" defaultOpen>
         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">XML ou DANFE</label>
         <label className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-slate-300 text-sm cursor-pointer hover:bg-slate-50">
           {loading ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}

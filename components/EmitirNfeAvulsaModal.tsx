@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, NfeStatus, FreteInfo, Transportador } from '../types';
+import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador, OrderWithdrawal } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { assembleAutoInfCpl } from '../services/nfeComplementares';
@@ -10,7 +10,7 @@ import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, Plus, Trash2, FileText, CheckCircle2, AlertCircle, 
   Building, User as UserIcon, Truck, Sparkles, Search, ShoppingBag, 
-  CreditCard, Info, HelpCircle, Copy, Save, Eye, RefreshCw, ArrowLeft
+  CreditCard, Info, HelpCircle, Copy, Save, Eye, RefreshCw, ArrowLeft, Loader2
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
@@ -21,8 +21,9 @@ interface EmitirNfeAvulsaModalProps {
   config: FiscalConfig;
   company: Company;
   currentUser?: User;
+  orders?: SaleOrder[];
   onClose: () => void;
-  onSuccess: (newOrder: SaleOrder) => void;
+  onSuccess: (newOrder: SaleOrder, linkedOrderId?: string, withdrawal?: OrderWithdrawal) => void;
   onDraftSaved?: (draftOrder: SaleOrder) => void;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
@@ -55,6 +56,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   config,
   company,
   currentUser,
+  orders,
   onClose,
   onSuccess,
   onDraftSaved,
@@ -103,6 +105,14 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [frete, setFrete] = useState<FreteInfo>(duplicateFrom?.frete || { modalidade: 9, valor: 0 });
   const [infCplCustom, setInfCplCustom] = useState<string>(duplicateFrom?.infCpl || '');
   const [infCplTouched, setInfCplTouched] = useState(Boolean(duplicateFrom?.infCpl?.trim()));
+
+  // Vínculo com Pedido de Venda e Dados do Carregamento
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
+  const [generateFinance, setGenerateFinance] = useState<boolean>(false);
+  const [placaCaminhao, setPlacaCaminhao] = useState<string>('');
+  const [nomeMotorista, setNomeMotorista] = useState<string>('');
+  const [ticketBalanca, setTicketBalanca] = useState<string>('');
+  const [pedidoExterno, setPedidoExterno] = useState<string>('');
 
   // Itens da Nota
   const [items, setItems] = useState<AvulsaItem[]>(() => {
@@ -180,6 +190,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     destIe, destIsentoIe, destStreet, destNumber, destNeighborhood, 
     destCity, destState, destZip, destIbge, destEmail
   ]);
+
+  // Pedidos ativos do cliente selecionado
+  const customerOrders = useMemo(() => {
+    if (!orders || !activeCustomer?.id) return [];
+    return orders.filter(o => o.customerId === activeCustomer.id && o.status !== OrderStatus.CANCELLED);
+  }, [orders, activeCustomer?.id]);
 
   // Seletor de clientes cadastrados (blindado contra cadastros com campos vazios)
   const filteredCustomers = useMemo(() => {
@@ -344,12 +360,20 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     total,
     frete: { ...frete, modalidade: freteModalidadeNum as FreteInfo['modalidade'], valor: shippingVal },
     status: OrderStatus.FINALIZED,
-    paymentMethod: paymentMethod === 'Sem Pagamento' ? 'Outros' : paymentMethod,
-    payments: [],
+    withoutFinance: !generateFinance || Boolean(selectedOrderId),
+    paymentMethod: paymentMethod === 'Sem Pagamento' || !generateFinance ? 'Outros' : paymentMethod,
+    payments: generateFinance && !selectedOrderId ? [{
+      id: `pay-${Date.now()}`,
+      amount: total,
+      date: new Date().toISOString().split('T')[0],
+      status: TransactionStatus.PAGO,
+      accountId: 'acc-1',
+      description: 'Pagamento NF-e Avulsa'
+    }] : [],
     receipts: [],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
+  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, selectedOrderId]);
 
   const previewOrder: SaleOrder = useMemo(() => ({
     ...syntheticOrder,
@@ -453,8 +477,19 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config);
-      const result = await fiscalService.emitirNFe(syntheticOrder, activeCustomer, config, company.id);
+      const semPgto = !generateFinance || Boolean(selectedOrderId);
+      const opts = {
+        semPagamento: semPgto,
+        carregamento: {
+          ticketPesagem: ticketBalanca.trim() || undefined,
+          placa: placaCaminhao.trim() || undefined,
+          motorista: nomeMotorista.trim() || undefined,
+          pedidoExterno: pedidoExterno.trim() || undefined
+        }
+      };
+
+      const payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config, opts);
+      const result = await fiscalService.emitirNFe(syntheticOrder, activeCustomer, config, company.id, opts);
 
       if (result.success || result.nfeId) {
         const linkedId = draftLinkedId || newId('nfa');
@@ -510,7 +545,42 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           nfeRawResponse: createdOrder.nfeRawResponse,
         });
 
-        onSuccess(upsertLinkedNfe(createdOrder, linked));
+        const orderWithLinked = upsertLinkedNfe(createdOrder, linked);
+
+        let withdrawal: OrderWithdrawal | undefined;
+        if (selectedOrderId && orders) {
+          const linkedOrder = orders.find(o => o.id === selectedOrderId);
+          if (linkedOrder) {
+            const totalQty = (linkedOrder.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+            const alreadyWithdrawn = (linkedOrder.withdrawals || []).reduce((sum, w) => sum + (w.quantityWithdrawn || 0), 0);
+            const thisQty = items.reduce((sum, it) => sum + (it.quantity || 0), 0);
+            const remaining = Math.max(0, totalQty - (alreadyWithdrawn + thisQty));
+
+            withdrawal = {
+              id: `RET-${Date.now()}`,
+              orderId: linkedOrder.id,
+              orderReference: linkedOrder.reference,
+              date: new Date().toISOString().split('T')[0],
+              driverName: nomeMotorista.trim() || 'Motorista',
+              plateNumber: placaCaminhao.trim().toUpperCase() || 'PLACA',
+              quantityWithdrawn: thisQty,
+              productName: items[0]?.productName || 'Calcário Agrícola',
+              weighTicketNumber: ticketBalanca.trim() || `PES-${Math.floor(100000 + Math.random() * 900000)}`,
+              remainingBalanceQuantity: remaining,
+              nfeStatus: (createdOrder.nfeStatus || 'processando') as NfeStatus,
+              nfeId: createdOrder.nfeId,
+              nfeChave: createdOrder.nfeChave,
+              nfeNumero: createdOrder.nfeNumero,
+              nfeSerie: createdOrder.nfeSerie,
+              nfeProtocolo: createdOrder.nfeProtocolo,
+              nfeDanfeUrl: createdOrder.nfeDanfeUrl,
+              nfeXmlUrl: createdOrder.nfeXmlUrl,
+              nfeEmissao: createdOrder.nfeEmissao
+            };
+          }
+        }
+
+        onSuccess(orderWithLinked, selectedOrderId || undefined, withdrawal);
       } else {
         setErrorMsg(result.nfeErro || 'Rejeição na emissão da NF-e.');
       }
@@ -842,6 +912,71 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Vínculo Opcional a Pedido de Venda */}
+            {customerOrders.length > 0 && (
+              <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2 mt-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span className="text-xs font-black text-purple-900 uppercase flex items-center gap-1.5">
+                    <ShoppingBag size={15} className="text-purple-700" /> Vincular esta NF-e a um Pedido de Venda deste Cliente?
+                  </span>
+                  <span className="text-[10px] text-purple-600 font-bold">
+                    Abate o saldo sem duplicar venda no financeiro
+                  </span>
+                </div>
+                <select
+                  value={selectedOrderId}
+                  onChange={e => {
+                    const ordId = e.target.value;
+                    setSelectedOrderId(ordId);
+                    if (ordId) {
+                      setGenerateFinance(false);
+                      const foundOrd = orders?.find(o => o.id === ordId);
+                      if (foundOrd && foundOrd.items.length > 0) {
+                        const first = foundOrd.items[0];
+                        const totalQty = (foundOrd.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+                        const alreadyWithdrawn = (foundOrd.withdrawals || []).reduce((sum, w) => sum + (w.quantityWithdrawn || 0), 0);
+                        const remaining = Math.max(0, totalQty - alreadyWithdrawn);
+                        const suggestedQty = remaining > 35 ? 32 : (remaining > 0 ? remaining : 10);
+                        setItems([{
+                          id: `item-1`,
+                          productId: first.productId,
+                          productCode: first.productCode || 'CALC-01',
+                          productName: first.productName,
+                          unit: first.unit || 'TON',
+                          quantity: suggestedQty,
+                          unitPrice: first.unitPrice || 180,
+                          discount: 0,
+                          total: suggestedQty * (first.unitPrice || 180),
+                          ncm: first.ncm || '2517.10.00',
+                          cfop: first.cfop || config.cfopPadraoEstadual || '5101',
+                          cst: first.cst || config.cstIcmsPadrao || '40',
+                          informacoesComplementares: first.informacoesComplementares
+                        }]);
+                      }
+                    }
+                  }}
+                  className="w-full p-2.5 bg-white border border-purple-200 rounded-xl text-xs font-bold outline-none focus:border-purple-600 text-slate-800"
+                >
+                  <option value="">Sem vínculo (NF-e Avulsa Independente)</option>
+                  {customerOrders.map(o => {
+                    const totalQty = (o.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+                    const alreadyWithdrawn = (o.withdrawals || []).reduce((sum, w) => sum + (w.quantityWithdrawn || 0), 0);
+                    const remaining = Math.max(0, totalQty - alreadyWithdrawn);
+                    return (
+                      <option key={o.id} value={o.id}>
+                        {o.reference} — Saldo a retirar: {remaining.toFixed(1)} TON (Total comprado: {totalQty} TON)
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedOrderId && (
+                  <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                    <CheckCircle2 size={13} /> Esta nota fiscal abaterá a quantidade diretamente do pedido selecionado acima. Não gerará pedido duplicado e não lançará receita no caixa.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Seção 2: Itens da NF-e (com CFOP e CST editáveis) */}
@@ -986,6 +1121,75 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   <option value="Sem Pagamento">90 - Sem Pagamento</option>
                 </select>
               </div>
+
+              {/* Dados do Veículo / Transporte da Carga */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-slate-200/60">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Placa Veículo</label>
+                  <input 
+                    type="text" 
+                    value={placaCaminhao} 
+                    onChange={e => setPlacaCaminhao(e.target.value.toUpperCase())} 
+                    placeholder="ABC-1D23"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Motorista</label>
+                  <input 
+                    type="text" 
+                    value={nomeMotorista} 
+                    onChange={e => setNomeMotorista(e.target.value)} 
+                    placeholder="Nome"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Ticket Balança</label>
+                  <input 
+                    type="text" 
+                    value={ticketBalanca} 
+                    onChange={e => setTicketBalanca(e.target.value)} 
+                    placeholder="PES-123456"
+                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-purple-700">Nº Pedido Externo</label>
+                  <input 
+                    type="text" 
+                    value={pedidoExterno} 
+                    onChange={e => setPedidoExterno(e.target.value)} 
+                    placeholder="Ex: PED-1052"
+                    className="w-full p-2 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-bold outline-none focus:border-purple-600 text-purple-950"
+                  />
+                </div>
+              </div>
+
+              {/* Opção de Geração Financeira */}
+              {!selectedOrderId && (
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl flex items-center justify-between gap-3 mt-2">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black text-slate-900 block">
+                      Lançar entrada no Caixa / Contas a Receber?
+                    </span>
+                    <p className="text-[10px] text-slate-500">
+                      {generateFinance 
+                        ? 'Aviso: Gerará lançamento com status PAGO no caixa diário.' 
+                        : 'Recomendado: Desativado. A emissão não polui o caixa e não cria receita fictícia.'}
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={generateFinance} 
+                      onChange={e => setGenerateFinance(e.target.checked)} 
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100">

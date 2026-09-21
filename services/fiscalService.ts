@@ -66,6 +66,14 @@ export interface NotaAsItemPayload {
 export interface NfeEmitOpts {
   devolucao?: { chaveAcesso: string; nItem?: number };
   transferencia?: boolean;
+  semPagamento?: boolean;
+  carregamento?: {
+    ticketPesagem?: string;
+    placa?: string;
+    motorista?: string;
+    driverCpf?: string;
+    pedidoExterno?: string;
+  };
 }
 
 export interface NotaAsPagamento {
@@ -627,7 +635,7 @@ export const fiscalService = {
       return row;
     });
 
-    const semPagamento = isDevolucao || isTransferencia;
+    const semPagamento = isDevolucao || isTransferencia || Boolean(opts?.semPagamento) || Boolean(order.withoutFinance);
     const tipoPagamento = semPagamento
       ? '90'
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
@@ -687,20 +695,30 @@ export const fiscalService = {
       if (veic?.placa?.trim()) freteInfParts.push(`Placa: ${veic.placa.trim().toUpperCase()}`);
     }
 
+    const carregamentoParts: string[] = [
+      opts?.carregamento?.pedidoExterno ? `Ref. Pedido Externo: ${opts.carregamento.pedidoExterno}` : '',
+      opts?.carregamento?.ticketPesagem ? `Ticket Balança: ${opts.carregamento.ticketPesagem}` : '',
+      opts?.carregamento?.placa ? `Veículo/Placa: ${opts.carregamento.placa}` : '',
+      opts?.carregamento?.motorista ? `Motorista: ${opts.carregamento.motorista}` : '',
+    ].filter(Boolean);
+
     // infCpl: texto do modal ou cláusulas do produto. NFA avulsa não recebe Pedido/NFA/disclaimer.
     const isAvulsaNote = Boolean(order.isAvulsa) || (order.nfeReferenciaExterna || '').includes('#AV#');
     const infCpl = buildNfeInfCpl({
       nfeInfCpl: order.nfeInfCpl,
       observacoesFiscaisPadrao: config.observacoesFiscaisPadrao,
       items: order.items,
-      extras: isAvulsaNote
-        ? []
-        : [
-            ...freteInfParts,
-            order.reference ? `Pedido: ${order.reference}` : '',
-            isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
-            isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
-          ]
+      extras: [
+        ...carregamentoParts,
+        ...(isAvulsaNote
+          ? []
+          : [
+              ...freteInfParts,
+              order.reference ? `Pedido: ${order.reference}` : '',
+              isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
+              isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
+            ])
+      ]
     });
 
     const payload: NotaAsCriarNFePayload = {
@@ -755,7 +773,8 @@ export const fiscalService = {
       const digits = (resolvedIbge || '').replace(/\D/g, '');
       if (digits.length === 7 && customer.id && persistCompanyId) {
         try {
-          await db.upsert('customers', persistCompanyId, { id: customer.id, ibgeCode: digits });
+          const updatedCustomer = { ...customer, ibgeCode: digits, companyId: persistCompanyId };
+          await db.upsert('customers', persistCompanyId, updatedCustomer);
         } catch (persistErr) {
           console.warn(`⚠️ [FISCAL SERVICE] [${invoiceRequestId}] Não foi possível persistir ibgeCode no cliente:`, persistErr);
         }

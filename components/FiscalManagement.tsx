@@ -507,18 +507,32 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           config={config}
           company={company}
           currentUser={currentUser}
+          orders={orders}
           transportadores={transportadores}
           onAddTransportador={onAddTransportador}
+          duplicateFrom={duplicateDraft}
           onClose={() => {
             setShowAvulsaModal(false);
             setDuplicateDraft(null);
           }}
-          duplicateFrom={duplicateDraft}
-          onSuccess={(newOrder) => {
+          onSuccess={(newOrder, linkedOrderId, withdrawal) => {
+            if (linkedOrderId && withdrawal) {
+              const targetOrder = (orders || []).find(o => o.id === linkedOrderId);
+              if (targetOrder) {
+                const existing = targetOrder.withdrawals || [];
+                const updatedWithdrawals = [...existing, withdrawal];
+                const updatedOrder: SaleOrder = {
+                  ...targetOrder,
+                  withdrawals: updatedWithdrawals
+                };
+                onUpdateOrder(updatedOrder);
+              }
+            } else {
+              onUpdateOrder(newOrder);
+            }
             const isDraft =
               newOrder.nfeStatus === 'rascunho' ||
               listDraftNfes(newOrder).length > 0;
-            onUpdateOrder(newOrder);
             setShowAvulsaModal(false);
             setDuplicateDraft(null);
             if (!isDraft) {

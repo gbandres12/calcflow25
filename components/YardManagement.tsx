@@ -139,11 +139,16 @@ const YardManagement: React.FC<YardManagementProps> = ({
 
   const handleSaveWithdrawal = (withdrawal: OrderWithdrawal) => {
     if (!selectedOrderForWeigh || !onUpdateOrder) return;
-    const updatedWithdrawals = [...(selectedOrderForWeigh.withdrawals || []), withdrawal];
+    const existing = selectedOrderForWeigh.withdrawals || [];
+    const exists = existing.some(w => w.id === withdrawal.id);
+    const updatedWithdrawals = exists
+      ? existing.map(w => w.id === withdrawal.id ? withdrawal : w)
+      : [...existing, withdrawal];
     const updatedOrder: SaleOrder = {
       ...selectedOrderForWeigh,
       withdrawals: updatedWithdrawals
     };
+    setSelectedOrderForWeigh(updatedOrder);
     onUpdateOrder(updatedOrder);
   };
 
@@ -336,7 +341,16 @@ const YardManagement: React.FC<YardManagementProps> = ({
                           <span className="font-mono font-bold text-xs text-slate-900 block">
                             {item.withdrawal.weighTicketNumber || item.withdrawal.id}
                           </span>
-                          <span className="text-[10px] text-slate-400">{item.withdrawal.date}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400">{item.withdrawal.date}</span>
+                            {item.withdrawal.nfeNumero ? (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                NF-e {item.withdrawal.nfeNumero}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">Sem NF-e</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-bold text-xs text-slate-900">{item.customer?.name || 'Cliente'}</p>
@@ -358,6 +372,17 @@ const YardManagement: React.FC<YardManagementProps> = ({
                         </td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
+                            {item.withdrawal.nfeDanfeUrl && (
+                              <a
+                                href={item.withdrawal.nfeDanfeUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`Abrir DANFE (NF-e ${item.withdrawal.nfeNumero})`}
+                                className="p-1.5 text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg transition-all"
+                              >
+                                <FileText size={13} />
+                              </a>
+                            )}
                             <button
                               onClick={() => handleSendWhatsAppTicket(item.withdrawal, item.customer?.name)}
                               title="Enviar Romaneio no WhatsApp"
@@ -367,7 +392,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             </button>
                             <button
                               onClick={() => setViewingWithdrawal({ withdrawal: item.withdrawal, order: item.order })}
-                              title="Visualizar Ticket Completo"
+                              title="Visualizar Ticket / Detalhes"
                               className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all"
                             >
                               <Printer size={13} />
@@ -776,6 +801,28 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <span className="text-[10px] text-slate-400 font-bold uppercase">Volume Pesado / Expedido</span>
                 <p className="text-lg font-black text-emerald-700">{viewingWithdrawal.withdrawal.quantityWithdrawn.toLocaleString('pt-BR')} Toneladas</p>
               </div>
+
+              {viewingWithdrawal.withdrawal.nfeNumero && (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between gap-2 mt-2">
+                  <div>
+                    <span className="text-[9px] font-black text-purple-700 uppercase">NF-e da Carga</span>
+                    <p className="font-black text-sm text-purple-950">Nº {viewingWithdrawal.withdrawal.nfeNumero}</p>
+                    {viewingWithdrawal.withdrawal.nfeChave && (
+                      <p className="text-[9px] font-mono text-purple-600 truncate max-w-xs">{viewingWithdrawal.withdrawal.nfeChave}</p>
+                    )}
+                  </div>
+                  {viewingWithdrawal.withdrawal.nfeDanfeUrl && (
+                    <a
+                      href={viewingWithdrawal.withdrawal.nfeDanfeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shrink-0"
+                    >
+                      <FileText size={13} /> Abrir DANFE
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2">

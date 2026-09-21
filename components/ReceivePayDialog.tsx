@@ -35,9 +35,16 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
   const currentPaid = Number(transaction.paidAmount || 0);
   const remainingBalance = Math.max(0, totalAmount - currentPaid);
 
+  const getLocalDateStr = (d: Date = new Date()): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // States do formulário
   const [payAmountStr, setPayAmountStr] = useState(remainingBalance.toString());
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState(getLocalDateStr());
   const [accountId, setAccountId] = useState(transaction.accountId || accounts[0]?.id || '');
   const [paymentMethod, setPaymentMethod] = useState(transaction.paymentMethod || 'PIX');
   const [isDeduction, setIsDeduction] = useState(false); // Flag se é Abatimento ou Pagamento Normal
