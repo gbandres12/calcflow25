@@ -30,6 +30,7 @@ import {
   stripSeedDocs
 } from './persistSeed';
 import { pickMembershipCompanyId } from './membershipCompany';
+import { decideEmptyCloudRead } from './cloudRead';
 
 // Cache local e fila de reenvio. A fonte da verdade é o Supabase.
 const storage = {
@@ -206,6 +207,33 @@ const createSupabaseRows = (tableName: string, companyId: string, records: any[]
     updated_at: new Date().toISOString()
   }));
 
+export const waitForAuthUser = async (timeoutMs = 2500): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  try {
+    const first = await supabase.auth.getSession();
+    if (first.data.session?.user) return true;
+  } catch {
+    return false;
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    let subscription: { unsubscribe: () => void } | null = null;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      try { subscription?.unsubscribe(); } catch {}
+      resolve(value);
+    };
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) finish(true);
+    });
+    subscription = data.subscription;
+    setTimeout(() => finish(false), timeoutMs);
+  });
+};
+
 const persistPendingUpserts = async (
   tableName: string,
   companyId: string,
@@ -217,7 +245,7 @@ const persistPendingUpserts = async (
   if (operational.length === 0) return;
 
   try {
-    await supabase.auth.getSession();
+    await waitForAuthUser(1500);
   } catch {}
 
   const { error } = await supabase
@@ -242,7 +270,7 @@ const persistPendingDeletes = async (
   if (!supabase || ids.length === 0) return;
 
   try {
-    await supabase.auth.getSession();
+    await waitForAuthUser(1500);
   } catch {}
 
   for (const id of ids) {
@@ -425,19 +453,45 @@ export const db = {
     const supabase = getSupabase();
     if (supabase) {
       try {
+        let hasAuthUser = demo;
         if (!demo) {
-          try {
-            await supabase.auth.getSession();
-          } catch {}
+          hasAuthUser = await waitForAuthUser(2500);
         }
 
-        const { data, error } = await supabase
-          .from('app_records')
-          .select('id, data, updated_at')
-          .eq('table_name', tableName)
-          .eq('company_id', compKey);
+        const readRemote = () =>
+          supabase
+            .from('app_records')
+            .select('id, data, updated_at')
+            .eq('table_name', tableName)
+            .eq('company_id', compKey);
+
+        let { data, error } = await readRemote();
+        if (!demo && hasAuthUser && !error && Array.isArray(data) && data.length === 0) {
+          const retry = await readRemote();
+          if (!retry.error && Array.isArray(retry.data)) {
+            data = retry.data;
+            error = retry.error;
+          }
+        }
 
         if (!error && Array.isArray(data)) {
+          const decision = decideEmptyCloudRead({
+            isDemo: demo,
+            hasAuthUser,
+            remoteRowCount: data.length
+          });
+
+          if (decision === 'keep-local-unauthenticated') {
+            console.warn(`[Supabase] Sem sessão ao ler '${tableName}' (${compKey}). Não trato como pasta vazia.`);
+            const localOnly = stripSeedDocs(storage.get(storageKey) || []);
+            return composeVisibleRows(
+              localOnly,
+              pendingAtReadStart.upserts,
+              pendingAtReadStart.deletes,
+              localOnly
+            );
+          }
+
           const records = mapSupabaseRows(data);
           const initialized = hasSeedMeta(records) || data.length > 0;
           const cleanRecords = stripSeedDocs(records);
@@ -471,7 +525,7 @@ export const db = {
             const missingRemote = safeRecords.filter((row) =>
               row?.id && !remoteIds.has(String(row.id)) && !pendingIds.has(String(row.id))
             );
-            if (missingRemote.length) {
+            if (hasAuthUser && missingRemote.length) {
               this.upsert(tableName, compKey, missingRemote).catch((e) =>
                 console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
               );
@@ -479,13 +533,13 @@ export const db = {
             return safeRecords;
           }
 
-          if (!demo) {
+          if (decision === 'empty-authenticated') {
             console.warn(`[Supabase] Tabela '${tableName}' vazia na nuvem para a empresa '${compKey}'. Preservando estado local.`);
             const localData = storage.get(storageKey) || [];
             return stripSeedDocs(localData);
           }
 
-          const initialData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
+          const initialData = DEMO_TABLE_DATA[tableName] || [];
           storage.set(storageKey, initialData);
           if (initialData.length > 0) {
             this.upsert(tableName, compKey, initialData).catch((e) =>
@@ -1022,11 +1076,54 @@ export const userService = {
   },
 
   async getAll(companyId?: string): Promise<User[]> {
+    const supabase = getSupabase();
+    if (supabase && typeof window !== 'undefined') {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (accessToken) {
+          const response = await fetch('/api/users/list', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok && Array.isArray(payload?.users)) {
+            return payload.users as User[];
+          }
+        }
+      } catch (err) {
+        console.warn('[USUÁRIOS] Falha ao listar equipe no servidor, usando pasta local:', err);
+      }
+    }
     return await db.getTable('users', resolveCompanyKey(companyId));
   },
 
-  async saveUser(user: User) {
-    await db.upsert('users', resolveCompanyKey(user.companyId), user);
+  async saveUser(user: User & { newPassword?: string }) {
+    const { newPassword, ...userWithoutPassword } = user as any;
+    await db.upsert('users', resolveCompanyKey(user.companyId), userWithoutPassword);
+
+    // If a newPassword was set, call the invite API (which uses Admin SDK) to reset it
+    if (newPassword && newPassword.length >= 6) {
+      const supabase = getSupabase();
+      if (supabase && typeof window !== 'undefined') {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          if (accessToken) {
+            fetch('/api/users/invite', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`
+              },
+              body: JSON.stringify({ ...userWithoutPassword, password: newPassword })
+            }).catch((err) => console.warn('[USUÁRIOS] Falha ao redefinir senha:', err));
+          }
+        } catch (err) {
+          console.warn('[USUÁRIOS] Erro ao redefinir senha:', err);
+        }
+      }
+    }
+
     return user;
   },
 

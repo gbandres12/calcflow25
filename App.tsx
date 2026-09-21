@@ -54,9 +54,9 @@ import {
   INITIAL_COST_CENTERS,
   COMPANY_INFO
 } from './constants';
-import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
+import { financeService, userService, inventoryService, orderService, db, isDemoCompany, waitForAuthUser } from './services/dataService';
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
-import { toPublicUser, isDemoEmail } from './services/authLogic';
+import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
@@ -239,19 +239,11 @@ const App: React.FC = () => {
       const epoch = dataEpochRef.current;
       setSyncing(true);
       try {
-        const supabase = getSupabase();
-        if (supabase) {
-          try {
-            await supabase.auth.getSession();
-          } catch {}
+        if (!isDemoCompany(activeCompanyId)) {
+          await waitForAuthUser(2500);
         }
 
-        const [
-          savedTxs, savedInv, savedCust, 
-          savedOrders, savedMachines, savedStore, 
-          savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers, savedTransportadores
-        ] = await Promise.all([
+        const fetchAll = () => Promise.all([
           financeService.getTransactions(activeCompanyId),
           inventoryService.getInventory(activeCompanyId),
           db.getTable('customers', activeCompanyId),
@@ -267,6 +259,19 @@ const App: React.FC = () => {
           db.getTable('transfers', activeCompanyId),
           db.getTable('transportadores', activeCompanyId)
         ]);
+
+        let bundle = await fetchAll();
+        if (!isDemoCompany(activeCompanyId) && Array.isArray(bundle[3]) && bundle[3].length === 0) {
+          await waitForAuthUser(1500);
+          bundle = await fetchAll();
+        }
+
+        const [
+          savedTxs, savedInv, savedCust, 
+          savedOrders, savedMachines, savedStore, 
+          savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
+          savedCategories, savedUsers, savedTransfers, savedTransportadores
+        ] = bundle;
 
         if (epoch !== dataEpochRef.current) return;
 
@@ -626,14 +631,15 @@ const App: React.FC = () => {
     return publicUser;
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
+  const handleUpdateUser = (updatedUser: User & { newPassword?: string }) => {
+    const { newPassword, ...rest } = updatedUser as any;
     const tagged = {
-      ...updatedUser,
-      email: (updatedUser.email || '').trim().toLowerCase(),
-      companyId: updatedUser.companyId || activeCompanyId
+      ...rest,
+      email: (rest.email || '').trim().toLowerCase(),
+      companyId: rest.companyId || activeCompanyId
     };
     setUsers(prev => prev.map(u => u.id === tagged.id ? toPublicUser(tagged) : u));
-    userService.saveUser(tagged);
+    userService.saveUser({ ...tagged, ...(newPassword ? { newPassword } : {}) });
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -990,9 +996,7 @@ const App: React.FC = () => {
     isActive: true
   };
 
-  const displayUsers = activeCompanyId === 'matriz-demo' 
-    ? users 
-    : users.filter(u => u.companyId === currentUser?.companyId || u.companyId === activeCompanyId || u.id === currentUser?.id || u.email === currentUser?.email);
+  const displayUsers = visibleCompanyUsers(users, currentUser);
 
   return (
     <div className="cf-app-shell min-h-screen flex flex-col lg:flex-row">

@@ -1,5 +1,5 @@
 import { getAdminSupabase, getAdminSupabaseConfigError } from './supabaseAdmin.js';
-import { pickAdminMembership, MembershipRow } from '../../services/membershipCompany.js';
+import { pickAdminMembership, pickMembershipCompanyId, MembershipRow } from '../../services/membershipCompany.js';
 
 export const ADMIN_ROLE = 'Administrador';
 
@@ -9,7 +9,7 @@ export function getBearerToken(req: any): string | null {
   return match?.[1] || null;
 }
 
-export async function requireCompanyAdmin(req: any, res: any) {
+async function loadCompanyContext(req: any, res: any, forbiddenMessage: string) {
   const token = getBearerToken(req);
   const admin = getAdminSupabase();
   if (!admin) {
@@ -33,24 +33,55 @@ export async function requireCompanyAdmin(req: any, res: any) {
     .eq('user_id', authData.user.id);
 
   if (membershipError || !Array.isArray(memberships) || memberships.length === 0) {
-    res.status(403).json({ error: 'Apenas administradores da empresa podem gerir acessos.' });
+    res.status(403).json({ error: forbiddenMessage });
     return null;
   }
 
+  return { admin, authData, memberships: memberships as MembershipRow[] };
+}
+
+export async function requireCompanyAccess(req: any, res: any) {
+  const loaded = await loadCompanyContext(req, res, 'A conta autenticada não está vinculada a uma empresa.');
+  if (!loaded) return null;
+
   const preferred =
     String(req.body?.companyId || req.query?.companyId || '').trim() ||
-    String(authData.user.user_metadata?.companyId || '').trim();
-  const membership = pickAdminMembership(memberships as MembershipRow[], preferred);
+    String(loaded.authData.user.user_metadata?.companyId || '').trim();
+  const companyId = pickMembershipCompanyId(loaded.memberships, preferred);
+  const membership = loaded.memberships.find((row) => row.company_id === companyId);
+  if (!companyId || !membership) {
+    res.status(403).json({ error: 'A conta autenticada não está vinculada a uma empresa.' });
+    return null;
+  }
+
+  return {
+    admin: loaded.admin,
+    userId: loaded.authData.user.id,
+    companyId,
+    role: membership.role,
+    email: loaded.authData.user.email || '',
+    metadataCompanyId: String(loaded.authData.user.user_metadata?.companyId || '')
+  };
+}
+
+export async function requireCompanyAdmin(req: any, res: any) {
+  const loaded = await loadCompanyContext(req, res, 'Apenas administradores da empresa podem gerir acessos.');
+  if (!loaded) return null;
+
+  const preferred =
+    String(req.body?.companyId || req.query?.companyId || '').trim() ||
+    String(loaded.authData.user.user_metadata?.companyId || '').trim();
+  const membership = pickAdminMembership(loaded.memberships, preferred);
   if (!membership || membership.role !== ADMIN_ROLE) {
     res.status(403).json({ error: 'Apenas administradores da empresa podem gerir acessos.' });
     return null;
   }
 
   return {
-    admin,
-    userId: authData.user.id,
+    admin: loaded.admin,
+    userId: loaded.authData.user.id,
     companyId: membership.company_id,
-    email: authData.user.email || '',
-    metadataCompanyId: String(authData.user.user_metadata?.companyId || '')
+    email: loaded.authData.user.email || '',
+    metadataCompanyId: String(loaded.authData.user.user_metadata?.companyId || '')
   };
 }

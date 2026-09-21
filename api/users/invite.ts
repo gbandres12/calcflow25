@@ -119,7 +119,9 @@ export default async function handler(req: any, res: any) {
     try {
       await ensureMembership(context.admin, context.companyId, existingAuth.id, role);
       await upsertProfile(context.admin, context.companyId, profile);
-      await context.admin.auth.admin.updateUserById(existingAuth.id, {
+
+      // Build the update payload for Auth
+      const authUpdate: Record<string, any> = {
         user_metadata: {
           ...(existingAuth.user_metadata || {}),
           name,
@@ -127,7 +129,13 @@ export default async function handler(req: any, res: any) {
           companyName: profile.companyName,
           role
         }
-      });
+      };
+      // If admin provided a new password, update it directly via Admin API (no email required)
+      if (password && password.length >= 6) {
+        authUpdate.password = password;
+      }
+
+      await context.admin.auth.admin.updateUserById(existingAuth.id, authUpdate);
     } catch (error: any) {
       return res.status(500).json({ error: error?.message || 'Não foi possível atualizar o acesso existente.' });
     }

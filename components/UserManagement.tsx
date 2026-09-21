@@ -5,7 +5,8 @@ import {
   CheckCircle2, Sparkles, Building2, Phone, Briefcase,
   XCircle, Edit, X, ShieldCheck, 
   Search, Copy, Check, Send, Scale, Factory,
-  DollarSign, Package, Truck, Trash2, Sliders
+  DollarSign, Package, Truck, Trash2, Sliders, AlertCircle,
+  Eye, EyeOff, KeyRound
 } from 'lucide-react';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { TelegramAccessCard } from './TelegramAccessCard';
@@ -27,7 +28,7 @@ interface UserManagementProps {
   users: User[];
   currentUser?: User | null;
   onAddUser: (user: Omit<User, 'id'> & { password?: string }) => Promise<User> | User;
-  onUpdateUser: (user: User) => void;
+  onUpdateUser: (user: User & { newPassword?: string }) => void;
   onDeleteUser?: (id: string) => void;
   onOpenOnboarding?: () => void;
   onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
@@ -51,6 +52,11 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [invitePasswords, setInvitePasswords] = useState<Record<string, string>>({});
   const [savingUser, setSavingUser] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  const canManage = !currentUser || currentUser.role === UserRole.ADMIN || currentUser.permissions?.users !== false;
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -73,26 +79,58 @@ const UserManagement: React.FC<UserManagementProps> = ({
   });
 
   const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    String(u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (u.jobTitle && u.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingUser) {
-      const { password: _pw, ...rest } = formData;
-      onUpdateUser({ ...editingUser, ...rest });
-      handleClose();
+    setFormError(null);
+
+    const cleanName = formData.name.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    if (!cleanName) {
+      setFormError('Informe o nome completo do colaborador.');
       return;
     }
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setFormError('Informe um e-mail corporativo válido.');
+      return;
+    }
+
+    if (editingUser) {
+      const { password: _pw, ...rest } = formData;
+      try {
+        await onUpdateUser({
+          ...editingUser,
+          ...rest,
+          name: cleanName,
+          ...(newPassword.trim().length >= 6 ? { newPassword: newPassword.trim() } : {})
+        });
+        if (newPassword.trim().length >= 6) {
+          setInvitePasswords(prev => ({ ...prev, [editingUser.id]: newPassword.trim() }));
+        }
+        handleClose();
+      } catch (err: any) {
+        setFormError(err?.message || 'Falha ao atualizar dados do colaborador.');
+      }
+      return;
+    }
+
     const password = (formData.password || '').trim();
-    if (password.length < 6) return;
+    if (password.length < 6) {
+      setFormError('A senha de acesso deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
     setSavingUser(true);
     try {
       const created = await onAddUser({
         ...formData,
-        email: formData.email.trim().toLowerCase(),
+        name: cleanName,
+        email: cleanEmail,
         password,
         companyName: currentUser?.companyName || 'CalcárioFlow Mineração',
         onboardingCompleted: true,
@@ -102,12 +140,17 @@ const UserManagement: React.FC<UserManagementProps> = ({
         setInvitePasswords(prev => ({ ...prev, [created.id]: password }));
       }
       handleClose();
+    } catch (err: any) {
+      setFormError(err?.message || 'Não foi possível cadastrar o colaborador.');
     } finally {
       setSavingUser(false);
     }
   };
 
   const handleEdit = (user: User) => {
+    setFormError(null);
+    setNewPassword('');
+    setShowNewPassword(false);
     setEditingUser(user);
     setFormData({
       name: user.name,
@@ -124,6 +167,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const handleClose = () => {
     setIsModalOpen(false);
     setEditingUser(null);
+    setFormError(null);
+    setNewPassword('');
+    setShowNewPassword(false);
     setFormData({ 
       name: '', 
       email: '', 
@@ -137,11 +183,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   const buildAccessShareText = (user: User) => {
+    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://calcarioflow.com.br';
     const knownPassword = invitePasswords[user.id];
     const passwordLine = knownPassword
       ? `🔑 Senha: ${knownPassword}`
-      : `🔑 Senha: use "Esqueci minha senha" em ${window.location.origin} para definir uma nova senha`;
-    return `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n${passwordLine}\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${window.location.origin}`;
+      : `🔑 Senha: use "Esqueci minha senha" em ${appOrigin} para definir uma nova senha`;
+    return `*Acesso ao CalcárioFlow ERP*\nOlá ${user.name}, seu login na Usina está liberado:\n\n👤 E-mail: ${user.email}\n${passwordLine}\n📌 Função: ${user.jobTitle || user.role}\n🏢 Unidade: ${user.companyName || currentUser?.companyName || 'CalcárioFlow'}\n\n📱 Acesse pelo link:\n${appOrigin}`;
   };
 
   const handleCopyCredentials = (user: User) => {
@@ -200,12 +247,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
             </button>
           )}
 
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all text-sm shadow-sm active:scale-95"
-          >
-            <UserPlus size={16} /> Convidar Usuário
-          </button>
+          {canManage && (
+            <button 
+              onClick={() => { setFormError(null); setIsModalOpen(true); }}
+              className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all text-sm shadow-sm active:scale-95"
+            >
+              <UserPlus size={16} /> Convidar Usuário
+            </button>
+          )}
         </div>
       </header>
 
@@ -301,7 +350,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                            {user.name.charAt(0).toUpperCase()}
+                            {(user.name || user.email || '?').charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-900 leading-tight">{user.name}</p>
@@ -368,14 +417,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           >
                             {copiedId === user.id ? <Check size={14} /> : <Copy size={14} />}
                           </button>
-                          <button 
-                            onClick={() => handleEdit(user)} 
-                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all border border-slate-200" 
-                            title="Editar Dados e Permissões"
-                          >
-                            <Edit size={14} />
-                          </button>
-                          {onDeleteUser && (
+                          {canManage && (
+                            <button 
+                              onClick={() => handleEdit(user)} 
+                              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all border border-slate-200" 
+                              title="Editar Dados e Permissões"
+                            >
+                              <Edit size={14} />
+                            </button>
+                          )}
+                          {onDeleteUser && canManage && user.id !== currentUser?.id && (
                             <button 
                               onClick={() => {
                                 setUserToDelete(user);
@@ -413,6 +464,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
              </div>
 
              <form onSubmit={handleSubmit} className="space-y-5">
+                {formError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0 text-rose-500" />
+                    <span>{formError}</span>
+                  </div>
+                )}
+
                 {/* Perfis Rápidos Pré-configurados */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Modelos Rápidos de Cargo</label>
@@ -485,11 +543,15 @@ const UserManagement: React.FC<UserManagementProps> = ({
                    <input 
                      required 
                      type="email" 
+                     disabled={Boolean(editingUser)}
                      value={formData.email} 
                      onChange={e => setFormData({...formData, email: e.target.value})} 
-                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm" 
+                     className={`w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm ${editingUser ? 'bg-slate-100 cursor-not-allowed text-slate-500' : ''}`} 
                      placeholder="operador.balanca@usina.com.br" 
                    />
+                   {editingUser && (
+                     <p className="text-[10px] text-slate-400">O e-mail de acesso é a credencial de login e não pode ser alterado diretamente.</p>
+                   )}
                 </div>
 
                 {!editingUser && (
@@ -506,6 +568,44 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       placeholder="Mínimo 6 caracteres"
                     />
                     <p className="text-[10px] text-slate-500">Essa senha só aparece no WhatsApp e na cópia se o convite for enviado nesta sessão. Depois, o colaborador usa “Esqueci minha senha”.</p>
+                  </div>
+                )}
+
+                {/* Redefinir senha – só aparece no modo de edição */}
+                {editingUser && (
+                  <div className="border border-amber-200 bg-amber-50/60 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <KeyRound size={15} className="text-amber-600" />
+                      <span className="text-xs font-black text-amber-900 uppercase tracking-wide">Redefinir Senha do Usuário</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 font-medium">
+                      Como administrador, você pode definir uma nova senha diretamente — sem necessidade de e-mail de recuperação.
+                      Deixe em branco para não alterar a senha atual.
+                    </p>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        className="w-full p-2.5 pr-10 bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-500 font-medium text-sm"
+                        placeholder="Nova senha (mín. 6 caracteres) — opcional"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(v => !v)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {newPassword.length > 0 && newPassword.length < 6 && (
+                      <p className="text-[11px] text-rose-600 font-bold">A senha deve ter pelo menos 6 caracteres.</p>
+                    )}
+                    {newPassword.trim().length >= 6 && (
+                      <p className="text-[11px] text-emerald-700 font-bold">✓ Nova senha será aplicada ao salvar.</p>
+                    )}
                   </div>
                 )}
 
@@ -557,12 +657,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <label className="text-xs font-bold text-slate-700">Status da Conta</label>
                       <select 
                         value={formData.status} 
+                        disabled={editingUser?.id === currentUser?.id}
                         onChange={e => setFormData({...formData, status: e.target.value as any})} 
-                        className="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-medium text-xs outline-none"
+                        className={`w-full p-2.5 bg-white border border-slate-300 rounded-lg font-medium text-xs outline-none ${editingUser?.id === currentUser?.id ? 'bg-slate-100 cursor-not-allowed text-slate-500' : ''}`}
                       >
                          <option value="Ativo">Ativo</option>
                          <option value="Inativo">Inativo / Bloqueado</option>
                       </select>
+                      {editingUser?.id === currentUser?.id && (
+                        <p className="text-[10px] text-slate-400">Você não pode inativar a sua própria conta ativa em uso.</p>
+                      )}
                    </div>
                 </div>
 

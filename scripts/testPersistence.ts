@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://qbnmtimnurbciuzqtlxd.supabase.co';
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibm10aW1udXJiY2l1enF0bHhkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzkyNTQ2OSwiZXhwIjoyMTAzNTAxNDY5fQ.Vkl3mQ5suqn0W4qeeGjJssf8_Q9PQXvT7X40ApOfvF8';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibm10aW1udXJiY2l1enF0bHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjU0NjksImV4cCI6MjEwMzUwMTQ2OX0.YiQW6pCXaAk2FYfiuXPtbFyXiHw_wMObO6FZdGBB4og';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
+const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  throw new Error('Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no ambiente. Não grave chaves no repositório.');
+}
 
 const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-const anonClient = createClient(SUPABASE_URL, ANON_KEY);
+const anonClient = ANON_KEY ? createClient(SUPABASE_URL, ANON_KEY) : adminClient;
 
 const TEST_COMPANY_ID = 'comp-1788898385141';
 const TEST_PROBE_ID = `audit-test-${Date.now()}`;
