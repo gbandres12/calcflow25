@@ -26,6 +26,21 @@ export function isDraftNfe(nfe: Pick<SaleOrderLinkedNfe, 'nfeStatus'> | null | u
   return nfe?.nfeStatus === 'rascunho';
 }
 
+/** NF-e avulsa / clone NFA: documento fiscal, não pedido comercial nem recebimento. */
+export function isFiscalOnlyOrder(
+  order: Pick<SaleOrder, 'isAvulsa' | 'reference'> | null | undefined
+): boolean {
+  if (!order) return false;
+  if (order.isAvulsa) return true;
+  const ref = String(order.reference || '');
+  return ref.startsWith('NFA-') || ref.includes(AVULSA_REF_SEP);
+}
+
+/** Valor realmente recebido: só recibos emitidos no pedido, nunca a NF-e nem parcela marcada no formulário. */
+export function orderReceiptsPaid(order: Pick<SaleOrder, 'receipts'> | null | undefined): number {
+  return (order?.receipts || []).reduce((sum, receipt) => sum + (Number(receipt?.amount) || 0), 0);
+}
+
 function nfeCountsTowardInvoiced(nfe: SaleOrderLinkedNfe): boolean {
   if (nfe.tipo === 'devolucao') return false;
   return nfe.nfeStatus === 'autorizada' || nfe.nfeStatus === 'processando';

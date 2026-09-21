@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
-    "test": "node --import tsx --test services/persistMerge.test.ts services/nfeStatusMap.test.ts services/membershipCompany.test.ts services/tenantMerge.test.ts services/nfeRecover.test.ts services/nfeDuplicate.test.ts services/quickRomaneio.test.ts services/domain/telegramWrites.test.ts services/domain/telegramNfe.test.ts services/domain/salesOrderPdf.test.ts services/domain/nfeDraftPdf.test.ts services/agent/search.test.ts services/agent/tools.test.ts",
+    "test": "node --import tsx --test services/persistMerge.test.ts services/nfeStatusMap.test.ts services/membershipCompany.test.ts services/tenantMerge.test.ts services/nfeRecover.test.ts services/nfeDuplicate.test.ts services/quickRomaneio.test.ts services/domain/telegramWrites.test.ts services/domain/telegramNfe.test.ts services/domain/salesOrderPdf.test.ts services/domain/nfeDraftPdf.test.ts services/saleFinance.test.ts services/agent/search.test.ts services/agent/tools.test.ts",
     "testsprite:mcp": "testsprite-mcp-plugin"
   },
   "dependencies": {

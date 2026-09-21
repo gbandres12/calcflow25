@@ -58,7 +58,7 @@ import { financeService, userService, inventoryService, orderService, db, isDemo
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
-import { hasAuthorizedFiscalDocument } from './services/saleNfe';
+import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 
 const App: React.FC = () => {
@@ -642,24 +642,31 @@ const App: React.FC = () => {
 
   // Pedidos e Vendas
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'reference'>) => {
-    const isAvulsa = Boolean((orderData as SaleOrder).isAvulsa);
-    const reference = isAvulsa ? nextAvulsaReference(orders) : nextOrderReference(orders);
+    const incoming = orderData as SaleOrder;
+    const fiscalOnly = isFiscalOnlyOrder(incoming);
+    const reference = incoming.reference
+      || (fiscalOnly ? nextAvulsaReference(orders) : nextOrderReference(orders));
     const newOrder: SaleOrder = {
-      ...orderData,
-      id: newId('ord'),
+      ...incoming,
+      id: incoming.id || newId('ord'),
       reference,
       companyId: activeCompanyId,
-      sellerName: orderData.sellerName || currentUser?.name || 'Vendedor'
+      sellerName: incoming.sellerName || currentUser?.name || 'Vendedor',
+      ...(fiscalOnly ? { isAvulsa: true, payments: [] } : {})
     };
-    setOrders(prev => [...prev, newOrder]);
+    setOrders(prev => {
+      const exists = prev.some(o => o.id === newOrder.id);
+      return exists ? prev.map(o => o.id === newOrder.id ? newOrder : o) : [...prev, newOrder];
+    });
     persistCloud('sales_orders', newOrder);
-    if (!isAvulsa && newOrder.status === OrderStatus.FINALIZED) {
+    if (!fiscalOnly && newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }
   };
 
   const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
+    if (isFiscalOnlyOrder(order)) return;
     (Array.isArray(order.items) ? order.items : []).forEach(item => {
       if (!item?.productId) return;
       processStockChange(String(item.productId), -(Number(item.quantity) || 0));
@@ -667,7 +674,11 @@ const App: React.FC = () => {
     const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
     const financialSchedule: SalePayment[] = [
-      ...(payments || []),
+      ...(payments || []).map((payment) => ({
+        ...payment,
+        paidAmount: 0,
+        status: TransactionStatus.PENDENTE
+      })),
       ...(balanceWithoutSchedule > 0.01 ? [{
         id: newId('pay'),
         amount: balanceWithoutSchedule,
@@ -680,36 +691,20 @@ const App: React.FC = () => {
     ];
 
     financialSchedule.forEach(payment => {
-      let actualPaid = 0;
-      if (payment.status === TransactionStatus.CONFIRMADO || payment.status === TransactionStatus.PAGO) {
-        actualPaid = payment.amount;
-      } else if (payment.status === TransactionStatus.PARCIAL) {
-        actualPaid = payment.paidAmount || 0;
-      }
-
       const accId = payment.accountId || accounts[0]?.id || 'acc-1';
-      const txId = newId('tx');
       handleAddTransaction({
         accountId: accId,
         costCenterId: 'cc4',
         date: payment.date,
         type: TransactionType.SALE,
-        status: payment.status,
+        status: TransactionStatus.PENDENTE,
         description: `Venda Faturada #${order.reference}`,
         category: 'Venda Calcário Moído Granel',
         amount: payment.amount,
-        paidAmount: actualPaid,
+        paidAmount: 0,
         customerId: order.customerId,
         orderId: order.id,
-        payments: actualPaid > 0 ? [{
-          id: newId('pmt'),
-          transactionId: txId,
-          amount: actualPaid,
-          paymentDate: payment.date,
-          accountId: accId,
-          paymentMethod: payment.paymentMethod || 'PIX',
-          notes: `Recebimento da venda #${order.reference}`
-        }] : []
+        payments: []
       });
     });
     setCustomers(prev => {
@@ -849,7 +844,11 @@ const App: React.FC = () => {
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-    if (originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED && !tagged.isAvulsa) {
+    if (
+      originalOrder.status === OrderStatus.BUDGET
+      && tagged.status === OrderStatus.FINALIZED
+      && !isFiscalOnlyOrder(tagged)
+    ) {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }

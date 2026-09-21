@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company, TransactionStatus } from '../types';
+import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company } from '../types';
+import { orderReceiptsPaid } from '../services/saleNfe';
 import { CheckCircle } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 
@@ -20,14 +21,8 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   onSavePayment,
   onClose
 }) => {
-  const receiptsPaid = (order.receipts || []).reduce((acc, r) => acc + (r.amount || 0), 0);
-  const scheduledPaid = (order.payments || []).reduce((acc, p) => (
-    p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO
-      ? acc + p.amount
-      : acc + (p.paidAmount || 0)
-  ), 0);
-  const totalPaidSoFar = Math.max(receiptsPaid, scheduledPaid);
-  const currentDebt = Math.max(0, order.total - totalPaidSoFar);
+  const totalPaidSoFar = orderReceiptsPaid(order);
+  const currentDebt = Math.max(0, Number(order.total || 0) - totalPaidSoFar);
 
   const [amount, setAmount] = useState(currentDebt > 0 ? (currentDebt > 5000 ? '5000' : currentDebt.toString()) : '0');
   const [paymentType, setPaymentType] = useState<'ENTRADA' | 'PARCELA' | 'ABATIMENTO'>(

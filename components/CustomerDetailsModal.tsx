@@ -7,6 +7,7 @@ import {
   ChevronRight, ShieldAlert, BadgePercent, Scale, Edit3
 } from 'lucide-react';
 import { calculateOrderPayment } from './SalesOrders';
+import { isFiscalOnlyOrder } from '../services/saleNfe';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { COMPANY_INFO } from '../constants';
 import { FlowSheet } from './ui/FlowSheet';
@@ -38,7 +39,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
     if (!customer) return null;
 
     const safeOrders = Array.isArray(orders) ? orders.filter(Boolean) : [];
-    const customerOrders = safeOrders.filter(o => o && String(o.customerId) === String(customer.id));
+    const customerOrders = safeOrders.filter(o => o && String(o.customerId) === String(customer.id) && !isFiscalOnlyOrder(o));
     const finalizedOrders = customerOrders.filter(o => o && o.status === OrderStatus.FINALIZED);
     const budgetOrders = customerOrders.filter(o => o && o.status === OrderStatus.BUDGET);
 

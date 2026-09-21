@@ -33,7 +33,7 @@ import { SalesOrderPdfModal } from './SalesOrderPdfModal';
 import { FlowSheet } from './ui/FlowSheet';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
-import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes } from '../services/saleNfe';
+import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes, isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
 import {
@@ -72,7 +72,7 @@ interface SalesOrdersProps {
 export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE';
 
 export const calculateOrderPayment = (order?: SaleOrder | null) => {
-  if (!order) {
+  if (!order || isFiscalOnlyOrder(order)) {
     return {
       totalPaid: 0,
       remainingDebt: 0,
@@ -82,15 +82,7 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
   }
 
   const orderTotal = Number(order.total) || 0;
-  const receiptsPaid = (order.receipts || []).reduce((s, r) => s + (Number(r?.amount) || 0), 0);
-  const scheduledPaid = (order.payments || []).reduce((s, p) => {
-    if (!p) return s;
-    return (p.status === TransactionStatus.CONFIRMADO || p.status === TransactionStatus.PAGO)
-      ? s + (Number(p.amount) || 0)
-      : s + (Number(p.paidAmount) || 0);
-  }, 0);
-
-  const totalPaid = Math.max(receiptsPaid, scheduledPaid);
+  const totalPaid = orderReceiptsPaid(order);
   const remainingDebt = Math.max(0, orderTotal - totalPaid);
   const financialProgress = orderTotal > 0 ? Math.min(100, (totalPaid / orderTotal) * 100) : 0;
 
@@ -162,6 +154,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     if (!Array.isArray(rawOrders)) return [];
     return rawOrders
       .filter((item): item is SaleOrder => Boolean(item && typeof item === 'object' && item.id))
+      .filter((item) => !isFiscalOnlyOrder(item))
       .map(item => ({
         ...item,
         id: String(item.id),
@@ -2479,12 +2472,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             const isDraft =
               newOrder.nfeStatus === 'rascunho' ||
               listDraftNfes(newOrder).length > 0;
-            const exists = orders.some((o) => o.id === newOrder.id);
-            if (isDraft || exists) {
-              onUpdateOrder(newOrder);
-            } else {
-              onAddOrder(newOrder);
-            }
+            onUpdateOrder(newOrder);
             setDuplicateDraft(null);
             if (!isDraft) {
               const last = listOrderNfes(newOrder).filter((n) => !isDraftNfe(n)).slice(-1)[0]

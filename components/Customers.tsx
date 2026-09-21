@@ -11,6 +11,7 @@ import {
 import { CustomerDetailsModal } from './CustomerDetailsModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
 import { calculateOrderPayment } from './SalesOrders';
+import { isFiscalOnlyOrder } from '../services/saleNfe';
 
 interface CustomersProps {
   customers: Customer[];
@@ -62,6 +63,7 @@ const Customers: React.FC<CustomersProps> = ({
 
     safeOrders.forEach(order => {
       if (!order || !order.customerId) return;
+      if (isFiscalOnlyOrder(order)) return;
       if (!statsMap[order.customerId]) {
         statsMap[order.customerId] = { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
       }

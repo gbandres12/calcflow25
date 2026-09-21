@@ -39,7 +39,6 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   transportadores = [],
   onAddTransportador,
   onUpdateOrder,
-  onAddOrder,
   onNavigate,
   canConfigure = false
 }) => {
@@ -487,14 +486,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
             const isDraft =
               newOrder.nfeStatus === 'rascunho' ||
               listDraftNfes(newOrder).length > 0;
-            const exists = safeOrders.some((o) => o.id === newOrder.id);
-            if (isDraft || exists) {
-              onUpdateOrder(newOrder);
-            } else if (onAddOrder) {
-              onAddOrder(newOrder);
-            } else {
-              onUpdateOrder(newOrder);
-            }
+            onUpdateOrder(newOrder);
             setShowAvulsaModal(false);
             setDuplicateDraft(null);
             if (!isDraft) {

@@ -6,6 +6,7 @@ import {
 import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { OnboardingChecklist } from './OnboardingChecklist';
+import { isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -36,43 +37,46 @@ const Dashboard: React.FC<DashboardProps> = ({
   user, onNavigate, onOpenOnboardingModal
 }) => {
   const today = todayISO();
-  const romaneios = useMemo(() => orders.filter((o) =>
+  const commercialOrders = useMemo(
+    () => orders.filter((o) => !isFiscalOnlyOrder(o)),
+    [orders]
+  );
+  const romaneios = useMemo(() => commercialOrders.filter((o) =>
     o.status === OrderStatus.FINALIZED && (o.withdrawalStatus === 'aguardando' || o.withdrawalStatus === 'parcial' || !o.withdrawalStatus)
-  ).slice(0, 7), [orders]);
+  ).slice(0, 7), [commercialOrders]);
   const remessas = useMemo(() =>
     transfers.filter((t) => t.status === 'EM_TRANSITO').slice(0, 5), [transfers]);
   const moido = stockOf(inventory, ['moido', 'moído', 'moido']);
   const britado = stockOf(inventory, ['britado']);
-  const pendingNfe = orders.filter((o) =>
+  const pendingNfe = commercialOrders.filter((o) =>
     o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando' || o.nfeStatus === 'rascunho')
   ).slice(0, 5);
-  const rejectedNfe = orders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
+  const rejectedNfe = commercialOrders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
   const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);
-  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
-  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + Number(t.paidAmount || t.amount || 0), 0);
+  const cashIn = (t: Transaction) => Number(t.paidAmount || 0);
+  const cashOut = (t: Transaction) => Number(t.paidAmount || 0);
+  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + cashIn(t), 0);
+  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + cashOut(t), 0);
   const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
   const saldoDia = saldoContas + dayTx.reduce((s, t) => {
-    const v = Number(t.paidAmount || t.amount || 0);
+    const v = Number(t.paidAmount || 0);
     return t.type === TransactionType.SALE ? s + v : s - v;
   }, 0);
   const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
   const strategic = useMemo(() => {
     const start = isoDaysAgo(29);
-    const finalized = orders.filter((o) => o.status === OrderStatus.FINALIZED && (o.date || '') >= start);
+    const finalized = commercialOrders.filter((o) => o.status === OrderStatus.FINALIZED && (o.date || '') >= start);
     const soldValue = finalized.reduce((sum, order) => sum + Number(order.total || 0), 0);
     const soldTons = finalized.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0);
-    const received = finalized.reduce((sum, order) => sum + (order.payments || []).reduce((paid, payment) => {
-      const amount = Number(payment.paidAmount ?? payment.amount ?? 0);
-      return paid + amount;
-    }, 0), 0);
+    const received = finalized.reduce((sum, order) => sum + orderReceiptsPaid(order), 0);
     const openReceivable = Math.max(0, soldValue - received);
     const chart = Array.from({ length: 7 }, (_, index) => {
       const date = isoDaysAgo(6 - index);
       const daily = transactions.filter((tx) => (tx.paymentDate || tx.date || '').slice(0, 10) === date);
       const receivedDay = daily.filter((tx) => tx.type === TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
+        .reduce((sum, tx) => sum + Number(tx.paidAmount || 0), 0);
       const spentDay = daily.filter((tx) => tx.type !== TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || tx.amount || 0), 0);
+        .reduce((sum, tx) => sum + Number(tx.paidAmount || 0), 0);
       return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: receivedDay, saidas: spentDay };
     });
     return {
@@ -83,12 +87,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       averageTicket: finalized.length ? soldValue / finalized.length : 0,
       chart
     };
-  }, [orders, transactions]);
+  }, [commercialOrders, transactions]);
 
   return (
     <div className="space-y-4">
       {user && (
-        <OnboardingChecklist user={user} customers={customers} orders={orders} transactions={transactions} accounts={accounts} onNavigate={onNavigate} onOpenOnboardingModal={onOpenOnboardingModal} />
+        <OnboardingChecklist user={user} customers={customers} orders={commercialOrders} transactions={transactions} accounts={accounts} onNavigate={onNavigate} onOpenOnboardingModal={onOpenOnboardingModal} />
       )}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>

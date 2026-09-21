@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador } from '../types';
+import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, NfeStatus, FreteInfo, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { assembleAutoInfCpl } from '../services/nfeComplementares';
@@ -345,14 +345,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     frete: { ...frete, modalidade: freteModalidadeNum as FreteInfo['modalidade'], valor: shippingVal },
     status: OrderStatus.FINALIZED,
     paymentMethod: paymentMethod === 'Sem Pagamento' ? 'Outros' : paymentMethod,
-    payments: [{
-      id: `pay-${Date.now()}`,
-      amount: total,
-      date: new Date().toISOString().split('T')[0],
-      status: TransactionStatus.PAGO,
-      accountId: 'acc-1',
-      description: 'Pagamento NF-e Avulsa'
-    }],
+    payments: [],
+    receipts: [],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
   }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl]);
