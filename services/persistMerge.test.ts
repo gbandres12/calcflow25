@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   applyPendingDeletes,
   hasSeedMeta,
+  keepUnseenLocalRecords,
   mergeRecordsById,
   remainingPendingAfterConfirm,
   remainingPendingDeletes,
@@ -18,6 +19,29 @@ describe('persistência: merge de cache pendente com o banco', () => {
     const merged = mergeRecordsById(remote, pending);
     assert.equal(merged.length, 2);
     assert.ok(merged.some((row) => row.id === 'cust-2' && row.name === 'Novo no navegador'));
+  });
+
+  it('um fetch atrasado não apaga cliente/transportador recém-criado no cache', () => {
+    const remote = [{ id: 'cust-1', name: 'Antigo' }];
+    const localCache = [
+      { id: 'cust-1', name: 'Antigo' },
+      { id: 'cust-novo', name: 'Acabei de cadastrar' }
+    ];
+    const merged = mergeRecordsById(remote, localCache);
+    assert.ok(merged.some((row) => row.id === 'cust-novo'));
+  });
+
+  it('um fetch atrasado não apaga cliente/transportador recém-criado na tela', () => {
+    const remote = [{ id: 'cust-1', name: 'Antigo' }];
+    const local = [
+      { id: 'cust-1', name: 'Antigo' },
+      { id: 'cust-novo', name: 'Acabei de cadastrar' },
+      { id: 'transp-1', nome: 'Caminhoneiro novo' }
+    ];
+    const kept = keepUnseenLocalRecords(remote, local);
+    assert.ok(kept.some((row) => row.id === 'cust-novo'));
+    assert.ok(kept.some((row) => row.id === 'transp-1'));
+    assert.equal(kept.filter((row) => row.id === 'cust-1').length, 1);
   });
 
   it('a edição local mais recente vence o registro antigo da nuvem', () => {

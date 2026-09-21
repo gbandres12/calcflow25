@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -55,6 +55,7 @@ import {
   COMPANY_INFO
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
+import { keepUnseenLocalRecords } from './services/persistSeed';
 import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument } from './services/saleNfe';
@@ -128,7 +129,10 @@ const App: React.FC = () => {
     }
   };
 
+  const dataEpochRef = useRef(0);
+
   const persistCloud = (tableName: string, record: any, options?: { required?: boolean }) => {
+    dataEpochRef.current += 1;
     return db.upsert(tableName, activeCompanyId, record)
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
@@ -145,6 +149,7 @@ const App: React.FC = () => {
   };
 
   const persistDelete = (tableName: string, id: string) => {
+    dataEpochRef.current += 1;
     db.delete(tableName, activeCompanyId, id)
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
@@ -179,6 +184,7 @@ const App: React.FC = () => {
     if (!currentUser) return;
 
     const loadAllData = async () => {
+      const epoch = dataEpochRef.current;
       setSyncing(true);
       try {
         const [
@@ -203,24 +209,25 @@ const App: React.FC = () => {
           db.getTable('transportadores', activeCompanyId)
         ]);
 
+        if (epoch !== dataEpochRef.current) return;
+
+        const normalizeCustomers = (rows: any[]): Customer[] =>
+          (Array.isArray(rows) ? rows : [])
+            .filter((c): c is Customer => Boolean(c && typeof c === 'object' && (c as Customer).id))
+            .map(c => ({
+              ...c,
+              id: String(c.id),
+              name: String(c.name || 'Cliente sem nome'),
+              document: String(c.document ?? ''),
+              email: String(c.email ?? ''),
+              phone: String(c.phone ?? ''),
+              totalSpent: Number(c.totalSpent) || 0
+            }));
+
         setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
         setInventory(Array.isArray(savedInv) ? savedInv : []);
-        setCustomers(
-          Array.isArray(savedCust)
-            ? savedCust
-                .filter((c): c is Customer => Boolean(c && typeof c === 'object' && (c as Customer).id))
-                .map(c => ({
-                  ...c,
-                  id: String(c.id),
-                  name: String(c.name || 'Cliente sem nome'),
-                  document: String(c.document ?? ''),
-                  email: String(c.email ?? ''),
-                  phone: String(c.phone ?? ''),
-                  totalSpent: Number(c.totalSpent) || 0
-                }))
-            : []
-        );
-        setOrders(Array.isArray(savedOrders) ? savedOrders : []);
+        setCustomers((prev) => keepUnseenLocalRecords(normalizeCustomers(savedCust), prev) as Customer[]);
+        setOrders((prev) => keepUnseenLocalRecords(Array.isArray(savedOrders) ? savedOrders : [], prev) as SaleOrder[]);
         setMachines(Array.isArray(savedMachines) ? savedMachines : []);
         setStoreItems(Array.isArray(savedStore) ? savedStore : []);
         setMaintenances(Array.isArray(savedMaint) ? savedMaint : []);
@@ -229,8 +236,14 @@ const App: React.FC = () => {
         setAccounts(Array.isArray(savedAccounts) ? savedAccounts : []);
         setCategories(Array.isArray(savedCategories) ? savedCategories : []);
         setUsers(Array.isArray(savedUsers) ? savedUsers : []);
-        setTransfers(Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : []);
-        setTransportadores(Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : []);
+        setTransfers((prev) => keepUnseenLocalRecords(
+          Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : [],
+          prev
+        ) as TransferShipment[]);
+        setTransportadores((prev) => keepUnseenLocalRecords(
+          Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : [],
+          prev
+        ) as Transportador[]);
 
         db.flushAllPending().catch((err) => {
           console.warn('[PERSISTÊNCIA] Reenvio da fila para o Supabase falhou:', err);

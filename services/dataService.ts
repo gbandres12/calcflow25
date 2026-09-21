@@ -275,9 +275,7 @@ const retryUnconfirmed = (
   const leftoverDeletes = remainingPendingDeletes(pendingDeletes, remoteRecords);
   pendingDeletes.filter((id) => !leftoverDeletes.includes(id)).forEach((id) => removePendingDelete(storageKey, id));
   if (unconfirmed.length) {
-    persistPendingUpserts(tableName, companyId, unconfirmed).then(() => {
-      confirmPendingUpserts(storageKey, unconfirmed);
-    }).catch((err) => {
+    persistPendingUpserts(tableName, companyId, unconfirmed).catch((err) => {
       console.warn(`[Supabase] Reenvio pendente de '${tableName}' falhou:`, err);
     });
   }
@@ -427,7 +425,12 @@ export const db = {
             ...pendingAtReadStart.deletes,
             ...getPendingDeleteIds(storageKey)
           ]));
-          const safeRecords = composeVisibleRows(cleanRecords, pendingUpserts, pendingDeletes);
+          const localCache = stripSeedDocs(storage.get(storageKey) || []);
+          const safeRecords = composeVisibleRows(
+            mergeRecordsById(cleanRecords, localCache),
+            pendingUpserts,
+            pendingDeletes
+          );
 
           if (initialized || cleanRecords.length > 0) {
             storage.set(storageKey, safeRecords);

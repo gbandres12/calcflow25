@@ -55,6 +55,16 @@ export const mergeRecordsById = (remoteRecords: any[], localRecords: any[]): any
   return Array.from(merged.values());
 };
 
+/** Mantém cadastros locais que um fetch atrasado da nuvem ainda não devolveu. */
+export const keepUnseenLocalRecords = (remoteRecords: any[], localRecords: any[]): any[] => {
+  const remote = stripSeedDocs(remoteRecords);
+  const remoteIds = new Set(remote.map((record) => String(record.id)));
+  const extras = stripSeedDocs(localRecords).filter(
+    (record) => record?.id && !remoteIds.has(String(record.id))
+  );
+  return extras.length ? [...remote, ...extras] : remote;
+};
+
 export const applyPendingDeletes = (records: any[], deletedIds: string[]): any[] => {
   if (!deletedIds?.length) return stripSeedDocs(records);
   const removed = new Set(deletedIds.map((id) => String(id)));
