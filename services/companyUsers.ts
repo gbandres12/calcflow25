@@ -1,4 +1,4 @@
-import { isAuthUserId, planUserDedupe, type AppRecordRow } from './tenantMerge';
+import { isAuthUserId, planUserDedupe, type AppRecordRow } from './tenantMerge.js';
 
 export type AuthUserInfo = {
   id: string;
