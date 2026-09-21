@@ -775,9 +775,13 @@ const App: React.FC = () => {
   const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean }) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
+    if (!originalOrder) {
+      setOrders(prev => [...prev, tagged]);
+      return persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
+    }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-    if (originalOrder && originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED) {
+    if (originalOrder.status === OrderStatus.BUDGET && tagged.status === OrderStatus.FINALIZED && !tagged.isAvulsa) {
       finalizeSale(tagged, tagged.payments || []);
       (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
     }

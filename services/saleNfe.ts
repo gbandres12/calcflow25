@@ -22,9 +22,47 @@ export function linkedIdFromAvulsaRef(reference?: string): string | undefined {
   return reference.split(AVULSA_REF_SEP)[1] || undefined;
 }
 
+export function isDraftNfe(nfe: Pick<SaleOrderLinkedNfe, 'nfeStatus'> | null | undefined): boolean {
+  return nfe?.nfeStatus === 'rascunho';
+}
+
 function nfeCountsTowardInvoiced(nfe: SaleOrderLinkedNfe): boolean {
   if (nfe.tipo === 'devolucao') return false;
   return nfe.nfeStatus === 'autorizada' || nfe.nfeStatus === 'processando';
+}
+
+export function listDraftNfes(order: SaleOrder): SaleOrderLinkedNfe[] {
+  return listOrderNfes(order).filter(isDraftNfe);
+}
+
+export function findDraftNfe(order: SaleOrder, tipo?: SaleNfeTipo): SaleOrderLinkedNfe | undefined {
+  return listDraftNfes(order).find((n) => (tipo ? n.tipo === tipo : true));
+}
+
+export function removeLinkedNfe(order: SaleOrder, linkedId: string): SaleOrder {
+  const nfes = (order.nfes || []).filter((n) => n.id !== linkedId && n.nfeId !== linkedId);
+  const removed = (order.nfes || []).find((n) => n.id === linkedId || n.nfeId === linkedId);
+  const next: SaleOrder = { ...order, nfes };
+  if (removed && removed.tipo !== 'avulsa' && order.nfeStatus === 'rascunho') {
+    return {
+      ...next,
+      nfeStatus: 'nao_emitida',
+      nfeId: undefined,
+      nfeChave: undefined,
+      nfeNumero: undefined,
+      nfeSerie: undefined,
+      nfeProtocolo: undefined,
+      nfeDanfeUrl: undefined,
+      nfeXmlUrl: undefined,
+      nfeEmissao: undefined,
+      nfeErro: undefined,
+      nfeNaturezaOperacao: undefined,
+      nfeInfCpl: undefined,
+      nfePayload: undefined,
+      nfeRawResponse: undefined,
+    };
+  }
+  return next;
 }
 
 export function nfeDocumentKey(
@@ -182,8 +220,14 @@ function extractHeaderNfe(order: SaleOrder): Partial<SaleOrderLinkedNfe> {
 export function upsertLinkedNfe(order: SaleOrder, linked: SaleOrderLinkedNfe): SaleOrder {
   const nfes = [...(order.nfes || [])];
   const idx = nfes.findIndex((n) => n.id === linked.id || (linked.nfeId && n.nfeId === linked.nfeId));
-  if (idx >= 0) nfes[idx] = { ...nfes[idx], ...linked };
-  else nfes.push(linked);
+  const preservedCreatedAt = idx >= 0 ? nfes[idx].createdAt : linked.createdAt;
+  const merged: SaleOrderLinkedNfe = {
+    ...(idx >= 0 ? nfes[idx] : {}),
+    ...linked,
+    createdAt: preservedCreatedAt || linked.createdAt || new Date().toISOString(),
+  };
+  if (idx >= 0) nfes[idx] = merged;
+  else nfes.push(merged);
 
   const next: SaleOrder = { ...order, nfes };
   if (linked.tipo !== 'avulsa') {
@@ -201,6 +245,8 @@ export function upsertLinkedNfe(order: SaleOrder, linked: SaleOrderLinkedNfe): S
       nfeErro: linked.nfeErro,
       nfeNaturezaOperacao: linked.nfeNaturezaOperacao,
       nfeInfCpl: linked.nfeInfCpl,
+      nfePayload: linked.nfePayload ?? order.nfePayload,
+      nfeReferenciaExterna: linked.reference || order.nfeReferenciaExterna,
     };
   }
   return next;

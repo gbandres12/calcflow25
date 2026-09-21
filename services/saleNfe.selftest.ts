@@ -8,6 +8,8 @@ import {
   remainingQuantityByProduct,
   saleItemKey,
   upsertLinkedNfe,
+  listDraftNfes,
+  isDraftNfe,
 } from './saleNfe';
 import { OrderStatus, SaleOrder } from '../types';
 
@@ -90,5 +92,24 @@ const nfaRow = {
 const deduped = dedupeEmittedNfeRows([nfaRow, pedRow]);
 if (deduped.length !== 1) throw new Error('lista fiscal deve mostrar uma linha por NF-e');
 if (deduped[0].order.reference !== 'PED-2026-0022') throw new Error('deve preferir o pedido PED e esconder o clone NFA');
+
+const withDraft = upsertLinkedNfe(order, {
+  id: 'nfp-draft-1',
+  tipo: 'pedido',
+  reference: order.reference,
+  items: order.items,
+  subtotal: order.subtotal,
+  discount: 0,
+  shipping: 0,
+  total: order.total,
+  nfeStatus: 'rascunho',
+  nfeNaturezaOperacao: 'Venda',
+  createdAt: '2026-09-18T12:00:00.000Z',
+});
+if (!isDraftNfe(withDraft.nfes![0])) throw new Error('Draft nao marcado como rascunho');
+if (listDraftNfes(withDraft).length !== 1) throw new Error('listDraftNfes falhou');
+const draftInvoiced = invoicedQuantityByProduct(withDraft).get(saleItemKey(order.items[0])) || 0;
+if (draftInvoiced !== 0) throw new Error(`Rascunho nao pode faturar qty, veio ${draftInvoiced}`);
+if (withDraft.nfeStatus !== 'rascunho') throw new Error('Header deveria ficar rascunho no pedido');
 
 console.log('saleNfe.selftest ok');

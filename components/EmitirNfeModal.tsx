@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { SaleOrder, SaleOrderItem, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
+import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
 import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
@@ -14,7 +14,7 @@ import { FreteNfeSection } from './FreteNfeSection';
 import { 
   X, Send, ShieldCheck, AlertCircle, CheckCircle2, 
   Building, User, FileText, Hash, MapPin, Truck, Sparkles, Settings,
-  Edit3, Save, Search, RefreshCw, Key, Check, Database
+  Edit3, Save, Search, RefreshCw, Key, Check, Database, Eye, ArrowLeft
 } from 'lucide-react';
 import { CompanyFiscalSettingsModal } from './CompanyFiscalSettingsModal';
 import { DatabaseStatusModal } from './DatabaseStatusModal';
@@ -29,6 +29,9 @@ interface EmitirNfeModalProps {
   company: Company;
   onClose: () => void;
   onSuccess: (updatedOrder: SaleOrder) => void;
+  onDraftSaved?: (updatedOrder: SaleOrder) => void;
+  draftNfe?: SaleOrderLinkedNfe;
+  initialStep?: 'edit' | 'preview';
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   devolutionChave?: string;
@@ -43,6 +46,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   company,
   onClose,
   onSuccess,
+  onDraftSaved,
+  draftNfe,
+  initialStep,
   transportadores = [],
   onAddTransportador,
   devolutionChave,
@@ -57,7 +63,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [draftSavedMsg, setDraftSavedMsg] = useState<string | null>(null);
+  const [step, setStep] = useState<'edit' | 'preview'>(
+    initialStep || (draftNfe?.nfeStatus === 'rascunho' ? 'preview' : 'edit')
+  );
+  const [draftLinkedId, setDraftLinkedId] = useState<string | null>(draftNfe?.id || null);
   const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
   const [quickApiKey, setQuickApiKey] = useState(config.apiKey || '');
   const [isSavingKey, setIsSavingKey] = useState(false);
@@ -85,11 +97,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [items, setItems] = useState<(SaleOrderItem & { maxQuantity?: number })[]>(() => {
     const remaining = remainingQuantityByProduct(order);
     const useRemaining = !isDevolucao && !isTransferencia;
-    return orderItems.map((it) => {
+    const sourceItems = draftNfe?.items?.length ? draftNfe.items : orderItems;
+    return sourceItems.map((it) => {
       const rem = remaining.get(saleItemKey(it));
-      const qty = useRemaining ? (rem ?? it.quantity) : it.quantity;
-      const ratio = it.quantity ? qty / it.quantity : 1;
-      const discount = (Number(it.discount) || 0) * ratio;
+      const qty = draftNfe?.items?.length
+        ? (Number(it.quantity) || 0)
+        : (useRemaining ? (rem ?? it.quantity) : it.quantity);
+      const orig = orderItems.find((o) => saleItemKey(o) === saleItemKey(it));
+      const origQty = Number(orig?.quantity) || Number(it.quantity) || 1;
+      const ratio = origQty ? qty / origQty : 1;
+      const discount = draftNfe?.items?.length
+        ? (Number(it.discount) || 0)
+        : (Number(orig?.discount ?? it.discount) || 0) * ratio;
       const unitPrice = Number(it.unitPrice) || 0;
       return {
         ...it,
@@ -104,13 +123,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   });
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
-    order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
+    draftNfe?.nfeNaturezaOperacao || order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
 
   // Frete / transporte (modFrete SEFAZ): sem frete (9) · CIF remetente (0) · FOB destinatário (1) · 2/3/4
   const [frete, setFrete] = useState<FreteInfo>(() => {
+    if (draftNfe?.frete) return { ...draftNfe.frete };
     if (order.frete) return { ...order.frete };
-    const shippingVal = Number(order.shipping) || 0;
+    const shippingVal = Number(draftNfe?.shipping ?? order.shipping) || 0;
     return {
       modalidade: shippingVal > 0 ? 0 : 9,
       valor: shippingVal > 0 ? shippingVal : 0,
@@ -141,7 +161,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const productComplementares = orderItems
     .map(it => it.informacoesComplementares)
     .filter((txt): txt is string => Boolean(txt && txt.trim()));
-  const initialInfCpl = order.nfeInfCpl || [
+  const initialInfCpl = draftNfe?.nfeInfCpl || order.nfeInfCpl || [
     config.observacoesFiscaisPadrao,
     ...Array.from(new Set(productComplementares))
   ].filter(Boolean).join(' | ');
@@ -255,6 +275,135 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     }
   };
 
+  const resolveTipo = (): 'pedido' | 'avulsa' | 'devolucao' | 'transferencia' =>
+    isDevolucao ? 'devolucao' : isTransferencia ? 'transferencia' : isAvulsa ? 'avulsa' : 'pedido';
+
+  const buildOrderWithEdits = (emitItems: SaleOrderItem[], referenciaExterna: string): SaleOrder => ({
+    ...order,
+    items: emitItems,
+    discount: discountEfetivo,
+    shipping: freteValorEfetivo,
+    total: totalComFrete,
+    subtotal: itemsSubtotal,
+    frete: {
+      ...frete,
+      modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
+      valor: freteValorEfetivo,
+    },
+    nfeNaturezaOperacao: naturezaOperacao,
+    nfeInfCpl: infCpl,
+    nfeReferenciaExterna: referenciaExterna,
+  });
+
+  const persistDraft = (): SaleOrder | null => {
+    const emitItems = items.filter((it) => (Number(it.quantity) || 0) > 0);
+    if (emitItems.length === 0) {
+      setErrorMsg('Informe a quantidade de pelo menos um item para salvar o rascunho.');
+      return null;
+    }
+
+    const tipo = resolveTipo();
+    const linkedId = draftLinkedId || newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
+    const referenciaExterna = isAvulsa
+      ? avulsaExternalRef(order.reference, linkedId)
+      : (order.nfeReferenciaExterna || order.reference);
+    const orderWithEdits = buildOrderWithEdits(emitItems, referenciaExterna);
+    let payloadSent: any = undefined;
+    try {
+      const opts = isDevolucao
+        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        : isTransferencia
+          ? { transferencia: true }
+          : undefined;
+      payloadSent = fiscalService.montarPayloadNotaAs(orderWithEdits, activeCustomer, currentConfig, opts);
+    } catch {
+      payloadSent = undefined;
+    }
+
+    const linked = buildLinkedNfe({
+      id: linkedId,
+      tipo,
+      reference: referenciaExterna,
+      order: orderWithEdits,
+      items: emitItems,
+      subtotal: itemsSubtotal,
+      discount: discountEfetivo,
+      shipping: freteValorEfetivo,
+      total: totalComFrete,
+      nfeStatus: 'rascunho',
+      nfeNaturezaOperacao: naturezaOperacao,
+      nfeInfCpl: infCpl,
+      nfePayload: payloadSent,
+      nfeErro: undefined,
+    });
+
+    const sourceKeepItems: SaleOrder = {
+      ...order,
+      nfePayload: isAvulsa ? order.nfePayload : payloadSent,
+    };
+    const updatedOrder = upsertLinkedNfe(
+      isAvulsa
+        ? sourceKeepItems
+        : {
+            ...sourceKeepItems,
+            items: order.items,
+            subtotal: order.subtotal,
+            discount: order.discount,
+            shipping: order.shipping,
+            total: order.total,
+            frete: orderWithEdits.frete,
+          },
+      linked
+    );
+
+    setDraftLinkedId(linkedId);
+    return updatedOrder;
+  };
+
+  const persistDraftToDb = async (updated: SaleOrder) => {
+    const persistCompanyId = order.companyId || company.id;
+    await db.upsert('sales_orders', persistCompanyId, { ...updated, companyId: persistCompanyId });
+  };
+
+  const handleSalvarRascunho = async () => {
+    if (savingDraft || loading) return;
+    setSavingDraft(true);
+    setErrorMsg(null);
+    setDraftSavedMsg(null);
+    try {
+      const updated = persistDraft();
+      if (!updated) return;
+      await persistDraftToDb(updated);
+      if (onDraftSaved) onDraftSaved(updated);
+      else onSuccess(updated);
+      setDraftSavedMsg('Rascunho salvo. Você pode revisar a prévia e emitir depois sem preencher de novo.');
+      setTimeout(() => setDraftSavedMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Não foi possível salvar o rascunho.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleIrParaPrevia = async () => {
+    const emitItems = items.filter((it) => (Number(it.quantity) || 0) > 0);
+    if (emitItems.length === 0) {
+      setErrorMsg('Informe a quantidade de pelo menos um item para revisar a prévia.');
+      return;
+    }
+    setErrorMsg(null);
+    const updated = persistDraft();
+    if (updated) {
+      try {
+        await persistDraftToDb(updated);
+      } catch (e: any) {
+        setErrorMsg(e.message || 'Rascunho ficou na tela, mas o banco não confirmou o salvamento.');
+      }
+      if (onDraftSaved) onDraftSaved(updated);
+    }
+    setStep('preview');
+  };
+
   const handleEmitir = async () => {
     if (isSubmittingRef.current || loading) {
       console.warn('⚠️ [EMISSÃO] Ação em processamento...');
@@ -274,27 +423,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         return;
       }
 
-      const linkedId = newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
+      const linkedId = draftLinkedId || newId(isAvulsa ? 'nfa' : isDevolucao ? 'nfd' : isTransferencia ? 'nft' : 'nfp');
       const referenciaExterna = isAvulsa
         ? avulsaExternalRef(order.reference, linkedId)
         : (order.nfeReferenciaExterna || order.reference);
 
-      const orderWithEdits: SaleOrder = {
-        ...order,
-        items: emitItems,
-        discount: discountEfetivo,
-        shipping: freteValorEfetivo,
-        total: totalComFrete,
-        subtotal: itemsSubtotal,
-        frete: {
-          ...frete,
-          modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
-          valor: freteValorEfetivo,
-        },
-        nfeNaturezaOperacao: naturezaOperacao,
-        nfeInfCpl: infCpl,
-        nfeReferenciaExterna: referenciaExterna,
-      };
+      const orderWithEdits = buildOrderWithEdits(emitItems, referenciaExterna);
 
       const opts = isDevolucao
         ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
@@ -312,7 +446,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       );
 
       if (result.success || result.nfeId) {
-        const tipo = isDevolucao ? 'devolucao' : isTransferencia ? 'transferencia' : isAvulsa ? 'avulsa' : 'pedido';
+        const tipo = resolveTipo();
         let resultFields = {
           nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
@@ -398,13 +532,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   };
 
   const hasApiKey = Boolean((currentConfig.apiKey || '').trim());
-  const nfeTitle = isDevolucao
-    ? 'Devolução NF-e'
-    : isTransferencia
-      ? 'Transferência NF-e'
-      : isAvulsa
-        ? 'NF-e avulsa'
-        : 'Emitir NF-e';
+  const isPreview = step === 'preview';
+  const nfeTitle = isPreview
+    ? 'Prévia do rascunho da NF-e'
+    : isDevolucao
+      ? 'Devolução NF-e'
+      : isTransferencia
+        ? 'Transferência NF-e'
+        : isAvulsa
+          ? 'NF-e avulsa'
+          : 'Emitir NF-e';
 
   return (
     <FlowSheet
@@ -416,34 +553,112 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {order.reference} · Nº {currentConfig.proxNumeroNFe || 1042} / série {currentConfig.serieNFe || 1}
           {' · '}
           {currentConfig.environment === 'production' ? 'Produção' : 'Homologação'}
+          {isPreview ? ' · revise os dados antes de transmitir' : ''}
         </>
       }
       onClose={onClose}
       footer={(
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
             <p className="text-base font-black text-slate-900 leading-none">{formatBRL(totalComFrete)}</p>
           </div>
-          <button
-            disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
-            onClick={handleEmitir}
-            className="min-h-12 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Enviando…
-              </>
-            ) : (
-              <>
-                <Send size={16} /> Transmitir
-              </>
-            )}
-          </button>
+          {isPreview ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep('edit')}
+                disabled={loading}
+                className="min-h-12 px-4 py-3 bg-white border border-slate-200 text-slate-700 font-bold text-sm rounded-2xl disabled:opacity-50 flex items-center gap-2"
+              >
+                <ArrowLeft size={16} /> Editar
+              </button>
+              <button
+                disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
+                onClick={handleEmitir}
+                className="min-h-12 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Enviando…
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Confirmar e emitir
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleSalvarRascunho}
+                disabled={loading || savingDraft || items.length === 0 || totalQuantidade <= 0}
+                className="min-h-12 px-4 py-3 bg-white border border-amber-300 text-amber-900 font-bold text-sm rounded-2xl disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingDraft ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" /> Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} /> Salvar rascunho
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleIrParaPrevia}
+                disabled={loading || savingDraft || items.length === 0 || totalQuantidade <= 0}
+                className="min-h-12 px-4 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm rounded-2xl disabled:opacity-50 flex items-center gap-2"
+              >
+                <Eye size={16} /> Revisar prévia
+              </button>
+              <button
+                disabled={loading || !validation.valid || items.length === 0 || totalQuantidade <= 0}
+                onClick={handleEmitir}
+                className="min-h-12 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Enviando…
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Transmitir
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
       )}
     >
+          {(draftLinkedId || draftNfe) && (
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                Rascunho
+              </span>
+            </div>
+          )}
+          {draftSavedMsg && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 font-bold flex items-center gap-2 mb-3">
+              <Save size={14} className="text-amber-600 shrink-0" /> {draftSavedMsg}
+            </div>
+          )}
+          {isPreview && (
+            <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950 mb-3">
+              <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                <Eye size={14} /> Prévia do rascunho — revise antes de transmitir
+              </p>
+              <p className="text-xs font-medium mt-1">
+                {items.length} item(ns) · Total {formatBRL(totalComFrete)} · {naturezaOperacao}
+              </p>
+            </div>
+          )}
           {!hasApiKey && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 text-xs text-amber-900 mb-3">
               <p className="font-bold">Project Key da NotaAs obrigatória</p>
