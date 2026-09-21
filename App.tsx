@@ -55,7 +55,7 @@ import {
   COMPANY_INFO
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
-import { keepUnseenLocalRecords } from './services/persistSeed';
+import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument } from './services/saleNfe';
@@ -130,10 +130,36 @@ const App: React.FC = () => {
   };
 
   const dataEpochRef = useRef(0);
+  const loadedCompanyRef = useRef<string | null>(null);
+  const localDeletedIdsRef = useRef<Set<string>>(new Set());
+
+  const markLocalDelete = (tableName: string, id: string) => {
+    dataEpochRef.current += 1;
+    localDeletedIdsRef.current.add(`${tableName}:${String(id)}`);
+  };
+
+  const dropLocalDeletes = (tableName: string, rows: any[]) =>
+    (Array.isArray(rows) ? rows : []).filter(
+      (row) => row?.id && !localDeletedIdsRef.current.has(`${tableName}:${String(row.id)}`)
+    );
+
+  const stampUpdatedAt = (record: any) => {
+    const now = new Date().toISOString();
+    const one = (row: any) => {
+      if (!row || typeof row !== 'object') return row;
+      row.updatedAt = now;
+      return row;
+    };
+    if (Array.isArray(record)) {
+      record.forEach(one);
+      return record;
+    }
+    return one(record);
+  };
 
   const persistCloud = (tableName: string, record: any, options?: { required?: boolean }) => {
     dataEpochRef.current += 1;
-    return db.upsert(tableName, activeCompanyId, record)
+    return db.upsert(tableName, activeCompanyId, stampUpdatedAt(record))
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
@@ -149,7 +175,7 @@ const App: React.FC = () => {
   };
 
   const persistDelete = (tableName: string, id: string) => {
-    dataEpochRef.current += 1;
+    markLocalDelete(tableName, id);
     db.delete(tableName, activeCompanyId, id)
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
@@ -182,6 +208,32 @@ const App: React.FC = () => {
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
     if (!currentUser) return;
+
+    if (loadedCompanyRef.current && loadedCompanyRef.current !== activeCompanyId) {
+      dataEpochRef.current += 1;
+      localDeletedIdsRef.current.clear();
+      setTransactions([]);
+      setInventory([]);
+      setCustomers([]);
+      setOrders([]);
+      setMachines([]);
+      setStoreItems([]);
+      setMaintenances([]);
+      setFuelRecords([]);
+      setFuelPurchases([]);
+      setAccounts([]);
+      setCategories([]);
+      setUsers([]);
+      setTransfers([]);
+      setTransportadores([]);
+    }
+    loadedCompanyRef.current = activeCompanyId;
+
+    const adoptFetched = <T,>(tableName: string, incoming: any, prev: T[]): T[] =>
+      mergeRecordsByUpdatedAt(
+        dropLocalDeletes(tableName, incoming),
+        dropLocalDeletes(tableName, prev as any[])
+      ) as T[];
 
     const loadAllData = async () => {
       const epoch = dataEpochRef.current;
@@ -224,26 +276,28 @@ const App: React.FC = () => {
               totalSpent: Number(c.totalSpent) || 0
             }));
 
-        setTransactions(Array.isArray(savedTxs) ? savedTxs : []);
-        setInventory(Array.isArray(savedInv) ? savedInv : []);
-        setCustomers((prev) => keepUnseenLocalRecords(normalizeCustomers(savedCust), prev) as Customer[]);
-        setOrders((prev) => keepUnseenLocalRecords(Array.isArray(savedOrders) ? savedOrders : [], prev) as SaleOrder[]);
-        setMachines(Array.isArray(savedMachines) ? savedMachines : []);
-        setStoreItems(Array.isArray(savedStore) ? savedStore : []);
-        setMaintenances(Array.isArray(savedMaint) ? savedMaint : []);
-        setFuelRecords(Array.isArray(savedFuel) ? savedFuel : []);
-        setFuelPurchases(Array.isArray(savedFuelPurchases) ? savedFuelPurchases : []);
-        setAccounts(Array.isArray(savedAccounts) ? savedAccounts : []);
-        setCategories(Array.isArray(savedCategories) ? savedCategories : []);
-        setUsers(Array.isArray(savedUsers) ? savedUsers : []);
-        setTransfers((prev) => keepUnseenLocalRecords(
-          Array.isArray(savedTransfers) ? savedTransfers.filter(t => t && typeof t === 'object') : [],
+        setTransactions((prev) => adoptFetched('transactions', savedTxs, prev));
+        setInventory((prev) => adoptFetched('inventory', savedInv, prev));
+        setCustomers((prev) => adoptFetched('customers', normalizeCustomers(savedCust), prev));
+        setOrders((prev) => adoptFetched('sales_orders', savedOrders, prev));
+        setMachines((prev) => adoptFetched('machines', savedMachines, prev));
+        setStoreItems((prev) => adoptFetched('store_items', savedStore, prev));
+        setMaintenances((prev) => adoptFetched('maintenance_records', savedMaint, prev));
+        setFuelRecords((prev) => adoptFetched('fuel_records', savedFuel, prev));
+        setFuelPurchases((prev) => adoptFetched('fuel_purchases', savedFuelPurchases, prev));
+        setAccounts((prev) => adoptFetched('financial_accounts', savedAccounts, prev));
+        setCategories((prev) => adoptFetched('categories', savedCategories, prev));
+        setUsers((prev) => adoptFetched('users', savedUsers, prev));
+        setTransfers((prev) => adoptFetched(
+          'transfers',
+          Array.isArray(savedTransfers) ? savedTransfers.filter((t: any) => t && typeof t === 'object') : [],
           prev
-        ) as TransferShipment[]);
-        setTransportadores((prev) => keepUnseenLocalRecords(
-          Array.isArray(savedTransportadores) ? savedTransportadores.filter(t => t && typeof t === 'object' && t.id) : [],
+        ));
+        setTransportadores((prev) => adoptFetched(
+          'transportadores',
+          Array.isArray(savedTransportadores) ? savedTransportadores.filter((t: any) => t && typeof t === 'object' && t.id) : [],
           prev
-        ) as Transportador[]);
+        ));
 
         db.flushAllPending().catch((err) => {
           console.warn('[PERSISTÊNCIA] Reenvio da fila para o Supabase falhou:', err);
@@ -275,7 +329,8 @@ const App: React.FC = () => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') flushQueue();
     };
-    const refreshTimer = window.setInterval(refreshOnFocus, 60_000);
+    // O intervalo só reenvia a fila. Recarregar as 14 tabelas a cada 60s apagava cadastro novo.
+    const refreshTimer = window.setInterval(flushQueue, 60_000);
     window.addEventListener('focus', refreshOnFocus);
     window.addEventListener('online', flushQueue);
     document.addEventListener('visibilitychange', onVisible);

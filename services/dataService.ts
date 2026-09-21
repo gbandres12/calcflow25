@@ -19,12 +19,12 @@ import { getSupabase } from './supabaseClient';
 import { isDemoEmail, isLocalDevHost } from './authLogic';
 import {
   SEED_DOC_ID,
-  applyPendingDeletes,
   hasSeedMeta,
   mapSupabaseRows,
   mergeRecordsById,
   remainingPendingAfterConfirm,
   remainingPendingDeletes,
+  reconcileVisibleRecords,
   seedMetaUpsertRow,
   splitConfirmedPending,
   stripSeedDocs
@@ -112,8 +112,14 @@ const setPersistError = (message: string | null) => {
 const composeVisibleRows = (
   remoteRecords: any[],
   pendingUpserts: any[],
-  pendingDeletes: string[]
-) => applyPendingDeletes(mergeRecordsById(remoteRecords, pendingUpserts), pendingDeletes);
+  pendingDeletes: string[],
+  localCache: any[] = []
+) => reconcileVisibleRecords({
+  remote: remoteRecords,
+  local: localCache,
+  pendingUpserts,
+  pendingDeletes
+});
 
 const DEMO_TABLE_DATA: Record<string, any[]> = {
   inventory: INITIAL_INVENTORY,
@@ -412,7 +418,7 @@ export const db = {
       try {
         const { data, error } = await supabase
           .from('app_records')
-          .select('id, data')
+          .select('id, data, updated_at')
           .eq('table_name', tableName)
           .eq('company_id', compKey);
 
@@ -420,37 +426,42 @@ export const db = {
           const records = mapSupabaseRows(data);
           const initialized = hasSeedMeta(records) || data.length > 0;
           const cleanRecords = stripSeedDocs(records);
-          const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
-          const pendingDeletes = Array.from(new Set([
-            ...pendingAtReadStart.deletes,
-            ...getPendingDeleteIds(storageKey)
-          ]));
-          const localCache = stripSeedDocs(storage.get(storageKey) || []);
-          const safeRecords = composeVisibleRows(
-            mergeRecordsById(cleanRecords, localCache),
-            pendingUpserts,
-            pendingDeletes
-          );
+          const latestVisible = () => {
+            const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
+            const pendingDeletes = Array.from(new Set([
+              ...pendingAtReadStart.deletes,
+              ...getPendingDeleteIds(storageKey)
+            ]));
+            return {
+              pendingUpserts,
+              pendingDeletes,
+              rows: composeVisibleRows(
+                cleanRecords,
+                pendingUpserts,
+                pendingDeletes,
+                stripSeedDocs(storage.get(storageKey) || [])
+              )
+            };
+          };
+          // Lê o cache de novo depois do fetch: um save no meio da espera não pode ser apagado.
+          const visible = latestVisible();
+          const safeRecords = visible.rows;
 
-          if (initialized || cleanRecords.length > 0) {
+          if (initialized || cleanRecords.length > 0 || safeRecords.length > 0) {
             storage.set(storageKey, safeRecords);
             if (!hasSeedMeta(records)) writeSeedMeta(tableName, compKey);
-            retryUnconfirmed(tableName, compKey, storageKey, cleanRecords, pendingUpserts, pendingDeletes);
-            return safeRecords;
-          }
-
-          const recovered = composeVisibleRows(
-            stripSeedDocs(storage.get(storageKey) || []),
-            pendingUpserts,
-            pendingDeletes
-          );
-          if (recovered.length > 0) {
-            storage.set(storageKey, recovered);
-            this.upsert(tableName, compKey, recovered).catch((e) =>
-              console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
+            retryUnconfirmed(tableName, compKey, storageKey, cleanRecords, visible.pendingUpserts, visible.pendingDeletes);
+            const remoteIds = new Set(cleanRecords.map((row) => String(row.id)));
+            const pendingIds = new Set(visible.pendingUpserts.map((row) => String(row.id)));
+            const missingRemote = safeRecords.filter((row) =>
+              row?.id && !remoteIds.has(String(row.id)) && !pendingIds.has(String(row.id))
             );
-            writeSeedMeta(tableName, compKey);
-            return recovered;
+            if (missingRemote.length) {
+              this.upsert(tableName, compKey, missingRemote).catch((e) =>
+                console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
+              );
+            }
+            return safeRecords;
           }
 
           const initialData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
@@ -481,7 +492,7 @@ export const db = {
       localData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
       storage.set(storageKey, localData);
     }
-    return composeVisibleRows(localData || [], pendingUpserts, pendingDeletes);
+    return composeVisibleRows(localData || [], pendingUpserts, pendingDeletes, localData || []);
   },
 
   async upsert(tableName: string, companyId: string, record: any): Promise<any[]> {
@@ -502,7 +513,8 @@ export const db = {
       return {
         ...safeRecord,
         id: String(safeRecord.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
-        companyId: safeRecord.companyId || compKey
+        companyId: safeRecord.companyId || compKey,
+        updatedAt: new Date().toISOString()
       };
     });
     const operational = stripSeedDocs(normalizedRecords);

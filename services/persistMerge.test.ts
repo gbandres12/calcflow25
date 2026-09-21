@@ -5,6 +5,8 @@ import {
   hasSeedMeta,
   keepUnseenLocalRecords,
   mergeRecordsById,
+  mergeRecordsByUpdatedAt,
+  reconcileVisibleRecords,
   remainingPendingAfterConfirm,
   remainingPendingDeletes,
   serializeRecord,
@@ -92,5 +94,49 @@ describe('persistência: merge de cache pendente com o banco', () => {
     const remaining = remainingPendingAfterConfirm(pending, sent);
     assert.equal(remaining.length, 1);
     assert.equal(serializeRecord({ a: 1, b: 2 }), serializeRecord({ b: 2, a: 1 }));
+  });
+
+  it('um snapshot vazio da nuvem não apaga o que já está no cache ou na tela', () => {
+    const local = [
+      { id: 'tx-1', description: 'Recebimento', updatedAt: '2026-09-21T12:00:00.000Z' },
+      { id: 'inv-1', name: 'Moído', updatedAt: '2026-09-21T12:00:00.000Z' }
+    ];
+    const merged = mergeRecordsByUpdatedAt([], local);
+    assert.equal(merged.length, 2);
+    assert.deepEqual(merged.map((row) => row.id).sort(), ['inv-1', 'tx-1']);
+  });
+
+  it('cache velho não sobrescreve a versão mais nova já gravada na nuvem', () => {
+    const remote = [{ id: 'ord-1', total: 250, updatedAt: '2026-09-21T14:00:00.000Z' }];
+    const staleCache = [{ id: 'ord-1', total: 100, updatedAt: '2026-09-21T10:00:00.000Z' }];
+    const merged = mergeRecordsByUpdatedAt(remote, staleCache);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].total, 250);
+  });
+
+  it('edição local mais nova continua na tela mesmo se o fetch voltar a versão antiga', () => {
+    const remote = [{ id: 'cust-1', name: 'Antigo', updatedAt: '2026-09-21T10:00:00.000Z' }];
+    const screen = [{ id: 'cust-1', name: 'Nome corrigido', updatedAt: '2026-09-21T14:00:00.000Z' }];
+    const merged = mergeRecordsByUpdatedAt(remote, screen);
+    assert.equal(merged[0].name, 'Nome corrigido');
+  });
+
+  it('reconcile não perde cadastro local, aplica exclusão pendente e deixa a fila vencer', () => {
+    const visible = reconcileVisibleRecords({
+      remote: [
+        { id: 'cust-1', name: 'Nuvem', updatedAt: '2026-09-21T10:00:00.000Z' },
+        { id: 'cust-2', name: 'Apagar' }
+      ],
+      local: [
+        { id: 'cust-1', name: 'Cache velho', updatedAt: '2026-09-20T10:00:00.000Z' },
+        { id: 'cust-3', name: 'Novo no navegador', updatedAt: '2026-09-21T14:00:00.000Z' }
+      ],
+      pendingUpserts: [{ id: 'cust-1', name: 'Editado agora', updatedAt: '2026-09-21T14:05:00.000Z' }],
+      pendingDeletes: ['cust-2']
+    });
+    assert.equal(visible.length, 2);
+    assert.equal(visible.find((row) => row.id === 'cust-1')?.name, 'Editado agora');
+    assert.ok(visible.some((row) => row.id === 'cust-3'));
+    assert.ok(!visible.some((row) => row.id === 'cust-2'));
   });
 });

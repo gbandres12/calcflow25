@@ -19,9 +19,20 @@ export const mapSupabaseRows = (data: any[]) =>
     .map((row: any) => {
       const payload = row?.data && typeof row.data === 'object' ? row.data : row;
       if (!payload) return null;
-      return { ...payload, id: String(payload.id || row.id) };
+      const updatedAt = payload.updatedAt || payload.updated_at || row.updated_at;
+      return {
+        ...payload,
+        id: String(payload.id || row.id),
+        ...(updatedAt ? { updatedAt } : {})
+      };
     })
     .filter(Boolean);
+
+export const recordUpdatedAtMs = (record: any): number => {
+  const raw = record?.updatedAt || record?.updated_at;
+  const parsed = Date.parse(String(raw || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export const seedMetaUpsertRow = (tableName: string, companyId: string) => ({
   id: SEED_DOC_ID,
@@ -55,14 +66,45 @@ export const mergeRecordsById = (remoteRecords: any[], localRecords: any[]): any
   return Array.from(merged.values());
 };
 
+/** Junta listas pelo id e deixa a versão com updatedAt mais recente ganhar o conflito. */
+export const mergeRecordsByUpdatedAt = (baseRecords: any[], overlayRecords: any[]): any[] => {
+  const merged = new Map<string, any>();
+  const put = (record: any, preferIncomingOnTie: boolean) => {
+    if (!record?.id) return;
+    const id = String(record.id);
+    const existing = merged.get(id);
+    if (!existing) {
+      merged.set(id, { ...record, id });
+      return;
+    }
+    const incomingTime = recordUpdatedAtMs(record);
+    const existingTime = recordUpdatedAtMs(existing);
+    if (incomingTime > existingTime || (incomingTime === existingTime && preferIncomingOnTie)) {
+      merged.set(id, { ...existing, ...record, id });
+    }
+  };
+  stripSeedDocs(baseRecords).forEach((record) => put(record, false));
+  stripSeedDocs(overlayRecords).forEach((record) => put(record, true));
+  return Array.from(merged.values());
+};
+
 /** Mantém cadastros locais que um fetch atrasado da nuvem ainda não devolveu. */
-export const keepUnseenLocalRecords = (remoteRecords: any[], localRecords: any[]): any[] => {
-  const remote = stripSeedDocs(remoteRecords);
-  const remoteIds = new Set(remote.map((record) => String(record.id)));
-  const extras = stripSeedDocs(localRecords).filter(
-    (record) => record?.id && !remoteIds.has(String(record.id))
-  );
-  return extras.length ? [...remote, ...extras] : remote;
+export const keepUnseenLocalRecords = (remoteRecords: any[], localRecords: any[]): any[] =>
+  mergeRecordsByUpdatedAt(remoteRecords, localRecords);
+
+/**
+ * Nuvem + cache + fila local. Nada some, a menos que esteja na fila de exclusão.
+ * Edição mais nova (updatedAt / pendência) vence a cópia velha.
+ */
+export const reconcileVisibleRecords = (input: {
+  remote: any[];
+  local?: any[];
+  pendingUpserts?: any[];
+  pendingDeletes?: string[];
+}): any[] => {
+  const withLocal = mergeRecordsByUpdatedAt(input.remote, input.local || []);
+  const withPending = mergeRecordsById(withLocal, input.pendingUpserts || []);
+  return applyPendingDeletes(withPending, input.pendingDeletes || []);
 };
 
 export const applyPendingDeletes = (records: any[], deletedIds: string[]): any[] => {
