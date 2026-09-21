@@ -27,11 +27,45 @@ function nfeCountsTowardInvoiced(nfe: SaleOrderLinkedNfe): boolean {
   return nfe.nfeStatus === 'autorizada' || nfe.nfeStatus === 'processando';
 }
 
+export function nfeDocumentKey(
+  nfe: Pick<SaleOrderLinkedNfe, 'id' | 'nfeId' | 'nfeChave' | 'nfeNumero' | 'nfeSerie'>
+): string {
+  const chave = String(nfe.nfeChave || '').replace(/\D/g, '');
+  if (chave.length >= 44) return `ch:${chave}`;
+  if (nfe.nfeId) return `id:${nfe.nfeId}`;
+  const numero = String(nfe.nfeNumero || '').replace(/^0+/, '');
+  if (numero) return `nf:${String(nfe.nfeSerie || '1')}:${numero}`;
+  return `row:${nfe.id}`;
+}
+
+export function dedupeEmittedNfeRows<T extends { order: SaleOrder; nfe: SaleOrderLinkedNfe }>(rows: T[]): T[] {
+  const preferred = [...rows].sort(
+    (a, b) => Number(Boolean(a.order.isAvulsa)) - Number(Boolean(b.order.isAvulsa))
+  );
+  const seen = new Set<string>();
+  const keep = new Set<T>();
+  for (const row of preferred) {
+    const key = nfeDocumentKey(row.nfe);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keep.add(row);
+  }
+  return rows.filter((row) => keep.has(row));
+}
+
 function linkedFromLegacyHeader(order: SaleOrder): SaleOrderLinkedNfe | null {
   if (!order.nfeStatus || order.nfeStatus === 'nao_emitida') return null;
   const existing = order.nfes || [];
-  if (order.nfeId && existing.some((n) => n.nfeId === order.nfeId)) return null;
-  if (order.nfeNumero && existing.some((n) => n.tipo !== 'avulsa' && n.nfeNumero === order.nfeNumero)) return null;
+  if (
+    existing.some(
+      (n) =>
+        (order.nfeId && n.nfeId === order.nfeId) ||
+        (order.nfeChave && n.nfeChave && n.nfeChave === order.nfeChave) ||
+        (order.nfeNumero && n.nfeNumero && String(n.nfeNumero) === String(order.nfeNumero))
+    )
+  ) {
+    return null;
+  }
   if (!order.nfeId && !order.nfeNumero && !order.nfeChave) return null;
   return {
     id: order.nfeId || `legacy-${order.id}`,

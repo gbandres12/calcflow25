@@ -56,7 +56,7 @@ import {
 } from './constants';
 import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
 import { toPublicUser, isDemoEmail } from './services/authLogic';
-import { newId, nextOrderReference } from './services/ids';
+import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 
@@ -574,7 +574,8 @@ const App: React.FC = () => {
 
   // Pedidos e Vendas
   const handleAddOrder = (orderData: Omit<SaleOrder, 'id' | 'reference'>) => {
-    const reference = nextOrderReference(orders);
+    const isAvulsa = Boolean((orderData as SaleOrder).isAvulsa);
+    const reference = isAvulsa ? nextAvulsaReference(orders) : nextOrderReference(orders);
     const newOrder: SaleOrder = {
       ...orderData,
       id: newId('ord'),
@@ -584,7 +585,7 @@ const App: React.FC = () => {
     };
     setOrders(prev => [...prev, newOrder]);
     persistCloud('sales_orders', newOrder);
-    if (newOrder.status === OrderStatus.FINALIZED) {
+    if (!isAvulsa && newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
       (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
     }

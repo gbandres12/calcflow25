@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiscalConfig, SaleOrder, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
 import { fiscalService } from '../services/fiscalService';
-import { listOrderNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe } from '../services/saleNfe';
+import { listOrderNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, dedupeEmittedNfeRows } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
@@ -115,12 +115,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
   const safeOrders = orders || [];
   const safeCustomers = customers || [];
-  const nfeRows = safeOrders.flatMap((order) =>
-    listOrderNfes(order).map((nfe) => ({
-      order,
-      nfe,
-      overlay: overlayNfeFields(order, nfe),
-    }))
+  const nfeRows = dedupeEmittedNfeRows(
+    safeOrders.flatMap((order) =>
+      listOrderNfes(order).map((nfe) => ({
+        order,
+        nfe,
+        overlay: overlayNfeFields(order, nfe),
+      }))
+    )
   );
   const emittedOrders = nfeRows;
   const pendingEmissionOrders = safeOrders.filter(
