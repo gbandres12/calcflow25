@@ -1082,7 +1082,7 @@ export const userService = {
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData.session?.access_token;
         if (accessToken) {
-          const response = await fetch('/api/users/list', {
+          const response = await fetch('/api/users/invite', {
             headers: { Authorization: `Bearer ${accessToken}` }
           });
           const payload = await response.json().catch(() => ({}));
