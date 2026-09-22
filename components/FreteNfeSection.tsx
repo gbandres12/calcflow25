@@ -43,7 +43,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   });
 
   const mod = Number(value.modalidade ?? 9);
-  const precisaTransportadora = mod === 0 || mod === 1 || mod === 2;
+  const precisaTransportadora = mod === 0 || mod === 2;
   const comCobranca = mod !== 9;
   const valor = Number(value.valor ?? 0) || 0;
 
@@ -212,7 +212,12 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         <span>
           {mod === 9 && 'Sem ocorrência de transporte: nenhum valor de frete entra na NF-e.'}
           {mod === 0 && <><b>CIF:</b> você (remetente) contrata e paga o frete. O valor <b>soma no total</b> da NF-e.</>}
-          {mod === 1 && <><b>FOB:</b> o destinatário paga o frete. Deixe o valor zerado se for a cobrar, ou informe se já embutido.</>}
+          {mod === 1 && (
+            <>
+              <b>FOB:</b> frete por conta do destinatário (valor R$ 0 na nota). Informe <b>CPF e nome do motorista</b> abaixo e a placa — como na NF-e
+              do eFácil. CNPJ de transportadora nesta modalidade costuma ser rejeitado; use CIF se a empresa transportadora for contratada por você.
+            </>
+          )}
           {mod === 2 && 'Frete por conta de terceiros: informe a transportadora contratada abaixo.'}
           {mod === 3 && 'Transporte próprio do remetente: use sua frota, normalmente sem valor de frete.'}
           {mod === 4 && 'Transporte próprio do destinatário: o cliente retira com frota própria.'}
@@ -341,7 +346,16 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
             onClick={() => setShowTransportadora(!showTransportadora)}
             className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[10px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
           >
-            <span>Transportadora {mod === 0 ? '(contratada pelo remetente — CIF)' : mod === 1 ? '(contratada pelo destinatário — FOB)' : '(opcional)'}</span>
+            <span>
+              Transportadora{' '}
+              {mod === 0
+                ? '(contratada pelo remetente — CIF, vai na NF-e)'
+                : mod === 1
+                  ? '(FOB: motorista — CPF + nome na NF-e)'
+                  : mod === 2
+                    ? '(terceiros — vai na NF-e)'
+                    : '(opcional)'}
+            </span>
             {showTransportadora ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
 

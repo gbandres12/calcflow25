@@ -122,6 +122,19 @@ export function nfeQVol(raw?: number | string | null): number {
 }
 
 /**
+ * Grupo transporta na NF-e:
+ * - CIF (0) e terceiros (2): CNPJ/CPF da transportadora contratada.
+ * - FOB (1) e transporte próprio destinatário (4): só motorista (CPF), padrão eFácil/SEFAZ PA.
+ * - CNPJ de transportadora em FOB costuma gerar rejeição na NotaAs.
+ */
+export function modFreteAllowsGrupoTransportador(mod: number, documentoDigits?: string): boolean {
+  const d = (documentoDigits || '').replace(/\D/g, '');
+  if (mod === 0 || mod === 2) return true;
+  if (mod === 1 || mod === 4) return d.length === 11;
+  return false;
+}
+
+/**
  * Payload oficial POST /api/v1/nfe/emitir (modelo 55).
  * Não envia emitente, ambiente, serie, numero, total, destinatario ou itens (nomes antigos).
  */
@@ -523,6 +536,12 @@ export const fiscalService = {
     if (freteMod !== 9 && freteVal > 0 && freteMod === 1) {
       warnings.push('Frete FOB: o valor do frete é por conta do destinatário — confira se deve compor o total da nota.');
     }
+    const transpDocVal = onlyDigits(order.frete?.transportadora?.documento);
+    if (freteMod === 1 && transpDocVal.length === 14) {
+      warnings.push(
+        'FOB: informe o CPF do motorista no transportador (como no eFácil). CNPJ de transportadora nesta modalidade costuma ser rejeitado pela SEFAZ/NotaAs.'
+      );
+    }
 
     return {
       valid: errors.length === 0,
@@ -649,7 +668,13 @@ export const fiscalService = {
 
     const transporte: NotaAsTransporte = { modalidadeFrete: semPagamento ? 9 : freteModalidade };
     const transp = order.frete?.transportadora;
-    if (transp && (transp.documento || transp.nome || transp.rntrc)) {
+    const effectiveModFrete = semPagamento ? 9 : freteModalidade;
+    const transpDocDigits = onlyDigits(transp?.documento);
+    if (
+      modFreteAllowsGrupoTransportador(effectiveModFrete, transpDocDigits) &&
+      transp &&
+      (transp.documento || transp.nome || transp.rntrc)
+    ) {
       transporte.transportadora = {
         ...(transp.documento ? { documento: onlyDigits(transp.documento) } : {}),
         ...(transp.nome?.trim() ? { nome: transp.nome.trim() } : {}),
@@ -1322,9 +1347,10 @@ export const fiscalService = {
     const freteValXml = freteModXml === 9 ? 0 : (Number(order.frete?.valor ?? order.shipping) || 0);
     const transpDoc = (order.frete?.transportadora?.documento || '').replace(/\D/g, '');
     const transpNome = order.frete?.transportadora?.nome || '';
-    const transpBloco = transpDoc || transpNome
-      ? `<transporta><CNPJ>${transpDoc}</CNPJ><xNome>${transpNome}</xNome></transporta>`
-      : '';
+    const transpBloco =
+      modFreteAllowsGrupoTransportador(freteModXml, transpDoc) && (transpDoc || transpNome)
+        ? `<transporta>${transpDoc.length === 11 ? `<CPF>${transpDoc}</CPF>` : `<CNPJ>${transpDoc}</CNPJ>`}<xNome>${transpNome}</xNome></transporta>`
+        : '';
     const vol = order.frete?.volumes;
     const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)
       ? `<vol><qVol>${nfeQVol(vol.quantidade)}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`
