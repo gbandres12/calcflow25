@@ -170,6 +170,64 @@ const fobComValorIgnorado = fiscalService.montarPayloadNotaAs(
 assert.equal(fobComValorIgnorado.valorFrete, undefined, 'FOB nunca envia valorFrete');
 assert.equal(fobComValorIgnorado.transporte?.modalidadeFrete, 1);
 
+const fobMotoristaSemPagamento = fiscalService.montarPayloadNotaAs(
+  {
+    ...order,
+    withoutFinance: true,
+    shipping: 0,
+    frete: {
+      modalidade: 1,
+      valor: 0,
+      transportadora: { documento: '67706983900', nome: 'PAULO SERGIO GUARIENTI' },
+      veiculo: { placa: 'QIA1E13', uf: 'PA' },
+    },
+  } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG,
+  { semPagamento: true }
+);
+assert.equal(
+  fobMotoristaSemPagamento.transporte?.modalidadeFrete,
+  1,
+  'sem pagamento não pode trocar FOB por modFrete 9'
+);
+assert.equal(fobMotoristaSemPagamento.transporte?.transportadora?.documento, '67706983900');
+
+const inferFobFromMotorista = fiscalService.montarPayloadNotaAs(
+  {
+    ...order,
+    shipping: 0,
+    frete: {
+      valor: 0,
+      transportadora: { documento: '67706983900', nome: 'PAULO SERGIO GUARIENTI' },
+      veiculo: { placa: 'QIA1E13', uf: 'PA' },
+    },
+  } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(inferFobFromMotorista.transporte?.modalidadeFrete, 1, 'motorista/placa inferem FOB mesmo sem modalidade gravada');
+
+const corrigeSemFreteComMotorista = fiscalService.montarPayloadNotaAs(
+  {
+    ...order,
+    shipping: 0,
+    frete: {
+      modalidade: 9,
+      valor: 0,
+      transportadora: { documento: '67706983900', nome: 'PAULO SERGIO GUARIENTI' },
+      veiculo: { placa: 'QIA1E13', uf: 'PA' },
+    },
+  } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(
+  corrigeSemFreteComMotorista.transporte?.modalidadeFrete,
+  1,
+  'mod 9 gravado + motorista vira FOB, não sem ocorrência de transporte'
+);
+
 const numericNcmOrder = {
   ...order,
   items: [{

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
-import { fiscalService, freteValorCompoeTotalNota, mergeNfeConsulta } from '../services/fiscalService';
+import { fiscalService, freteValorCompoeTotalNota, mergeNfeConsulta, resolveFreteModalidade } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
 import {
@@ -131,10 +131,14 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [frete, setFrete] = useState<FreteInfo>(() => {
     if (draftNfe?.frete) return { ...draftNfe.frete };
     if (order.frete) return { ...order.frete };
+    const base = { ...(order.frete || {}) };
     const shippingVal = Number(draftNfe?.shipping ?? order.shipping) || 0;
     return {
-      modalidade: shippingVal > 0 ? 0 : 9,
-      valor: shippingVal > 0 ? shippingVal : 0,
+      ...base,
+      modalidade: resolveFreteModalidade({ ...order, frete: base, shipping: shippingVal }),
+      valor: shippingVal > 0 && freteValorCompoeTotalNota(resolveFreteModalidade(order), shippingVal)
+        ? shippingVal
+        : Math.max(0, Number(base.valor) || 0),
     };
   });
 
@@ -289,7 +293,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     subtotal: itemsSubtotal,
     frete: {
       ...frete,
-      modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
+      modalidade: (isDevolucao || isTransferencia)
+        ? 9
+        : (resolveFreteModalidade({ ...order, frete, shipping: freteValorEfetivo }) as FreteInfo['modalidade']),
       valor: freteValorEfetivo,
     },
     nfeNaturezaOperacao: naturezaOperacao,

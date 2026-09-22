@@ -141,6 +141,26 @@ export function freteValorCompoeTotalNota(mod: number, valor?: number): boolean 
   return mod === 0 || mod === 2 || mod === 3;
 }
 
+type FreteMod = 0 | 1 | 2 | 3 | 4 | 9;
+
+/** modFrete explícito no pedido; senão FOB se houver motorista/placa; nunca confundir “sem valor” com mod 9. */
+export function resolveFreteModalidade(order: Pick<SaleOrder, 'frete' | 'shipping'>): FreteMod {
+  const raw = order.frete?.modalidade;
+  const doc = onlyDigits(order.frete?.transportadora?.documento);
+  const hasMotorista = doc.length === 11 || Boolean(order.frete?.veiculo?.placa?.trim());
+
+  if (raw != null && Number.isFinite(Number(raw))) {
+    const n = Number(raw);
+    if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4) return n as FreteMod;
+    if (n === 9 && hasMotorista) return 1;
+    if (n === 9) return 9;
+  }
+  if (hasMotorista) return 1;
+  const ship = Math.max(0, Number(order.shipping) || Number(order.frete?.valor) || 0);
+  if (ship > 0) return 0;
+  return 9;
+}
+
 /**
  * Payload oficial POST /api/v1/nfe/emitir (modelo 55).
  * Não envia emitente, ambiente, serie, numero, total, destinatario ou itens (nomes antigos).
@@ -532,7 +552,7 @@ export const fiscalService = {
     });
 
     // Validação leve do frete (nunca bloqueia, só orienta)
-    const freteMod = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteMod = resolveFreteModalidade(order);
     const freteVal = Number(order.frete?.valor ?? order.shipping ?? 0) || 0;
     if (![0, 1, 2, 3, 4, 9].includes(freteMod)) {
       errors.push('Modalidade de frete inválida. Use 9 (sem frete), 0 (CIF), 1 (FOB), 2, 3 ou 4.');
@@ -670,16 +690,14 @@ export const fiscalService = {
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
 
     // ---- Frete / transporte (modFrete SEFAZ: 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2 terceiros · 3/4 próprio) ----
-    const freteModalidadeRaw = order.frete?.modalidade ?? (order.shipping && !semPagamento ? 0 : 9);
-    const freteModalidade = Number(freteModalidadeRaw) as 0 | 1 | 2 | 3 | 4 | 9;
+    const freteModalidade = resolveFreteModalidade(order);
     const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
-    const hasFreteCobrado =
-      !semPagamento && freteValorCompoeTotalNota(freteModalidade, freteValor);
+    const hasFreteCobrado = freteValorCompoeTotalNota(freteModalidade, freteValor);
 
-    const transporte: NotaAsTransporte = { modalidadeFrete: semPagamento ? 9 : freteModalidade };
+    const transporte: NotaAsTransporte = { modalidadeFrete: freteModalidade };
     const transp = order.frete?.transportadora;
-    const effectiveModFrete = semPagamento ? 9 : freteModalidade;
+    const effectiveModFrete = freteModalidade;
     const transpDocDigits = onlyDigits(transp?.documento);
     if (
       modFreteAllowsGrupoTransportador(effectiveModFrete, transpDocDigits) &&
@@ -720,7 +738,7 @@ export const fiscalService = {
 
     // Montar observações fiscais e complementares da nota
     const freteInfParts: string[] = [];
-    if (!semPagamento && freteModalidade !== 9) {
+    if (freteModalidade !== 9) {
       const modLabel = freteModalidade === 0 ? 'CIF' : freteModalidade === 1 ? 'FOB' : `modFrete ${freteModalidade}`;
       freteInfParts.push(
         hasFreteCobrado
@@ -1354,7 +1372,7 @@ export const fiscalService = {
    */
   gerarXml(order: SaleOrder, customer: Customer, config: FiscalConfig): string {
     const chave = order.nfeChave || this.generateMockChaveAcesso(config.cnpjEmitente, '15', order.nfeSerie || '1', order.nfeNumero || '1041');
-    const freteModXml = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteModXml = resolveFreteModalidade(order);
     const freteValXml = freteModXml === 9 ? 0 : (Number(order.frete?.valor ?? order.shipping) || 0);
     const transpDoc = (order.frete?.transportadora?.documento || '').replace(/\D/g, '');
     const transpNome = order.frete?.transportadora?.nome || '';
