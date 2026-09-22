@@ -3,7 +3,7 @@ import { Company, Customer, SaleOrder } from '../../types';
 import { fiscalService } from '../../services/fiscalService';
 import { SO } from './theme';
 import { formatBRL, formatQty, formatDate, dash } from './format';
-import { DEFAULT_PRODUCT_SHEET } from '../../utils/salesOrderProduct';
+import { sanitizeSalesOrderSheetBody } from '../../utils/salesOrderProduct';
 
 interface Props {
   order: SaleOrder;
@@ -42,11 +42,8 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
   const multiItem = items.length > 1;
   const sheetTitle =
     order.productSheetTitle?.trim() ||
-    (multiItem ? 'Informações complementares do pedido' : DEFAULT_PRODUCT_SHEET.title);
-  const sheetLines = (
-    order.productSheetBody?.trim() ||
-    (multiItem ? 'Consulte a tabela de itens acima para descrição de cada produto.' : DEFAULT_PRODUCT_SHEET.body)
-  )
+    (multiItem ? 'Informações complementares do pedido' : items[0]?.productName || '');
+  const sheetLines = sanitizeSalesOrderSheetBody(order.productSheetBody)
     .split('\n')
     .filter(Boolean);
 
@@ -178,14 +175,17 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
         </div>
       </section>
 
-      <footer className="text-white px-7 py-4 flex items-start justify-between gap-4" style={{ background: SO.navyDeep }}>
+      <footer
+        className="px-7 py-4 flex items-start justify-between gap-4 bg-white"
+        style={{ borderTop: `1.5px solid ${SO.navy}`, color: SO.navy }}
+      >
         <div className="text-[9px] leading-relaxed">
           <p className="font-black text-[12px] tracking-wide">{razao || 'CBA Mineração'}</p>
           {cnpjEmp && <p>CNPJ {cnpjEmp}</p>}
           {endEmp.map((line, i) => <p key={i}>{line}</p>)}
           {phones.map((p, i) => <p key={i}>{p}</p>)}
         </div>
-        <div className="text-[8px] text-right opacity-80">
+        <div className="text-[8px] text-right" style={{ color: SO.muted }}>
           <p>Impresso em {printedAt}</p>
         </div>
       </footer>

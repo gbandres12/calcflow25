@@ -47,6 +47,7 @@ import {
   orderItemsToDrafts,
   productSheetFromInventory,
   resolveInventoryProduct,
+  sanitizeSalesOrderSheetBody,
   sellableInventoryItems,
   sumLineDrafts
 } from '../utils/salesOrderProduct';
@@ -427,8 +428,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setCustomerSearch(cust?.name || '');
       const drafts = orderItemsToDrafts(editingOrder.items);
       setLineItems(drafts.length ? drafts : [newOrderLineDraft(sellableProducts)]);
-      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title);
-      setProductSheetBody(editingOrder.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body);
+      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || '');
+      setProductSheetBody(sanitizeSalesOrderSheetBody(editingOrder.productSheetBody));
       setDiscount(String(Number(editingOrder.discount) || 0));
       setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
@@ -551,8 +552,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       cornTons: isBarter ? grainTonsEquivalent : undefined,
       cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
       items: builtItems,
-      productSheetTitle: productSheetTitle.trim() || DEFAULT_PRODUCT_SHEET.title,
-      productSheetBody: productSheetBody.trim() || DEFAULT_PRODUCT_SHEET.body,
+      productSheetTitle: productSheetTitle.trim(),
+      productSheetBody: sanitizeSalesOrderSheetBody(productSheetBody),
       payments: payments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
@@ -1864,7 +1865,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           onClick={() => applyProductSheetFromLine(lineItems[0].lineId)}
                           className="text-[10px] font-bold text-purple-700 hover:text-purple-900"
                         >
-                          Usar ficha padrão do 1º item
+                          Usar nome do 1º item
                         </button>
                       )}
                       </div>

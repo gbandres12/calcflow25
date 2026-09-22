@@ -214,7 +214,9 @@ describe('telegram: orçamento', () => {
       quantity: 500,
       unitPrice: 180,
       minStock: 200,
-      unit: 'Ton'
+      unit: 'Ton',
+      observacoesFiscais: 'Peneira 50 e peneira 10 conforme análise.',
+      informacoesComplementares: 'PRNT mínimo garantido: 80%. MgO mínimo garantido: 14%.'
     }
   ];
 
@@ -247,6 +249,8 @@ describe('telegram: orçamento', () => {
     assert.equal(order.status, OrderStatus.FINALIZED);
     assert.equal(order.reference, 'PED-2026-0013');
     assert.equal(order.total, 8000);
+    assert.equal(order.productSheetTitle, 'Calcário Agrícola Moído');
+    assert.equal(order.productSheetBody, '');
     assert.equal(order.payments[0].status, TransactionStatus.PENDENTE);
     assert.equal(order.payments[0].amount, 8000);
 

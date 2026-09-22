@@ -54,7 +54,7 @@ describe('PDF do pedido: layout oficial do ERP', () => {
         }
       ],
       productSheetTitle: 'Calcário dolomítico',
-      productSheetBody: 'PRNT mínimo garantido: 80%\nMgO mínimo garantido: 14%',
+      productSheetBody: 'Entrega combinada na propriedade.\nPeneira 50 e PRNT mínimo garantido: 80%.',
       subtotal: 8000,
       discount: 0,
       shipping: 120,

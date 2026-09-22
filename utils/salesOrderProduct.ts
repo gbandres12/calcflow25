@@ -11,12 +11,20 @@ export type OrderLineDraft = {
 export type SaleOrderLineItem = SaleOrder['items'][number];
 
 export const DEFAULT_PRODUCT_SHEET = {
-  title: 'Calcário dolomítico',
-  body:
-    'PRNT mínimo garantido: 80%\n' +
-    'MgO mínimo garantido: 14%\n' +
-    'Valores sujeitos a variação conforme lote e análise laboratorial.'
+  title: '',
+  body: ''
 };
+
+const FISCAL_OR_WARRANTY_LINE =
+  /peneira|m[ií]nimo garantido|minimo garantido|\bprnt\b|\bmgo\b|conv[eê]nio icms|observac[oõ]es fiscais|infcpl|infadprod|isen[cç].*icms|icms diferido|art\.?\s*9|ec\s*132|reforma tribut[aá]ria|granulometr/i;
+
+export function sanitizeSalesOrderSheetBody(body?: string | null): string {
+  return String(body || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line && !FISCAL_OR_WARRANTY_LINE.test(line))
+    .join('\n');
+}
 
 export function productSheetFromInventory(item?: InventoryItem | null): { title: string; body: string } {
   if (!item) return { ...DEFAULT_PRODUCT_SHEET };
@@ -24,19 +32,7 @@ export function productSheetFromInventory(item?: InventoryItem | null): { title:
   const title =
     item.name.includes('(') ? item.name.split('(')[0].trim() : item.name.trim() || DEFAULT_PRODUCT_SHEET.title;
 
-  const lines: string[] = [];
-  if (item.observacoesFiscais?.trim()) lines.push(item.observacoesFiscais.trim());
-  if (item.informacoesComplementares?.trim()) lines.push(item.informacoesComplementares.trim());
-
-  if (lines.length === 0) {
-    const lower = item.name.toLowerCase();
-    if (lower.includes('dolomít') || item.id === 'dolomitico') {
-      return { ...DEFAULT_PRODUCT_SHEET };
-    }
-    lines.push('Especificação conforme ficha técnica do produto e análise de lote.');
-  }
-
-  return { title, body: lines.join('\n') };
+  return { title, body: '' };
 }
 
 export function inventoryProductCode(item: InventoryItem, index: number): string {
