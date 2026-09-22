@@ -24,7 +24,13 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   onAddTransportador
 }) => {
   const [showTransportadora, setShowTransportadora] = useState(
-    Boolean(value.transportadora?.nome || value.transportadora?.documento || value.modalidade === 0 || value.modalidade === 2)
+    Boolean(
+      value.transportadora?.nome ||
+        value.transportadora?.documento ||
+        value.modalidade === 0 ||
+        value.modalidade === 1 ||
+        value.modalidade === 2
+    )
   );
   const [showVolumes, setShowVolumes] = useState(
     Boolean(value.volumes?.pesoBruto || value.volumes?.pesoLiquido || value.volumes?.quantidade || value.veiculo?.placa)
@@ -44,6 +50,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
 
   const mod = Number(value.modalidade ?? 9);
   const precisaTransportadora = mod === 0 || mod === 2;
+  const isFobMotorista = mod === 1 || mod === 4;
   const comCobranca = mod !== 9;
   const valor = Number(value.valor ?? 0) || 0;
 
@@ -183,7 +190,12 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
             <button
               key={m.value}
               type="button"
-              onClick={() => update({ modalidade: m.value, valor: m.value === 9 ? 0 : value.valor })}
+              onClick={() =>
+                update({
+                  modalidade: m.value,
+                  valor: m.value === 9 || m.value === 1 || m.value === 4 ? 0 : value.valor,
+                })
+              }
               title={m.descricao}
               className={`text-left p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all min-w-0 ${
                 active
@@ -307,23 +319,39 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
 
       {comCobranca && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className={labelCls}>Valor do frete (R$) — compõe o total</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={value.valor ?? 0}
-              onChange={(e) => update({ valor: parseFloat(e.target.value) || 0 })}
-              className={inputCls}
-              placeholder="0.00"
-            />
-          </div>
+          {!isFobMotorista && (
+            <div className="space-y-1">
+              <label className={labelCls}>Valor do frete (R$) — compõe o total</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={value.valor ?? 0}
+                onChange={(e) => update({ valor: parseFloat(e.target.value) || 0 })}
+                className={inputCls}
+                placeholder="0.00"
+              />
+            </div>
+          )}
+          {isFobMotorista && (
+            <div className="space-y-1 sm:col-span-1">
+              <label className={labelCls}>Valor do frete na NF-e</label>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
+                FOB: permanece <b>R$ 0,00</b> — declare só o motorista (CPF) e a placa abaixo.
+              </p>
+            </div>
+          )}
           <div className="space-y-1">
             <label className={labelCls}>Modalidade SEFAZ (modFrete)</label>
             <select
               value={mod}
-              onChange={(e) => update({ modalidade: parseInt(e.target.value, 10) as FreteInfo['modalidade'] })}
+              onChange={(e) => {
+                const nextMod = parseInt(e.target.value, 10) as FreteInfo['modalidade'];
+                update({
+                  modalidade: nextMod,
+                  valor: nextMod === 9 || nextMod === 1 || nextMod === 4 ? 0 : value.valor,
+                });
+              }}
               className={inputCls}
             >
               {FRETE_MODALIDADES.map((m) => (
@@ -339,7 +367,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
       )}
 
       {/* Transportadora */}
-      {(precisaTransportadora || showTransportadora) && (
+      {(precisaTransportadora || showTransportadora || isFobMotorista) && (
         <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">
           <button
             type="button"
@@ -362,23 +390,23 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           {showTransportadora && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-150">
               <div className="space-y-1">
-                <label className={labelCls}>CNPJ / CPF da transportadora</label>
+                <label className={labelCls}>{isFobMotorista ? 'CPF do motorista *' : 'CNPJ / CPF da transportadora'}</label>
                 <input
                   type="text"
                   value={value.transportadora?.documento || ''}
                   onChange={(e) => update({ transportadora: { ...(value.transportadora || {}), documento: e.target.value } })}
                   className={`${inputCls} font-mono`}
-                  placeholder="Somente dígitos"
+                  placeholder={isFobMotorista ? '11 dígitos — vai no DANFE' : 'Somente dígitos'}
                 />
               </div>
               <div className="space-y-1">
-                <label className={labelCls}>Razão social / Nome</label>
+                <label className={labelCls}>{isFobMotorista ? 'Nome do motorista *' : 'Razão social / Nome'}</label>
                 <input
                   type="text"
                   value={value.transportadora?.nome || ''}
                   onChange={(e) => update({ transportadora: { ...(value.transportadora || {}), nome: e.target.value } })}
                   className={inputCls}
-                  placeholder="Transportes LTDA"
+                  placeholder={isFobMotorista ? 'Nome completo' : 'Transportes LTDA'}
                 />
               </div>
               <div className="space-y-1">
@@ -436,7 +464,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         </div>
       )}
 
-      {!precisaTransportadora && !showTransportadora && comCobranca && (
+      {!precisaTransportadora && !showTransportadora && !isFobMotorista && comCobranca && (
         <button
           type="button"
           onClick={() => setShowTransportadora(true)}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
-import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
+import { fiscalService, freteValorCompoeTotalNota, mergeNfeConsulta } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
 import {
@@ -141,6 +141,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const freteValorEfetivo = useMemo(() => {
     const mod = Number(frete.modalidade ?? 9);
     if (isDevolucao || isTransferencia || mod === 9) return 0;
+    if (!freteValorCompoeTotalNota(mod, frete.valor)) return 0;
     return Math.max(0, Number(frete.valor) || 0);
   }, [frete, isDevolucao, isTransferencia]);
 

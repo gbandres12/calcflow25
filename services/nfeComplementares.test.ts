@@ -154,6 +154,22 @@ assert.equal(fobMotorista.transporte?.transportadora?.nome, 'PAULO SERGIO GUARIE
 assert.equal(fobMotorista.transporte?.veiculo?.placa, 'QIA1E13');
 assert.equal(fobMotorista.valorFrete, undefined);
 
+const fobComValorIgnorado = fiscalService.montarPayloadNotaAs(
+  {
+    ...order,
+    shipping: 500,
+    frete: {
+      modalidade: 1,
+      valor: 500,
+      transportadora: { documento: '67706983900', nome: 'PAULO SERGIO GUARIENTI' },
+    },
+  } as SaleOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG
+);
+assert.equal(fobComValorIgnorado.valorFrete, undefined, 'FOB nunca envia valorFrete');
+assert.equal(fobComValorIgnorado.transporte?.modalidadeFrete, 1);
+
 const numericNcmOrder = {
   ...order,
   items: [{

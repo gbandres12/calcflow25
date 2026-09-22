@@ -134,6 +134,13 @@ export function modFreteAllowsGrupoTransportador(mod: number, documentoDigits?: 
   return false;
 }
 
+/** FOB (1) e transporte próprio destinatário (4): motorista/placa sim, valor de frete não compõe a NF-e. */
+export function freteValorCompoeTotalNota(mod: number, valor?: number): boolean {
+  const v = Math.max(0, Number(valor) || 0);
+  if (v <= 0) return false;
+  return mod === 0 || mod === 2 || mod === 3;
+}
+
 /**
  * Payload oficial POST /api/v1/nfe/emitir (modelo 55).
  * Não envia emitente, ambiente, serie, numero, total, destinatario ou itens (nomes antigos).
@@ -542,6 +549,9 @@ export const fiscalService = {
         'FOB: informe o CPF do motorista no transportador (como no eFácil). CNPJ de transportadora nesta modalidade costuma ser rejeitado pela SEFAZ/NotaAs.'
       );
     }
+    if (freteMod === 1 && !transpDocVal && order.frete?.transportadora?.nome?.trim()) {
+      warnings.push('FOB: informe o CPF do motorista para ele constar no bloco transportador da NF-e (sem valor de frete).');
+    }
 
     return {
       valid: errors.length === 0,
@@ -664,7 +674,8 @@ export const fiscalService = {
     const freteModalidade = Number(freteModalidadeRaw) as 0 | 1 | 2 | 3 | 4 | 9;
     const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
-    const hasFreteCobrado = freteValor > 0 && !semPagamento && freteModalidade !== 9;
+    const hasFreteCobrado =
+      !semPagamento && freteValorCompoeTotalNota(freteModalidade, freteValor);
 
     const transporte: NotaAsTransporte = { modalidadeFrete: semPagamento ? 9 : freteModalidade };
     const transp = order.frete?.transportadora;
