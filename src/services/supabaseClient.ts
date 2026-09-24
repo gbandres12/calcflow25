@@ -35,6 +35,20 @@ const supabaseAnonKey: string =
   getEnvVar('SUPABASE_PUBLISHABLE_KEY') || 
   getEnvVar('SUPABASE_KEY');
 
+// Lido antes de criar o client: o supabase-js consome o hash do link do
+// e-mail (#access_token=...&type=recovery) e limpa a URL logo em seguida.
+const readAuthRedirect = (): { type: string | null; error: string | null } => {
+  if (typeof window === 'undefined') return { type: null, error: null };
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(window.location.search);
+  return {
+    type: params.get('type') || query.get('type'),
+    error: params.get('error_description') || query.get('error_description')
+  };
+};
+
+export const initialAuthRedirect = readAuthRedirect();
+
 let _supabase: SupabaseClient | null = null;
 
 export const getSupabase = (): SupabaseClient | null => {

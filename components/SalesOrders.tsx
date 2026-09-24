@@ -42,6 +42,7 @@ import {
   DEFAULT_PRODUCT_SHEET,
   OrderLineDraft,
   buildItemsFromDrafts,
+  defaultWarrantyDraft,
   lineDraftSubtotal,
   newOrderLineDraft,
   orderItemsToDrafts,
@@ -68,6 +69,8 @@ interface SalesOrdersProps {
   onDeleteOrder: (orderId: string) => void;
   onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
   onFinalizeOrder: (orderId: string, payments: SalePayment[]) => void;
+  /** Pedido nasceu sem lançamento financeiro — usuário clicou pra lançar agora. */
+  onPostFinance?: (order: SaleOrder) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
   mode?: 'orders' | 'quotes';
 }
@@ -121,6 +124,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onDeleteOrder,
   onVerifyDeletionPassword,
   onFinalizeOrder,
+  onPostFinance,
   onPaymentReceived,
   mode = 'orders'
 }) => {
@@ -299,6 +303,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(isQuotesView);
+  // Desmarcado por padrão: carregamento/venda avulsa não entra sozinho no
+  // financeiro. Quem quiser lançar de cara marca aqui; senão, lança depois
+  // pelo botão "Fazer lançamento financeiro" no pedido já confirmado.
+  const [postFinanceNow, setPostFinanceNow] = useState(false);
   const [notes, setNotes] = useState('');
 
   // Barter / Permuta em Grãos
@@ -379,10 +387,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const handleLineProductChange = (lineId: string, productId: string) => {
     const prod = resolveInventoryProduct(productId, sellableProducts, inventory);
+    const warranty = defaultWarrantyDraft(prod);
     updateLineItem(lineId, {
       productId,
       productDescription: prod?.name || '',
-      unitPrice: String(Number(prod?.unitPrice) || 0)
+      unitPrice: String(Number(prod?.unitPrice) || 0),
+      prntMinimo: warranty.prntMinimo,
+      mgoMinimo: warranty.mgoMinimo
     });
   };
 
@@ -433,6 +444,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setDiscount(String(Number(editingOrder.discount) || 0));
       setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
+      setPostFinanceNow(!editingOrder.withoutFinance);
       setNotes(String(editingOrder.notes || ''));
       setPayments(
         (Array.isArray(editingOrder.payments) ? editingOrder.payments : [])
@@ -547,6 +559,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       shipping: parseFloat(shipping) || 0,
       total: itemsSubtotal - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0),
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
+      // Orçamento não tem esse conceito ainda — só passa a valer quando for
+      // convertido em venda (aí o padrão antigo de lançar automático continua).
+      withoutFinance: isBudget ? undefined : !postFinanceNow,
       isBarter: isBarter,
       barterCommodityType: isBarter ? barterCommodityType : undefined,
       cornTons: isBarter ? grainTonsEquivalent : undefined,
@@ -592,6 +607,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setDiscount('0');
     setShipping('0');
     setIsBudget(isQuotesView);
+    setPostFinanceNow(false);
     setNotes('');
     setIsBarter(false);
     setBarterCommodityType('MILHO');
@@ -1051,6 +1067,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           {order.reference}
                         </span>
 
+                        {order.status === OrderStatus.FINALIZED && order.withoutFinance && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                            <DollarSign size={10} /> Sem lançamento financeiro
+                          </span>
+                        )}
+
                         {/* Tag de Alerta de Débito junto ao nome do cliente */}
                         {order.status === OrderStatus.FINALIZED && (
                           paymentStatus === 'PENDENTE' ? (
@@ -1395,6 +1417,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </button>
                     ) : (
                       <>
+                        {order.withoutFinance && onPostFinance && (
+                          <button
+                            onClick={() => onPostFinance(order)}
+                            className="px-3.5 py-2.5 min-h-11 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-amber-100"
+                            title="Esta venda ainda não tem parcela no Contas a Receber — clique pra lançar agora"
+                          >
+                            <DollarSign size={14} /> Fazer lançamento financeiro
+                          </button>
+                        )}
                         <button
                           onClick={() => setOrderForPayment(order)}
                           className="px-3.5 py-2.5 min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
@@ -1831,6 +1862,33 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 />
                               </div>
                             </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">PRNT mínimo (%)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.prntMinimo}
+                                  onChange={e => updateLineItem(line.lineId, { prntMinimo: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="—"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 block mb-1">MgO mínimo (%)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.mgoMinimo}
+                                  onChange={e => updateLineItem(line.lineId, { mgoMinimo: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="—"
+                                />
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
@@ -2002,6 +2060,24 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </p>
                         </div>
                       </div>
+
+                      {/* Vínculo com o financeiro — opcional, opt-in */}
+                      <label className="flex items-start gap-3 p-4 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-emerald-300">
+                        <input
+                          type="checkbox"
+                          checked={postFinanceNow}
+                          onChange={(e) => setPostFinanceNow(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-emerald-600"
+                        />
+                        <span>
+                          <span className="text-xs font-bold text-slate-800 block">Fazer lançamento financeiro agora</span>
+                          <span className="text-[11px] text-slate-500">
+                            {postFinanceNow
+                              ? 'As parcelas abaixo já entram no Contas a Receber junto com esta venda.'
+                              : 'Estoque baixa normalmente. As parcelas ficam guardadas no pedido, mas só entram no Financeiro quando você clicar em "Fazer lançamento financeiro" nele — útil pra carregamento avulso, aterro, balsa e outros custos/vendas fracionados.'}
+                          </span>
+                        </span>
+                      </label>
 
                       {/* Entrada / Sinal no Ato */}
                       {!editingOrder && (

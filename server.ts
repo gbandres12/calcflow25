@@ -10,6 +10,7 @@ import xmlNfe from "./api/nfe/xml";
 import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
 import adminTenants from "./api/admin/tenants";
+import adminCompanies from "./api/admin/companies";
 import telegramPair from "./api/telegram/pair";
 import telegramWebhook from "./api/telegram/webhook";
 import telegramConferir from "./api/telegram/conferir";
@@ -33,6 +34,8 @@ async function startServer() {
   app.delete("/api/users/invite", (req, res) => inviteUser(req, res));
   app.get("/api/admin/tenants", (req, res) => adminTenants(req, res));
   app.post("/api/admin/tenants", (req, res) => adminTenants(req, res));
+  app.get("/api/admin/companies", (req, res) => adminCompanies(req, res));
+  app.post("/api/admin/companies", (req, res) => adminCompanies(req, res));
   app.get("/api/telegram/pair", (req, res) => telegramPair(req, res));
   app.post("/api/telegram/pair", (req, res) => telegramPair(req, res));
   app.delete("/api/telegram/pair", (req, res) => telegramPair(req, res));

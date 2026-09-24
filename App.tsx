@@ -23,7 +23,7 @@ import TransfersPage from './components/TransfersPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -48,18 +48,22 @@ import {
   Company,
   TransferShipment,
   Transportador,
-  UserRole
+  UserRole,
+  CompanyMembership
 } from './types';
-import { 
+import {
   INITIAL_COST_CENTERS,
   COMPANY_INFO
 } from './constants';
-import { financeService, userService, inventoryService, orderService, db, isDemoCompany, waitForAuthUser } from './services/dataService';
+import { financeService, userService, inventoryService, orderService, db, isDemoCompany, waitForAuthUser, listMyMemberships } from './services/dataService';
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
+import CompanyBranches from './components/CompanyBranches';
+import SetNewPassword from './components/SetNewPassword';
+import { getSupabase, initialAuthRedirect } from './services/supabaseClient';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -91,6 +95,22 @@ const App: React.FC = () => {
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showDbModal, setShowDbModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Link "Esqueci minha senha" do e-mail: antes, ele só logava a pessoa sem
+  // nunca pedir a senha nova. Agora prende a tela até ela definir uma.
+  const [passwordRecovery, setPasswordRecovery] = useState(initialAuthRedirect.type === 'recovery');
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const authLinkError = initialAuthRedirect.error
+    ? 'O link do e-mail expirou ou já foi usado. Peça um novo em "Esqueci minha senha".'
+    : undefined;
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   
   // App State
   const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
@@ -116,8 +136,17 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // ID isolado da empresa / tenant SaaS atual
-  const activeCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
+  // ID isolado da empresa / tenant SaaS atual — a empresa "de login" continua
+  // sendo a mesma de sempre; selectedCompanyId só existe quando o usuário
+  // troca pra outra empresa (matriz/filial) no seletor do topo.
+  const defaultCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<CompanyMembership[]>([]);
+  const [companySwitcherOpen, setCompanySwitcherOpen] = useState(false);
+  const activeCompanyId = (selectedCompanyId && memberships.some((m) => m.companyId === selectedCompanyId))
+    ? selectedCompanyId
+    : defaultCompanyId;
+  const activeMembership = memberships.find((m) => m.companyId === activeCompanyId) || null;
 
   const verifyCurrentUserPassword = async (password: string) => {
     if (!currentUser?.email || !password) return false;
@@ -157,19 +186,31 @@ const App: React.FC = () => {
     return one(record);
   };
 
-  const persistCloud = (tableName: string, record: any, options?: { required?: boolean }) => {
+  // onResult é opcional e não muda o tipo de retorno (continua Promise<void>,
+  // então quem já chama `persistCloud(...)` sem aguardar não muda em nada).
+  // Serve pra quem precisa saber se a gravação realmente confirmou no Supabase
+  // (ex: finalizeSale) sem depender de exceção — o catch abaixo nunca rejeita
+  // a menos que options.required seja passado.
+  const persistCloud = (
+    tableName: string,
+    record: any,
+    options?: { required?: boolean; onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
     dataEpochRef.current += 1;
     return db.upsert(tableName, activeCompanyId, stampUpdatedAt(record))
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
         setPersistError(state.lastError);
+        options?.onResult?.({ ok: true });
       })
       .catch((err) => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
-        setPersistError(err?.message || `Não foi possível gravar ${tableName} no Supabase.`);
+        const message = err?.message || `Não foi possível gravar ${tableName} no Supabase.`;
+        setPersistError(message);
         console.warn('[PERSISTÊNCIA] Gravação no banco falhou; o registro ficou na fila local para reenvio:', tableName, err);
+        options?.onResult?.({ ok: false, error: message });
         if (options?.required) throw err;
       });
   };
@@ -204,6 +245,22 @@ const App: React.FC = () => {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Empresas (matriz + filiais delegadas) do usuário logado, pro seletor do
+  // topo. Roda por usuário, não por activeCompanyId — senão trocar de
+  // empresa recarregaria a própria lista de empresas.
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setMemberships([]);
+      setSelectedCompanyId(null);
+      return;
+    }
+    let cancelled = false;
+    listMyMemberships(currentUser.id).then((rows) => {
+      if (!cancelled) setMemberships(rows);
+    });
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
 
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
@@ -490,7 +547,10 @@ const App: React.FC = () => {
   };
 
   // Transações Financeiras
-  const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
+  const handleAddTransaction = (
+    newTx: Omit<Transaction, 'id'>,
+    options?: { onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
     const id = newId('tx');
     const tx: Transaction = {
       ...newTx,
@@ -499,7 +559,7 @@ const App: React.FC = () => {
       payments: (newTx.payments || []).map(payment => ({ ...payment, transactionId: id }))
     };
     setTransactions(prev => [tx, ...prev]);
-    persistCloud('transactions', tx);
+    return persistCloud('transactions', tx, options);
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
@@ -581,15 +641,21 @@ const App: React.FC = () => {
   };
 
   // Estoque
-  const processStockChange = (productId: string, quantity: number) => {
+  const processStockChange = (
+    productId: string,
+    quantity: number,
+    options?: { onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
+    let pending: Promise<void> = Promise.resolve();
     setInventory(prev => {
-      const newList = prev.map(item => 
+      const newList = prev.map(item =>
         (item.id === productId) ? { ...item, quantity: Math.max(0, item.quantity + quantity) } : item
       );
       const updatedItem = newList.find(i => i.id === productId);
-      if (updatedItem) persistCloud('inventory', updatedItem);
+      if (updatedItem) pending = persistCloud('inventory', updatedItem, options);
       return newList;
     });
+    return pending;
   };
 
   const handleAddInventoryItem = (item: Omit<InventoryItem, 'id'> & { id?: string }) => {
@@ -671,18 +737,53 @@ const App: React.FC = () => {
       return exists ? prev.map(o => o.id === newOrder.id ? newOrder : o) : [...prev, newOrder];
     });
     persistCloud('sales_orders', newOrder);
-    if (!newOrder.withoutFinance && newOrder.status === OrderStatus.FINALIZED) {
+    if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
-      (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      if (!newOrder.withoutFinance) {
+        (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      }
     }
   };
 
-  const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    if (order.withoutFinance) return;
-    (Array.isArray(order.items) ? order.items : []).forEach(item => {
-      if (!item?.productId) return;
-      processStockChange(String(item.productId), -(Number(item.quantity) || 0));
+  // Baixa de estoque acontece sempre que o pedido entra em "Venda Confirmada"
+  // — o produto saiu do pátio, existe ou não lançamento financeiro. Quem
+  // chama isso já garantiu que é a primeira vez que o pedido finaliza (ver
+  // finalizeSale), então não precisa reaplicar em reenvios/retiradas depois.
+  const applyOrderStock = (order: SaleOrder) => {
+    const failures: string[] = [];
+    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) failures.push(label);
+    };
+    const stockWrites = (Array.isArray(order.items) ? order.items : [])
+      .filter((item) => item?.productId)
+      .map((item) =>
+        processStockChange(String(item.productId), -(Number(item.quantity) || 0), {
+          onResult: noteFailure(`estoque de ${item.productId}`)
+        })
+      );
+    Promise.all(stockWrites).then(() => {
+      if (failures.length > 0) {
+        setPersistError(
+          `A baixa de estoque da venda #${order.reference} ficou salva neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
+          'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
+        );
+      }
     });
+  };
+
+  // Cria as parcelas, os lançamentos financeiros e atualiza o saldo do
+  // cliente. Só roda quando o pedido pede lançamento financeiro (checkbox
+  // "Fazer lançamento financeiro" marcada) — ou quando alguém clica nesse
+  // botão depois, num pedido que nasceu sem isso (ver handlePostOrderFinance).
+  // Todas as gravações disparam juntas, sem esperar uma pela outra — só
+  // esperamos elas confirmarem (ou não) antes de decidir a mensagem do
+  // banner, que agora aponta exatamente o que ficou pendente.
+  const postSaleFinance = async (order: SaleOrder, payments: SalePayment[]) => {
+    const failures: string[] = [];
+    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) failures.push(label);
+    };
+
     const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
     const financialSchedule: SalePayment[] = [
@@ -702,9 +803,9 @@ const App: React.FC = () => {
       }] : [])
     ];
 
-    financialSchedule.forEach(payment => {
+    const transactionWrites = financialSchedule.map((payment, index) => {
       const accId = payment.accountId || accounts[0]?.id || 'acc-1';
-      handleAddTransaction({
+      return handleAddTransaction({
         accountId: accId,
         costCenterId: 'cc4',
         date: payment.date,
@@ -717,8 +818,10 @@ const App: React.FC = () => {
         customerId: order.customerId,
         orderId: order.id,
         payments: []
-      });
+      }, { onResult: noteFailure(`parcela ${index + 1}/${financialSchedule.length}`) });
     });
+
+    let customerWrite: Promise<void> = Promise.resolve();
     setCustomers(prev => {
       const updatedList = prev
         .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
@@ -729,19 +832,55 @@ const App: React.FC = () => {
               totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
               status: 'Ativo' as const
             };
-            persistCloud('customers', updatedCustomer);
+            customerWrite = persistCloud('customers', updatedCustomer, { onResult: noteFailure('saldo do cliente') });
             return updatedCustomer;
           }
           return c;
         });
       return updatedList;
     });
-    const finalizedOrder = { ...order, payments: financialSchedule, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
+    const finalizedOrder = {
+      ...order,
+      payments: financialSchedule,
+      status: OrderStatus.FINALIZED,
+      withoutFinance: false,
+      companyId: order.companyId || activeCompanyId
+    };
     setOrders(prev => {
       const exists = prev.some(o => o.id === order.id);
       return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
     });
-    persistCloud('sales_orders', finalizedOrder);
+    const orderWrite = persistCloud('sales_orders', finalizedOrder, { onResult: noteFailure('o próprio pedido') });
+
+    await Promise.all([...transactionWrites, customerWrite, orderWrite]);
+
+    if (failures.length > 0) {
+      setPersistError(
+        `O lançamento financeiro da venda #${order.reference} ficou salvo neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
+        'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
+      );
+    }
+  };
+
+  // Orquestra a primeira finalização de uma venda: sempre baixa o estoque
+  // (o produto saiu, independente de lançar no financeiro ou não); só cria
+  // parcelas/transações quando o pedido não pediu pra ficar "sem financeiro".
+  // Quem chama isso decide se é de fato a primeira vez que o pedido finaliza
+  // (ver os pontos que chamam finalizeSale em handleAddOrder/handleUpdateOrder)
+  // — chamar de novo depois (retirada parcial, edição) não deve reaplicar.
+  const finalizeSale = async (order: SaleOrder, payments: SalePayment[]) => {
+    applyOrderStock(order);
+    if (!order.withoutFinance) {
+      await postSaleFinance(order, payments);
+    }
+  };
+
+  // Ação explícita do botão "Fazer lançamento financeiro" num pedido que
+  // nasceu sem isso. Não toca em estoque — o produto já saiu na finalização.
+  const handlePostOrderFinance = (order: SaleOrder) => {
+    const alreadyPosted = transactions.some((t) => t.orderId === order.id);
+    if (alreadyPosted || !order.withoutFinance) return;
+    postSaleFinance(order, order.payments || []);
   };
 
   const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
@@ -873,24 +1012,29 @@ const App: React.FC = () => {
       setOrders(prev => [...prev, tagged]);
       voidCancelledNfeFinance(tagged);
       const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-      if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
+      if (tagged.status === OrderStatus.FINALIZED) {
         const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
         if (!hasTx) {
-          finalizeSale(tagged, tagged.payments || []);
-          (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+          applyOrderStock(tagged);
+          if (!tagged.withoutFinance) {
+            postSaleFinance(tagged, tagged.payments || []);
+            (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+          }
         }
       }
       return persist;
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-    if (
-      tagged.status === OrderStatus.FINALIZED
-      && !tagged.withoutFinance
-    ) {
+    // Baixa de estoque só na transição pra "Venda Confirmada" — reenvios
+    // depois (retirada parcial, "Fazer lançamento financeiro") não reaplicam.
+    if (tagged.status === OrderStatus.FINALIZED && originalOrder.status !== OrderStatus.FINALIZED) {
+      applyOrderStock(tagged);
+    }
+    if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
       const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
       if (!hasTx || originalOrder.status === OrderStatus.BUDGET) {
-        finalizeSale(tagged, tagged.payments || []);
+        postSaleFinance(tagged, tagged.payments || []);
         (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
       }
     }
@@ -979,7 +1123,22 @@ const App: React.FC = () => {
     }
   };
 
-  if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} />;
+  if (passwordRecovery) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#F4F5EF]">
+        <SetNewPassword
+          mode="recovery"
+          onDone={() => {
+            setPasswordRecovery(false);
+            try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+            userService.getCurrentSessionUser().then((user) => { if (user) handleSetCurrentUser(user); });
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} notice={authLinkError} />;
 
   const operatingCompany: Company = {
     id: activeCompanyId,
@@ -1005,6 +1164,7 @@ const App: React.FC = () => {
         onNavigate={setCurrentView} 
         user={currentUser}
         onLogout={() => handleSetCurrentUser(null)}
+        onChangePassword={isDemoCompany(activeCompanyId) ? undefined : () => { setMobileMenuOpen(false); setShowChangePassword(true); }}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
         onOpenDatabaseModal={() => setShowDbModal(true)}
@@ -1029,10 +1189,35 @@ const App: React.FC = () => {
             </div>
 
             <div className="cf-topbar-actions">
-              <div className="cf-topbar-pill hidden sm:inline-flex">
-                <MapPin size={14} className="text-[#0F5948]" />
-                <span>{activeCompanyId === 'matriz-demo' ? 'Unidade Matriz' : 'Unidade ativa'}</span>
-                <ChevronDown size={13} />
+              <div className="relative hidden sm:block">
+                <button
+                  type="button"
+                  onClick={() => { if (memberships.length > 1) setCompanySwitcherOpen((open) => !open); }}
+                  className="cf-topbar-pill"
+                  title={memberships.length > 1 ? 'Trocar de empresa' : undefined}
+                >
+                  <MapPin size={14} className="text-[#0F5948]" />
+                  <span>
+                    {activeMembership?.companyName
+                      || (activeCompanyId === 'matriz-demo' ? 'Unidade Matriz' : (activeMembership?.isBranch ? 'Filial' : (currentUser.companyName || 'Unidade ativa')))}
+                  </span>
+                  {memberships.length > 1 && <ChevronDown size={13} />}
+                </button>
+                {companySwitcherOpen && memberships.length > 1 && (
+                  <div className="absolute right-0 mt-1 w-64 bg-white border border-[#DDE6DE] rounded-xl shadow-lg z-40 overflow-hidden">
+                    {memberships.map((m) => (
+                      <button
+                        key={m.companyId}
+                        type="button"
+                        onClick={() => { setSelectedCompanyId(m.companyId); setCompanySwitcherOpen(false); setCurrentView('dashboard'); }}
+                        className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 ${m.companyId === activeCompanyId ? 'bg-emerald-50 font-semibold text-emerald-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        <span className="truncate">{m.companyName || (m.isBranch ? 'Filial' : (currentUser.companyName || 'Matriz'))}</span>
+                        <span className="text-[10px] uppercase text-slate-400 shrink-0">{m.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {currentUser.onboardingCompleted === false && (
@@ -1125,7 +1310,8 @@ const App: React.FC = () => {
                 onFinalizeOrder={(oid, p) => {
                   const order = orders.find(o => o.id === oid);
                   if (order) finalizeSale(order, p);
-                }} 
+                }}
+                onPostFinance={handlePostOrderFinance}
                 onPaymentReceived={handlePaymentReceived}
                 mode={currentView === 'quotes' ? 'quotes' : 'orders'}
               />
@@ -1292,6 +1478,13 @@ const App: React.FC = () => {
               onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
+          {currentView === 'branches' && (
+            <CompanyBranches
+              activeCompanyId={activeCompanyId}
+              currentUser={currentUser}
+              matrizUsers={displayUsers}
+            />
+          )}
           {currentView === 'fleet' && (
             <FleetManagement 
               machines={machines} 
@@ -1397,6 +1590,16 @@ const App: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setCurrentView('fiscal')}
+          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+            currentView === 'fiscal' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+          }`}
+        >
+          <FileCheck size={18} />
+          <span className="text-[10px] tracking-tight">Emitir NF-e</span>
+        </button>
+
+        <button
           onClick={() => setMobileMenuOpen(true)}
           className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-[#D5E3DC] hover:text-white"
         >
@@ -1404,6 +1607,16 @@ const App: React.FC = () => {
           <span className="text-[10px] tracking-tight">Menu</span>
         </button>
       </div>
+
+      {showChangePassword && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/60 flex items-center justify-center p-4 print:hidden">
+          <SetNewPassword
+            mode="change"
+            onDone={() => setShowChangePassword(false)}
+            onCancel={() => setShowChangePassword(false)}
+          />
+        </div>
+      )}
 
       {/* Assistente de Onboarding / Setup Inicial */}
       {showOnboardingModal && currentUser && (

@@ -94,6 +94,37 @@ export interface Company {
   isActive: boolean;
 }
 
+/** read/write por módulo (mesma chave de ALL_TABLES em dataService.ts). */
+export type CompanyModulePermissions = Record<string, { read: boolean; write: boolean }>;
+
+/** Vínculo do usuário logado com uma empresa (matriz ou filial). */
+export interface CompanyMembership {
+  companyId: string;
+  companyName?: string;
+  role: string;
+  permissions: CompanyModulePermissions;
+  isBranch: boolean;
+  parentCompanyId?: string | null;
+}
+
+/** Uma filial (ou a matriz) cadastrada em public.companies, com quem tem acesso. */
+export interface CompanyBranch {
+  id: string;
+  name: string;
+  parentCompanyId: string | null;
+  ownerUserId?: string | null;
+  isActive: boolean;
+  isBranch: boolean;
+  createdAt?: string;
+  members: Array<{
+    userId: string;
+    role: string;
+    permissions: CompanyModulePermissions;
+    name?: string;
+    email?: string;
+  }>;
+}
+
 export interface FinancialAccount {
   id: string;
   name: string;
@@ -481,6 +512,7 @@ export interface SaleOrder {
   deliveryDate?: string;
   validUntil?: string;
   isAvulsa?: boolean;
+  /** Verdadeiro até alguém clicar em "Fazer lançamento financeiro" no pedido. */
   withoutFinance?: boolean;
   items: SaleOrderItem[];
   /** Notas emitidas a partir desta venda (pedido completo + avulsas parciais). */
@@ -627,4 +659,4 @@ export interface TransferShipment {
   supplierName?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches';

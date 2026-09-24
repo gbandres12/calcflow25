@@ -13,9 +13,11 @@ import { DatabaseStatusModal } from './DatabaseStatusModal';
 
 interface LoginProps {
   onLoginSuccess: (user: User, isNewRegistration?: boolean) => void;
+  /** Mensagem vinda de fora (ex: link de recuperação expirado). */
+  notice?: string;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [showDbModal, setShowDbModal] = useState(false);
   
@@ -36,7 +38,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [forgotSuccess, setForgotSuccess] = useState('');
   
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(notice || '');
   const [successInfo, setSuccessInfo] = useState('');
 
   const handleLogin = async (e?: React.FormEvent, customEmail?: string, customPass?: string) => {

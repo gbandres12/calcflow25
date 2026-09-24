@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Package, FileText, Users, Wallet, TrendingUp, CreditCard,
   Truck, Fuel, Boxes, UserCog, Settings, LogOut, ShieldCheck, Briefcase, Wrench,
-  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers
+  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound
 } from 'lucide-react';
 import { View, UserRole, User, UserPermissions } from '../types';
 
@@ -11,12 +11,13 @@ interface SidebarProps {
   onNavigate: (view: View) => void;
   user: User;
   onLogout?: () => void;
+  onChangePassword?: () => void;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
   onOpenDatabaseModal?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogout, mobileOpen = false, onCloseMobile }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogout, onChangePassword, mobileOpen = false, onCloseMobile }) => {
   const userPermissions: UserPermissions = user.permissions || {
     financial: user.role === UserRole.ADMIN || user.role === UserRole.MANAGER,
     fiscal: false,
@@ -63,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     ]},
     { title: 'Gestão & Sistema', items: [
       { id: 'users', label: 'Usuários & Equipe', icon: UserCog },
+      { id: 'branches', label: 'Filiais e Acessos', icon: Briefcase, roles: [UserRole.ADMIN] },
       { id: 'fiscal_config', label: 'Configuração de NF-e', icon: Sliders, roles: [UserRole.ADMIN, UserRole.MANAGER] },
       { id: 'settings', label: 'Configurações', icon: Settings, roles: [UserRole.ADMIN] },
     ]},
@@ -110,7 +112,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
               <p className="text-xs font-extrabold text-[#163C35] truncate">{user.name.split(' ')[0]}</p>
               <p className="text-[10px] text-[#728078] truncate">{user.role}</p>
             </div>
-            {onLogout && <button type="button" onClick={onLogout} className="p-1.5 text-[#728078] hover:text-[#0F5948]"><LogOut size={15} /></button>}
+            <div className="flex items-center gap-0.5 shrink-0">
+              {onChangePassword && (
+                <button type="button" onClick={onChangePassword} title="Alterar minha senha" aria-label="Alterar minha senha" className="p-1.5 text-[#728078] hover:text-[#0F5948]">
+                  <KeyRound size={15} />
+                </button>
+              )}
+              {onLogout && <button type="button" onClick={onLogout} title="Sair" aria-label="Sair" className="p-1.5 text-[#728078] hover:text-[#0F5948]"><LogOut size={15} /></button>}
+            </div>
           </div>
         </div>
       </aside>

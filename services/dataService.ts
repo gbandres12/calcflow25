@@ -14,7 +14,7 @@ import {
   OUTFLOW_CATEGORIES,
   DEFAULT_FISCAL_CONFIG
 } from '../constants';
-import { User, UserRole } from '../types';
+import { User, UserRole, CompanyMembership } from '../types';
 import { getSupabase } from './supabaseClient';
 import { isDemoEmail, isLocalDevHost } from './authLogic';
 import {
@@ -104,10 +104,30 @@ const removePendingDelete = (tableStorageKey: string, id: string) => {
   );
 };
 
-let lastPersistError: string | null = null;
+// Erro de sync por tabela+empresa. Antes era uma única variável global: duas
+// tabelas sincronizando ao mesmo tempo podiam apagar o erro uma da outra e
+// mostrar "tudo ok" no banner do App.tsx quando uma delas tinha, sim, falhado.
+const persistErrorsByKey = new Map<string, { message: string; at: number }>();
 
-const setPersistError = (message: string | null) => {
-  lastPersistError = message;
+const persistErrorKey = (tableName: string, companyId: string) => `${tableName}::${companyId}`;
+
+const setPersistError = (tableName: string, companyId: string, message: string | null) => {
+  const key = persistErrorKey(tableName, companyId);
+  if (message) {
+    persistErrorsByKey.set(key, { message, at: Date.now() });
+  } else {
+    persistErrorsByKey.delete(key);
+  }
+};
+
+const getLatestPersistError = (companyId: string): string | null => {
+  const suffix = `::${companyId}`;
+  let latest: { message: string; at: number } | null = null;
+  for (const [key, entry] of persistErrorsByKey) {
+    if (!key.endsWith(suffix)) continue;
+    if (!latest || entry.at > latest.at) latest = entry;
+  }
+  return latest?.message ?? null;
 };
 
 const composeVisibleRows = (
@@ -141,6 +161,8 @@ const DEMO_TABLE_DATA: Record<string, any[]> = {
   ]
 };
 
+// Coleções lógicas no JSONB public.app_records. Não dual-write nas tabelas
+// relacionais travadas (customers/products/orders/…) da migration 004.
 export const ALL_TABLES = [
   'customers',
   'sales_orders',
@@ -255,10 +277,10 @@ const persistPendingUpserts = async (
     });
 
   if (error) {
-    setPersistError(`Falha ao gravar ${tableName} no Supabase: ${error.message}`);
+    setPersistError(tableName, companyId, `Falha ao gravar ${tableName} no Supabase: ${error.message}`);
     throw new Error(error.message);
   }
-  setPersistError(null);
+  setPersistError(tableName, companyId, null);
 };
 
 const persistPendingDeletes = async (
@@ -281,7 +303,7 @@ const persistPendingDeletes = async (
       .eq('company_id', companyId)
       .eq('id', String(id));
     if (error) {
-      setPersistError(`Falha ao excluir ${tableName} no Supabase: ${error.message}`);
+      setPersistError(tableName, companyId, `Falha ao excluir ${tableName} no Supabase: ${error.message}`);
       throw new Error(error.message);
     }
   }
@@ -393,6 +415,46 @@ export const resolveMembershipCompanyId = async (
   return fallback;
 };
 
+/**
+ * Toda empresa (matriz e/ou filial) onde o usuário logado tem vínculo, com o
+ * papel e a permissão por módulo dessa empresa específica. Alimenta o
+ * seletor de empresa no topo do app — sem RPC, company_memberships e
+ * companies já são RLS-scoped pra "só as minhas linhas".
+ */
+export const listMyMemberships = async (userId: string): Promise<CompanyMembership[]> => {
+  const supabase = getSupabase();
+  if (!supabase || !userId) return [];
+  try {
+    const { data: memberships, error } = await supabase
+      .from('company_memberships')
+      .select('company_id, role, permissions')
+      .eq('user_id', userId);
+    if (error || !Array.isArray(memberships) || memberships.length === 0) return [];
+
+    const companyIds = memberships.map((row: any) => row.company_id);
+    const { data: companies } = await supabase
+      .from('companies')
+      .select('id, name, parent_company_id')
+      .in('id', companyIds);
+    const companyById = new Map((companies || []).map((row: any) => [row.id, row]));
+
+    return memberships.map((row: any) => {
+      const company = companyById.get(row.company_id);
+      return {
+        companyId: row.company_id,
+        companyName: company?.name,
+        role: row.role,
+        permissions: row.permissions || {},
+        isBranch: Boolean(company?.parent_company_id),
+        parentCompanyId: company?.parent_company_id ?? null
+      };
+    });
+  } catch (err) {
+    console.warn('[Supabase] Falha ao listar empresas do usuário:', err);
+    return [];
+  }
+};
+
 // ========================================================
 // REPOSITÓRIO UNIFICADO: SUPABASE É A FONTE DA VERDADE
 // localStorage só guarda cache e fila de reenvio
@@ -408,7 +470,7 @@ export const db = {
     });
     return {
       pendingCount: Math.max(pendingCount, countAllBrowserPending()),
-      lastError: lastPersistError,
+      lastError: getLatestPersistError(compKey),
       cloudEnabled: Boolean(getSupabase())
     };
   },
@@ -550,7 +612,7 @@ export const db = {
           return initialData;
         } else if (error) {
           console.warn(`[Supabase] Consulta '${tableName}' retornou aviso (código ${error.code}):`, error.message);
-          setPersistError(`Falha ao ler ${tableName} no Supabase: ${error.message}`);
+          setPersistError(tableName, compKey, `Falha ao ler ${tableName} no Supabase: ${error.message}`);
         }
       } catch (err) {
         console.warn(`[Supabase] Falha ao consultar '${tableName}':`, err);
@@ -600,7 +662,7 @@ export const db = {
     if (!supabase) {
       if (!isDemoCompany(compKey)) {
         const err = new Error('Supabase não está configurado. Cliente e venda não foram gravados no banco.');
-        setPersistError(err.message);
+        setPersistError(tableName, compKey, err.message);
         throw err;
       }
       return updated;
@@ -629,7 +691,7 @@ export const db = {
     if (!supabase) {
       if (!isDemoCompany(compKey)) {
         const err = new Error('Supabase não está configurado. A exclusão não foi gravada no banco.');
-        setPersistError(err.message);
+        setPersistError(tableName, compKey, err.message);
         throw err;
       }
       removePendingDelete(storageKey, id);
@@ -976,6 +1038,31 @@ export const userService = {
       success: true,
       message: `Link de redefinição de senha enviado com sucesso para ${cleanEmail}. Verifique sua caixa de entrada!`
     };
+  },
+
+  /** Grava a nova senha do usuário da sessão atual (link de recuperação ou "Alterar minha senha"). */
+  async updatePassword(newPassword: string): Promise<void> {
+    const supabase = getSupabase();
+    if (!supabase) {
+      throw new Error('Supabase não conectado. Configure as variáveis de ambiente.');
+    }
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      throw new Error('O link expirou ou a sessão acabou. Peça um novo link em "Esqueci minha senha".');
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) return;
+    const msg = error.message || '';
+    if (/different from the old password/i.test(msg)) {
+      throw new Error('A nova senha precisa ser diferente da atual.');
+    }
+    if (/weak|pwned|leaked|compromised|at least/i.test(msg)) {
+      throw new Error('Senha fraca ou já vazada na internet. Use outra, com letras e números.');
+    }
+    if (/reauthentication/i.test(msg)) {
+      throw new Error('Por segurança, saia e entre de novo antes de trocar a senha.');
+    }
+    throw new Error(`Não foi possível trocar a senha: ${msg}`);
   },
 
   /**
