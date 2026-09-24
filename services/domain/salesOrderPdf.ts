@@ -1,6 +1,6 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib';
 import { Customer, FiscalConfig, SaleOrder } from '../../types.js';
-import { sanitizeSalesOrderSheetBody } from '../../utils/salesOrderProduct.js';
+import { productBlockLines } from '../../utils/salesOrderProduct.js';
 import { formatBRL } from './telegramWrites.js';
 
 const NAVY = rgb(11 / 255, 31 / 255, 74 / 255);
@@ -148,10 +148,9 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   const sheetTitle =
     input.order.productSheetTitle?.trim() ||
     (multiItem ? 'Informações complementares do pedido' : items[0]?.productName || '');
-  const sheetLines = sanitizeSalesOrderSheetBody(input.order.productSheetBody)
-    .split('\n')
-    .map((line) => line.replace(/^\*+\s*/, '').trim())
-    .filter(Boolean);
+  const sheetLines = productBlockLines(input.order);
+  const visibleSheetLines = sheetLines.slice(0, 8);
+  const sheetH = Math.max(78, 48 + Math.max(visibleSheetLines.length - 1, 0) * 11);
 
   const logo = await embedLogo(pdf, brand.logoDataUrl);
   if (logo) {
@@ -300,11 +299,11 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   y -= 12;
   const half = (width - 10) / 2;
   const sheetTop = y;
-  page.drawRectangle({ x: left, y: y - 78, width: half, height: 78, borderColor: BORDER, borderWidth: 0.8 });
+  page.drawRectangle({ x: left, y: y - sheetH, width: half, height: sheetH, borderColor: BORDER, borderWidth: 0.8 });
   draw('PRODUTO', left + 8, y - 12, 6.5, bold, MUTED);
   draw(fit(sheetTitle, 9, half - 16, bold), left + 8, y - 26, 9, bold, NAVY);
   let sy = y - 40;
-  sheetLines.slice(0, 4).forEach((line) => {
+  visibleSheetLines.forEach((line) => {
     const italicLook = line.toLowerCase().includes('sujeito');
     draw(fit(line, 7.5, half - 16), left + 8, sy, 7.5, font, italicLook ? MUTED : TEXT);
     sy -= 11;
@@ -328,7 +327,7 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   page.drawRectangle({ x: summaryX, y: ry - 18, width: half, height: 18, color: GREEN });
   draw('Total geral', summaryX + 8, ry - 12, 9, bold, WHITE);
   drawRight(formatBRL(input.order.total), summaryX + half - 8, ry - 12, 10, bold, WHITE);
-  y = Math.min(sheetTop - 78, ry - 18) - 12;
+  y = Math.min(sheetTop - sheetH, ry - 18) - 12;
 
   const blockH = 68;
   page.drawRectangle({ x: left, y: y - 16, width: half, height: 16, color: NAVY });

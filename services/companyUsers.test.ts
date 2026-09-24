@@ -24,7 +24,7 @@ describe('equipe da pasta de produção', () => {
     assert.equal(userBelongsToCompany(row, 'matriz-demo'), true);
   });
 
-  it('traz Cassia e Alana para a pasta da CBA e descarta admin de demonstração duplicado', () => {
+  it('lista só quem tem membership e usa o JSON só como nome na tela', () => {
     const plan = planCompanyUserHeal({
       companyId: COMPANY,
       userRows: [
@@ -74,7 +74,8 @@ describe('equipe da pasta de produção', () => {
         }
       ],
       memberships: [
-        { company_id: COMPANY, user_id: ALANA_ID, role: 'Administrador' }
+        { company_id: COMPANY, user_id: ALANA_ID, role: 'Administrador' },
+        { company_id: COMPANY, user_id: CASSIA_AUTH, role: 'Gerente' }
       ],
       authUsers: [
         { id: ALANA_ID, email: 'cbamatriz@gmail.com', name: 'Alana' },
@@ -94,11 +95,59 @@ describe('equipe da pasta de produção', () => {
     const cassia = plan.users.find((user) => user.email === 'cassiasilva140287@gmail.com');
     assert.equal(cassia?.id, CASSIA_AUTH);
     assert.equal(cassia?.name, 'Cassia Juliane');
+    assert.equal(cassia?.role, 'Gerente');
     assert.equal(cassia?.companyId, COMPANY);
 
-    assert.equal(plan.toEnsureMembership.some((row) => row.userId === CASSIA_AUTH), true);
+    assert.equal(plan.toEnsureMembership.length, 0);
     assert.equal(plan.toUpsert.some((row) => row.id === CASSIA_AUTH && row.company_id === COMPANY), true);
     assert.equal(plan.toRemove.some((row) => row.id === 'u1'), true);
+  });
+
+  it('não promove cadastro JSON sem membership para a equipe', () => {
+    const plan = planCompanyUserHeal({
+      companyId: COMPANY,
+      userRows: [{
+        id: 'u-local-cassia',
+        table_name: 'users',
+        company_id: COMPANY,
+        data: {
+          name: 'Cassia Juliane',
+          email: 'cassiasilva140287@gmail.com',
+          role: 'Gerente',
+          companyId: COMPANY
+        }
+      }],
+      memberships: [
+        { company_id: COMPANY, user_id: ALANA_ID, role: 'Administrador' }
+      ],
+      authUsers: [
+        { id: ALANA_ID, email: 'cbamatriz@gmail.com', name: 'Alana' },
+        { id: CASSIA_AUTH, email: 'cassiasilva140287@gmail.com', name: 'Cassia Juliane' }
+      ]
+    });
+
+    assert.deepEqual(plan.users.map((user) => user.email), ['cbamatriz@gmail.com']);
+    assert.equal(plan.toEnsureMembership.length, 0);
+    assert.equal(plan.toRemove.some((row) => row.id === 'u-local-cassia'), true);
+  });
+
+  it('o cargo da membership prevalece sobre o JSON e sobre o usuário logado', () => {
+    const alana = {
+      id: ALANA_ID,
+      name: 'Alana',
+      email: 'cbamatriz@gmail.com',
+      role: UserRole.OPERATOR,
+      status: 'Ativo' as const
+    };
+    const shown = visibleCompanyUsers([{
+      id: ALANA_ID,
+      name: 'Alana',
+      email: 'cbamatriz@gmail.com',
+      role: UserRole.ADMIN,
+      status: 'Ativo'
+    }], alana);
+    assert.equal(shown[0].role, UserRole.ADMIN);
+    assert.equal(shown[0].id, ALANA_ID);
   });
 
   it('mantém o administrador logado visível mesmo se a lista vier incompleta', () => {

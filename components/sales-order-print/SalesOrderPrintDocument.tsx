@@ -3,7 +3,7 @@ import { Company, Customer, SaleOrder } from '../../types';
 import { fiscalService } from '../../services/fiscalService';
 import { SO } from './theme';
 import { formatBRL, formatQty, formatDate, dash } from './format';
-import { sanitizeSalesOrderSheetBody } from '../../utils/salesOrderProduct';
+import { productBlockLines } from '../../utils/salesOrderProduct';
 
 interface Props {
   order: SaleOrder;
@@ -43,9 +43,7 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
   const sheetTitle =
     order.productSheetTitle?.trim() ||
     (multiItem ? 'Informações complementares do pedido' : items[0]?.productName || '');
-  const sheetLines = sanitizeSalesOrderSheetBody(order.productSheetBody)
-    .split('\n')
-    .filter(Boolean);
+  const sheetLines = productBlockLines(order);
 
   return (
     <article id="printable-sales-order" className="bg-white" style={{ fontFamily: SO.font, color: SO.text }}>

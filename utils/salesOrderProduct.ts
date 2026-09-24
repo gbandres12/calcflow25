@@ -6,6 +6,8 @@ export type OrderLineDraft = {
   productDescription: string;
   quantity: string;
   unitPrice: string;
+  prntMinimo: string;
+  mgoMinimo: string;
 };
 
 export type SaleOrderLineItem = SaleOrder['items'][number];
@@ -14,6 +16,95 @@ export const DEFAULT_PRODUCT_SHEET = {
   title: '',
   body: ''
 };
+
+export const WARRANTY_VARIATION_NOTE =
+  'Valores sujeitos a variação conforme lote e análise laboratorial.';
+
+export function defaultWarrantyDraft(item?: InventoryItem | null): { prntMinimo: string; mgoMinimo: string } {
+  const hay = `${item?.id || ''} ${item?.name || ''} ${item?.category || ''}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (!hay.trim()) return { prntMinimo: '', mgoMinimo: '' };
+  const isDolomitic = /dolomit/.test(hay);
+  const isLimestone = isDolomitic || /calcario/.test(hay) || /\b(moido|ensacado)\b/.test(hay);
+  if (isDolomitic) return { prntMinimo: '80', mgoMinimo: '15' };
+  if (isLimestone) return { prntMinimo: '80', mgoMinimo: '' };
+  return { prntMinimo: '', mgoMinimo: '' };
+}
+
+export function parseWarrantyPercent(raw?: string | null): number | undefined {
+  const trimmed = String(raw ?? '').trim().replace(',', '.');
+  if (!trimmed) return undefined;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
+export function warrantyFromDraft(prntMinimo: string, mgoMinimo: string): {
+  hasGarantias?: boolean;
+  prntMinimoGarantido?: number;
+  mgoMinimoGarantido?: number;
+} {
+  const prnt = parseWarrantyPercent(prntMinimo);
+  const mgo = parseWarrantyPercent(mgoMinimo);
+  if (prnt == null && mgo == null) return {};
+  return {
+    hasGarantias: true,
+    ...(prnt != null ? { prntMinimoGarantido: prnt } : {}),
+    ...(mgo != null ? { mgoMinimoGarantido: mgo } : {})
+  };
+}
+
+function formatWarrantyPercent(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(value);
+}
+
+export function warrantyLinesForItems(
+  items?: Array<Pick<SaleOrderLineItem, 'productName' | 'productDescription' | 'prntMinimoGarantido' | 'mgoMinimoGarantido'>>
+): string[] {
+  const list = (items || []).filter(
+    (item) => item.prntMinimoGarantido != null || item.mgoMinimoGarantido != null
+  );
+  if (!list.length) return [];
+
+  const signature = (item: (typeof list)[number]) =>
+    `${item.prntMinimoGarantido ?? ''}|${item.mgoMinimoGarantido ?? ''}`;
+  const distinct = new Set(list.map(signature)).size > 1;
+  const lines: string[] = [];
+
+  const pushPercents = (item: (typeof list)[number]) => {
+    if (item.prntMinimoGarantido != null) {
+      lines.push(`PRNT mínimo garantido: ${formatWarrantyPercent(item.prntMinimoGarantido)}%`);
+    }
+    if (item.mgoMinimoGarantido != null) {
+      lines.push(`MgO mínimo garantido: ${formatWarrantyPercent(item.mgoMinimoGarantido)}%`);
+    }
+  };
+
+  if (!distinct) {
+    pushPercents(list[0]);
+  } else {
+    for (const item of list) {
+      lines.push(item.productDescription?.trim() || item.productName || 'Produto');
+      pushPercents(item);
+    }
+  }
+
+  lines.push(WARRANTY_VARIATION_NOTE);
+  return lines;
+}
+
+export function productBlockLines(order: {
+  productSheetBody?: string | null;
+  items?: Array<Pick<SaleOrderLineItem, 'productName' | 'productDescription' | 'prntMinimoGarantido' | 'mgoMinimoGarantido'>>;
+}): string[] {
+  const sheet = sanitizeSalesOrderSheetBody(order.productSheetBody)
+    .split('\n')
+    .map((line) => line.replace(/^\*+\s*/, '').trim())
+    .filter(Boolean);
+  return [...warrantyLinesForItems(order.items), ...sheet];
+}
 
 const FISCAL_OR_WARRANTY_LINE =
   /peneira|m[ií]nimo garantido|minimo garantido|\bprnt\b|\bmgo\b|conv[eê]nio icms|observac[oõ]es fiscais|infcpl|infadprod|isen[cç].*icms|icms diferido|art\.?\s*9|ec\s*132|reforma tribut[aá]ria|granulometr/i;
@@ -50,12 +141,15 @@ export function sellableInventoryItems(inventory: InventoryItem[]): InventoryIte
 export function newOrderLineDraft(sellableProducts: InventoryItem[], productId?: string): OrderLineDraft {
   const prod =
     sellableProducts.find(p => p.id === (productId || 'moido')) || sellableProducts[0];
+  const warranty = defaultWarrantyDraft(prod);
   return {
     lineId: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     productId: String(prod?.id || 'moido'),
     productDescription: prod?.name || '',
     quantity: '',
-    unitPrice: String(Number(prod?.unitPrice) || 0)
+    unitPrice: String(Number(prod?.unitPrice) || 0),
+    prntMinimo: warranty.prntMinimo,
+    mgoMinimo: warranty.mgoMinimo
   };
 }
 
@@ -67,7 +161,13 @@ export function orderItemsToDrafts(items: SaleOrder['items'] | undefined): Order
     productId: String(it.productId || 'moido'),
     productDescription: String(it.productDescription?.trim() || it.productName || ''),
     quantity: String(Number(it.quantity) || 0),
-    unitPrice: String(Number(it.unitPrice) || 0)
+    unitPrice: String(Number(it.unitPrice) || 0),
+    prntMinimo: it.prntMinimoGarantido != null && Number.isFinite(Number(it.prntMinimoGarantido))
+      ? String(it.prntMinimoGarantido)
+      : '',
+    mgoMinimo: it.mgoMinimoGarantido != null && Number.isFinite(Number(it.mgoMinimoGarantido))
+      ? String(it.mgoMinimoGarantido)
+      : ''
   }));
 }
 
@@ -122,7 +222,8 @@ export function draftToSaleOrderItem(
     aliquotaIbs: prod?.aliquotaIbs,
     aliquotaCbs: prod?.aliquotaCbs,
     aliquotaIs: prod?.aliquotaIs,
-    informacoesComplementares: prod?.informacoesComplementares
+    informacoesComplementares: prod?.informacoesComplementares,
+    ...warrantyFromDraft(line.prntMinimo, line.mgoMinimo)
   };
 }
 

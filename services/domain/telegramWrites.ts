@@ -11,7 +11,7 @@ import {
   TransactionType
 } from '../../types.js';
 import { newId, nextOrderReference, nextQuoteReference } from '../ids.js';
-import { productSheetFromInventory } from '../../utils/salesOrderProduct.js';
+import { defaultWarrantyDraft, productSheetFromInventory, warrantyFromDraft } from '../../utils/salesOrderProduct.js';
 
 /**
  * Regras de escrita do agente do Telegram.
@@ -240,6 +240,7 @@ function buildOrderItems(input: { items: BudgetItemInput[]; inventory: Inventory
     if (unitPrice <= 0) throw new Error(`Informe o preço unitário de ${product.name}.`);
 
     const discount = round2(toNumber(line.discount));
+    const warranty = defaultWarrantyDraft(product);
     return {
       productId: product.id,
       productCode: product.code || product.id,
@@ -252,7 +253,8 @@ function buildOrderItems(input: { items: BudgetItemInput[]; inventory: Inventory
       total: round2(quantity * unitPrice - discount),
       ncm: product.ncm,
       cfop: product.cfop,
-      cst: product.cst
+      cst: product.cst,
+      ...warrantyFromDraft(warranty.prntMinimo, warranty.mgoMinimo)
     };
   });
 }

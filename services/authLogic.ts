@@ -26,11 +26,12 @@ export function visibleCompanyUsers(users: User[], currentUser?: User | null): U
   }
 
   const merged = {
-    ...list[index],
     ...currentUser,
+    ...list[index],
+    id: currentUser.id || list[index].id,
+    email: currentUser.email || list[index].email,
     name: currentUser.name || list[index].name,
-    role: currentUser.role || list[index].role,
-    email: currentUser.email || list[index].email
+    role: list[index].role || currentUser.role
   };
   return list.map((user, position) => (position === index ? merged : user));
 }

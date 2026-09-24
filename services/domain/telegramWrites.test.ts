@@ -251,6 +251,9 @@ describe('telegram: orçamento', () => {
     assert.equal(order.total, 8000);
     assert.equal(order.productSheetTitle, 'Calcário Agrícola Moído');
     assert.equal(order.productSheetBody, '');
+    assert.equal(order.items[0].hasGarantias, true);
+    assert.equal(order.items[0].prntMinimoGarantido, 80);
+    assert.equal(order.items[0].mgoMinimoGarantido, undefined);
     assert.equal(order.payments[0].status, TransactionStatus.PENDENTE);
     assert.equal(order.payments[0].amount, 8000);
 
@@ -262,6 +265,41 @@ describe('telegram: orçamento', () => {
     assert.equal(tx.amount, 8000);
     assert.equal(tx.paidAmount, 0);
     assert.equal(tx.orderId, order.id);
+  });
+
+  it('dolomítico entra com PRNT 80 e MgO 15; brita fica sem garantia', () => {
+    const catalog: InventoryItem[] = [
+      {
+        id: 'dolomitico',
+        name: 'Calcário Agrícola Dolomítico (Granel)',
+        quantity: 10,
+        unitPrice: 100,
+        minStock: 1,
+        unit: 'Ton'
+      },
+      { id: 'britado', name: 'Brita 1', quantity: 10, unitPrice: 80, minStock: 1, unit: 'Ton' }
+    ];
+    const customer = { id: 'cust-1', name: 'Fazenda Boa Vista' } as Customer;
+    const dolo = buildSaleOrder({
+      companyId: 'comp-1',
+      customer,
+      items: [{ productId: 'dolomitico', quantity: 1 }],
+      inventory: catalog,
+      existingOrders: []
+    });
+    assert.equal(dolo.items[0].prntMinimoGarantido, 80);
+    assert.equal(dolo.items[0].mgoMinimoGarantido, 15);
+
+    const brita = buildSaleOrder({
+      companyId: 'comp-1',
+      customer,
+      items: [{ productId: 'britado', quantity: 1 }],
+      inventory: catalog,
+      existingOrders: []
+    });
+    assert.equal(brita.items[0].prntMinimoGarantido, undefined);
+    assert.equal(brita.items[0].mgoMinimoGarantido, undefined);
+    assert.equal(brita.items[0].hasGarantias, undefined);
   });
 
   it('recusa produto fora do estoque cadastrado', () => {
