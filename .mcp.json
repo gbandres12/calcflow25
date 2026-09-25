@@ -1,14 +1,8 @@
 {
   "mcpServers": {
     "supabase": {
+      "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=qbnmtimnurbciuzqtlxd&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
-    },
-    "TestSprite": {
-      "command": "npx",
-      "args": ["--no-install", "testsprite-mcp-plugin"],
-      "env": {
-        "API_KEY": "${TESTSPRITE_API_KEY}"
-      }
     }
   }
 }
