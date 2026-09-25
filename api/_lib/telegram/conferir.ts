@@ -1,6 +1,6 @@
-import { getTable } from '../_lib/erpRepository.js';
-import { requireMember } from '../_lib/telegramAuth.js';
-import { reconcileReceiptsAgainstPayments } from '../../services/domain/telegramWrites.js';
+import { getTable } from '../erpRepository.js';
+import { requireMember } from '../telegramAuth.js';
+import { reconcileReceiptsAgainstPayments } from '../../../services/domain/telegramWrites.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 

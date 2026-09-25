@@ -1,4 +1,4 @@
-import { getTable, upsert } from '../_lib/erpRepository.js';
+import { getTable, upsert } from '../erpRepository.js';
 import {
   answerCallbackQuery,
   downloadFileAsBase64,
@@ -6,7 +6,7 @@ import {
   sendChatAction,
   sendDocument,
   sendMessage
-} from '../_lib/telegramApi.js';
+} from '../telegramApi.js';
 import {
   TelegramLink,
   claimUpdate,
@@ -19,7 +19,7 @@ import {
   savePendingAction,
   touchLink,
   writeAudit
-} from '../_lib/telegramStore.js';
+} from '../telegramStore.js';
 // Imports dinâmicos: o bundle serverless da Vercel quebra se @google/genai e
 // o restante do agente carregam no cold start desta função.
 type AgentAttachment = { mimeType: string; data: string };
@@ -33,9 +33,9 @@ type AgentContext = {
 
 async function loadAgentModules() {
   const [commands, runAgentMod, toolsMod] = await Promise.all([
-    import('../../services/agent/commands.js'),
-    import('../../services/agent/runAgent.js'),
-    import('../../services/agent/tools.js')
+    import('../../../services/agent/commands.js'),
+    import('../../../services/agent/runAgent.js'),
+    import('../../../services/agent/tools.js')
   ]);
   return {
     HELP_TEXT: commands.HELP_TEXT,

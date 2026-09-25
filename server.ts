@@ -11,9 +11,9 @@ import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
 import adminTenants from "./api/admin/tenants";
 import adminCompanies from "./api/admin/companies";
-import telegramPair from "./api/telegram/pair";
-import telegramWebhook from "./api/telegram/webhook";
-import telegramConferir from "./api/telegram/conferir";
+import telegramPair from "./api/_lib/telegram/pair";
+import telegramWebhook from "./api/_lib/telegram/webhook";
+import telegramConferir from "./api/_lib/telegram/conferir";
 
 async function startServer() {
   const app = express();

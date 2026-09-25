@@ -1,5 +1,5 @@
-import { requireMember } from '../_lib/telegramAuth.js';
-import { createPairingCode, listLinks, revokeLink } from '../_lib/telegramStore.js';
+import { requireMember } from '../telegramAuth.js';
+import { createPairingCode, listLinks, revokeLink } from '../telegramStore.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
