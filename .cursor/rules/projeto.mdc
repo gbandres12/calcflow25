@@ -29,6 +29,11 @@ ERP de usina de calcário (vendas, balança/pátio, estoque, financeiro, NF-e). 
 - Tela nova usa só componentes de `components/ui` e cores do tema (`forest`, `ink`, `sand`, `olive`, `cream`, `line`, `muted`). Não introduzir `slate-*` nem `text-[Npx]`.
 - Raio: `rounded-xl` em card e modal, `rounded-lg` em controle. Conteúdo no mínimo 12px; 11px só em rótulo em caixa-alta.
 - Confirmação e aviso passam por `ConfirmDialog` e `Toast`, sem `alert()` nem `confirm()`.
+  - Confirmar: `const confirmDialog = useConfirm();` e `if (!(await confirmDialog({ title, description, danger: true }))) return;`
+  - Avisar: `const toast = useToast();` e `toast.push('mensagem', 'success' | 'danger')`.
+- Cores do tema são classes Tailwind de verdade: `bg-forest`, `text-ink`, `border-line`, `text-muted`, `bg-sand-soft`, e aceitam transparência (`bg-ink/55`). Tailwind é compilado (`tailwind.config.js`); depois de mudar o config, reinicie o `npm run dev`.
+- Quem vê qual tela: `services/viewAccess.ts` (`isViewAllowed`) vale pro menu, rodapé do celular e busca Ctrl+K. Tela nova entra lá.
+- Toneladas vêm fracionadas (46,23 t): use `formatTons`/`sumTons` de `services/domain/loadings.ts`, nunca `toFixed(1)`.
 
 ## Estilo
 - Textos de UI, commits e comentários em português. Commits: `feat(escopo): ...`, `fix(escopo): ...`.

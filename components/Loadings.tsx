@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Download, FileSpreadsheet, Search, Truck, X } from 'lucide-react';
 import { Customer, OrderStatus, SaleOrder } from '../types';
 import { Button } from './ui/Button';
@@ -30,12 +30,32 @@ const control = 'mt-1 w-full min-h-11 border border-[var(--cf-line)] rounded-lg 
 const statLabel = 'text-xs font-semibold uppercase tracking-wide text-[var(--cf-muted)]';
 const statValue = 'text-2xl font-extrabold text-[var(--cf-ink)] tabular-nums';
 
+const FILTER_KEY = 'calcarioflow_loadings_filters';
+
+// Filtro lembrado só neste navegador — conveniência, não dado do sistema.
+const readSavedFilters = (): { customerId?: string; from?: string; to?: string } => {
+  try {
+    return JSON.parse(localStorage.getItem(FILTER_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+};
+
 export const Loadings: React.FC<Props> = ({ orders, customers }) => {
-  const [customerId, setCustomerId] = useState('');
+  const saved = useMemo(readSavedFilters, []);
+  const [customerId, setCustomerId] = useState(saved.customerId || '');
   const [orderId, setOrderId] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(saved.from || '');
+  const [to, setTo] = useState(saved.to || '');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTER_KEY, JSON.stringify({ customerId, from, to }));
+    } catch {
+      /* navegador sem armazenamento: só não lembra o filtro */
+    }
+  }, [customerId, from, to]);
 
   const allRows = useMemo(() => buildLoadingRows(orders, customers), [orders, customers]);
   const rows = useMemo(

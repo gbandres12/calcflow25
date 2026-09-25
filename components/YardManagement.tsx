@@ -309,7 +309,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                         <span className="text-slate-500 text-xs">Total: {totalQty} Ton</span>
                         <button
                           onClick={() => setSelectedOrderForWeigh(order)}
-                          className="min-h-12 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm active:scale-95"
+                          className="min-h-12 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm whitespace-nowrap shrink-0 active:scale-95"
                         >
                           <Scale size={16} /> Pesar carga
                         </button>

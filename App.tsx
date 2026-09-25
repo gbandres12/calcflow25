@@ -23,7 +23,7 @@ import TransfersPage from './components/TransfersPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck, Search } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -64,6 +64,7 @@ import { applyStoreIntegration, StoreIntegrationIncoming } from './services/stor
 import CompanyBranches from './components/CompanyBranches';
 import SetNewPassword from './components/SetNewPassword';
 import Loadings from './components/Loadings';
+import CommandPalette from './components/CommandPalette';
 import { isViewAllowed } from './services/viewAccess';
 import { useToast } from './components/ui/Toast';
 import { useConfirm } from './components/ui/ConfirmDialog';
@@ -105,6 +106,19 @@ const App: React.FC = () => {
   // nunca pedir a senha nova. Agora prende a tela até ela definir uma.
   const [passwordRecovery, setPasswordRecovery] = useState(initialAuthRedirect.type === 'recovery');
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Ctrl+K / Cmd+K abre a busca de qualquer tela.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const authLinkError = initialAuthRedirect.error
     ? 'O link do e-mail expirou ou já foi usado. Peça um novo em "Esqueci minha senha".'
     : undefined;
@@ -1245,6 +1259,18 @@ const App: React.FC = () => {
                 </button>
               )}
 
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="cf-topbar-pill"
+                title="Buscar (Ctrl+K)"
+                aria-label="Buscar pedido, cliente, placa ou NF"
+              >
+                <Search size={15} className="text-[#36574E]" />
+                <span className="hidden md:inline whitespace-nowrap">Buscar</span>
+                <kbd className="hidden xl:inline whitespace-nowrap text-xs text-muted">Ctrl K</kbd>
+              </button>
+
               <div className="cf-topbar-divider hidden sm:block" />
               <button className="cf-topbar-pill hidden sm:inline-flex" title="Notificações" aria-label="Notificações">
                 <Bell size={15} className="text-[#36574E]" />
@@ -1634,6 +1660,15 @@ const App: React.FC = () => {
           <span className="text-xs tracking-tight">Menu</span>
         </button>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        user={currentUser}
+        orders={orders}
+        customers={customers}
+        onNavigate={(view) => { setCurrentView(view); setMobileMenuOpen(false); }}
+      />
 
       {showChangePassword && (
         <div className="fixed inset-0 z-[60] bg-slate-950/60 flex items-center justify-center p-4 print:hidden">
