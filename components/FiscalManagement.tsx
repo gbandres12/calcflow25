@@ -236,6 +236,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
       (cust?.document || '').includes(searchQuery);
     if (filterStatus === 'all') return matchesSearch;
     return matchesSearch && row.nfe.nfeStatus === filterStatus;
+  }).sort((a, b) => {
+    // Sequência da numeração: mais recente no topo; sem número vai para o fim.
+    const na = parseInt(a.nfe.nfeNumero || '', 10);
+    const nb = parseInt(b.nfe.nfeNumero || '', 10);
+    if (isNaN(na) && isNaN(nb)) return 0;
+    if (isNaN(na)) return 1;
+    if (isNaN(nb)) return -1;
+    return nb - na;
   });
 
   const filteredPendingEmissionOrders = pendingInDateRange.filter((o) => {
