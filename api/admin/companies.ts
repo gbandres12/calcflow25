@@ -163,6 +163,16 @@ export default async function handler(req: any, res: any) {
       const name = String(req.body?.name || '').trim();
       if (!name) return res.status(400).json({ error: 'Informe o nome da filial.' });
 
+      // Empresas antigas (anteriores à migration 010) não têm linha em
+      // companies — a FK de parent_company_id exige que a matriz exista.
+      const { error: matrizError } = await context.admin.from('companies').upsert({
+        id: matrizId,
+        name: String(req.body?.matrizName || '').trim() || matrizId,
+        owner_user_id: context.userId,
+        is_active: true
+      }, { onConflict: 'id', ignoreDuplicates: true });
+      if (matrizError) throw new Error(matrizError.message);
+
       const id = newId('filial');
       const { error } = await context.admin.from('companies').insert({
         id,
@@ -204,6 +214,9 @@ export default async function handler(req: any, res: any) {
       const targetUserId = String(req.body?.userId || '').trim();
       if (!targetCompanyId || !targetUserId) {
         return res.status(400).json({ error: 'Informe a empresa e o usuário.' });
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId)) {
+        return res.status(400).json({ error: 'Esse colaborador não tem login no sistema. Convide-o pela Equipe antes de delegar acesso.' });
       }
 
       // Só quem administra a matriz ou já administra a

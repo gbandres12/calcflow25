@@ -17,6 +17,8 @@ interface Props {
   matrizUsers: User[];
 }
 
+const AUTH_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const roleOptions = ['Administrador', 'Gerente', 'Supervisor Operacional', 'Operador'];
 
 const DelegateForm: React.FC<{
@@ -27,7 +29,9 @@ const DelegateForm: React.FC<{
   onDone: (branches: CompanyBranch[]) => void;
   onCancel: () => void;
 }> = ({ companyId, activeCompanyId, candidates, existingUserIds, onDone, onCancel }) => {
-  const pickable = candidates.filter((u) => !existingUserIds.includes(u.id));
+  // Só dá pra delegar a quem tem login (id = uuid do Supabase Auth); cadastros
+  // antigos com id local (u-…) quebrariam a FK de company_memberships.
+  const pickable = candidates.filter((u) => AUTH_ID.test(u.id) && !existingUserIds.includes(u.id));
   const [userId, setUserId] = useState(pickable[0]?.id || '');
   const [role, setRole] = useState('Gerente');
   const [permissions, setPermissions] = useState<CompanyModulePermissions>(buildEmptyPermissions());
@@ -144,7 +148,7 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
     setCreating(true);
     setError(null);
     try {
-      const result = await createBranch(activeCompanyId, name);
+      const result = await createBranch(activeCompanyId, name, currentUser.companyName);
       setBranches(result.branches);
       setNewBranchName('');
     } catch (err: any) {

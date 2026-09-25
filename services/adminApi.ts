@@ -72,8 +72,8 @@ export async function fetchBranches(activeCompanyId: string) {
   return companiesRequest(activeCompanyId);
 }
 
-export async function createBranch(activeCompanyId: string, name: string) {
-  return companiesRequest(activeCompanyId, { action: 'create-branch', name });
+export async function createBranch(activeCompanyId: string, name: string, matrizName?: string) {
+  return companiesRequest(activeCompanyId, { action: 'create-branch', name, matrizName });
 }
 
 export async function grantBranchAccess(
