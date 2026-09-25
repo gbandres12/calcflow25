@@ -205,6 +205,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     isQuotesView ? 'BUDGET' : 'ALL'
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
+  const toggleOrderExpanded = (id: string) => setExpandedOrderIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [activeDatePreset, setActiveDatePreset] = useState<DatePreset>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -798,7 +804,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Header Principal */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
             {isQuotesView ? 'Orçamentos Comerciais' : 'Pedidos de Venda & Faturamento'}
           </h2>
           <p className="text-slate-500 text-sm font-medium">
@@ -826,50 +832,46 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       </header>
 
       {/* Cards de Métricas Comerciais */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 print:hidden">
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-black">
-            <DollarSign size={24} />
+      {(() => {
+        const paidPct = totalOrdersAmount > 0 ? Math.min(100, (totalPaidGlobal / totalOrdersAmount) * 100) : 0;
+        const pct = (v: number) => `${v.toFixed(1).replace('.', ',')}%`;
+        const money = (v: number, tone: string) => {
+          const [int, dec] = formatBRL(v).split(',');
+          return <p className={`text-xl md:text-3xl font-bold tracking-tight ${tone}`}>{int}<span className="text-base md:text-lg opacity-60">,{dec}</span></p>;
+        };
+        const card = (label: string, icon: React.ReactNode, iconCls: string, body: React.ReactNode) => (
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex justify-between items-start gap-2 mb-1">
+              <p className="text-[11px] md:text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
+              <div className={`p-2 rounded-xl border ${iconCls}`}>{icon}</div>
+            </div>
+            {body}
           </div>
-          <div>
-            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total Faturado</p>
-            <p className="text-base md:text-xl font-black text-slate-900">{formatBRL(totalOrdersAmount)}</p>
+        );
+        return (
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-5 print:hidden">
+            {card('Total Faturado', <DollarSign size={18} />, 'bg-emerald-50 text-emerald-700 border-emerald-100', <>
+              {money(totalOrdersAmount, 'text-slate-900')}
+              <p className="text-xs text-slate-400 mt-3">{formatTons(totalVolumeTon)} t comercializadas</p>
+            </>)}
+            {card('Entradas / Abatimentos', <CheckCircle2 size={18} />, 'bg-emerald-50 text-emerald-700 border-emerald-100', <>
+              {money(totalPaidGlobal, 'text-emerald-700')}
+              <div className="flex items-center gap-3 mt-3"><div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-600 rounded-full" style={{ width: `${paidPct}%` }} /></div><span className="text-xs text-slate-500 whitespace-nowrap">{pct(paidPct)} pago</span></div>
+            </>)}
+            {card('Saldo a Receber', <Clock size={18} />, 'bg-rose-50 text-rose-600 border-rose-100', <>
+              {money(totalOutstandingGlobal, 'text-rose-600')}
+              <div className="flex items-center gap-3 mt-3"><div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-rose-500 rounded-full" style={{ width: `${100 - paidPct}%` }} /></div><span className="text-xs text-rose-600 whitespace-nowrap">{pct(100 - paidPct)} pendente</span></div>
+            </>)}
+            {card('Volume Comercializado', <Package size={18} />, 'bg-blue-50 text-blue-600 border-blue-100', <>
+              <p className="text-xl md:text-3xl font-bold tracking-tight text-blue-600 font-mono">{formatTons(totalVolumeTon)}<span className="text-base ml-1 opacity-70">t</span></p>
+              <p className="text-xs text-slate-400 mt-3">{orders.length} pedido(s) no período</p>
+            </>)}
           </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Entradas / Abatimentos</p>
-            <p className="text-base md:text-xl font-black text-emerald-600">{formatBRL(totalPaidGlobal)}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-black">
-            <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo a Receber</p>
-            <p className="text-base md:text-xl font-black text-rose-600">{formatBRL(totalOutstandingGlobal)}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
-            <Package size={24} />
-          </div>
-          <div>
-            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Volume Comercializado</p>
-            <p className="text-base md:text-xl font-black text-blue-700">{formatTons(totalVolumeTon)} t</p>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Barra de Filtros por Status de Pagamento, Data e Busca */}
-      <div className="bg-white p-3 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm space-y-3.5 print:hidden">
+      <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 print:hidden">
         
         {/* Linha Superior: Status e Busca */}
         <div className="flex flex-col xl:flex-row gap-3 md:gap-4 items-center justify-between">
@@ -997,7 +999,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       </div>
 
       {/* Lista de Pedidos em Cards Modernos & Elegantes com Indicador Visual de Pagamento */}
-      <div className="space-y-4 print:hidden">
+      <div className={`print:hidden ${filteredOrders.length > 0 ? 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden' : ''}`}>
+        {filteredOrders.length > 0 && (
+          <div className="hidden lg:grid grid-cols-[48px_1.1fr_2fr_1.6fr_1.3fr_1.3fr_1.3fr] gap-4 px-4 py-3.5 bg-slate-50/70 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <span>Exp.</span><span>Pedido / Data</span><span>Cliente & Documento</span><span>Produto & Volume</span><span>Status Financeiro</span><span>Progresso de Carga</span><span className="text-right">Valor / Saldo</span>
+          </div>
+        )}
         {filteredOrders.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-4 max-w-xl mx-auto my-8">
             <div className="w-16 h-16 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
@@ -1016,7 +1023,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             {orders.length === 0 ? (
               <button
                 onClick={openNewOrder}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-100"
               >
                 <Plus size={16} /> {isQuotesView ? 'Emitir Primeiro Orçamento' : 'Emitir Primeiro Pedido'}
               </button>
@@ -1042,11 +1049,64 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             const remainingWithdraw = Math.max(0, totalQty - totalWithdrawn);
             const withdrawalProgress = totalQty > 0 ? Math.min(100, (totalWithdrawn / totalQty) * 100) : 0;
 
+            const isExpanded = expandedOrderIds.has(order.id);
+            const isBudget = order.status === OrderStatus.BUDGET;
+            const firstItem = order.items[0];
+            const statusChip = isBudget
+              ? { label: 'Orçamento', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', sub: 'Aguardando aprovação', subCls: 'text-slate-500' }
+              : paymentStatus === 'PAGO'
+              ? { label: 'Quitado', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', sub: '100% Pago', subCls: 'text-emerald-700' }
+              : paymentStatus === 'PARCIAL'
+              ? { label: `Parcial (${Math.round(financialProgress)}%)`, cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', sub: `${formatBRL(totalPaid)} recebido`, subCls: 'text-orange-600' }
+              : { label: 'Débito pendente', cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', sub: `${Math.round(financialProgress)}% pago (${formatBRL(totalPaid)})`, subCls: 'text-rose-600' };
+            const accent = isBudget ? 'border-l-slate-300' : paymentStatus === 'PAGO' ? 'border-l-emerald-500' : paymentStatus === 'PARCIAL' ? 'border-l-amber-400' : 'border-l-rose-500';
+
             return (
-              <div 
-                key={order.id} 
-                className="bg-white rounded-2xl md:rounded-3xl border border-slate-200/90 p-4 md:p-7 shadow-sm hover:shadow-md hover:border-slate-300 transition-all space-y-4 md:space-y-5"
-              >
+              <div key={order.id} className={`border-b border-slate-100 last:border-0 ${isExpanded ? 'bg-slate-50/60' : ''}`}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleOrderExpanded(order.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOrderExpanded(order.id); } }}
+                  className={`grid grid-cols-[40px_1fr_auto] lg:grid-cols-[48px_1.1fr_2fr_1.6fr_1.3fr_1.3fr_1.3fr] gap-x-4 gap-y-2 items-center px-4 py-4 cursor-pointer hover:bg-slate-50 transition-colors border-l-4 ${isExpanded ? accent : 'border-l-transparent'}`}
+                >
+                  <span className={`w-8 h-8 grid place-items-center rounded-lg text-slate-500 ${isExpanded ? 'bg-slate-200/70' : ''}`}>
+                    <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </span>
+                  <div className="min-w-0 lg:order-none">
+                    <p className="font-mono text-sm font-medium text-slate-900">{order.reference}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Calendar size={11} /> {order.date}</p>
+                  </div>
+                  <div className="lg:hidden text-right">
+                    <p className="font-mono text-sm font-semibold text-slate-900">{formatBRL(order.total)}</p>
+                    <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase border ${statusChip.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${statusChip.dot}`} />{statusChip.label}</span>
+                  </div>
+                  <div className="min-w-0 col-span-3 lg:col-span-1 pl-12 lg:pl-0">
+                    <p className="font-bold text-sm text-slate-900 uppercase truncate">{customer?.name || 'Cliente Geral'}</p>
+                    <p className="font-mono text-xs text-slate-500 truncate">DOC: {customer?.document || '—'}{order.sellerName ? ` · Vendedor: ${order.sellerName}` : ''}</p>
+                  </div>
+                  <div className="hidden lg:block min-w-0">
+                    <p className="text-sm text-slate-800 truncate">{firstItem?.productName || '—'}{order.items.length > 1 ? ` +${order.items.length - 1}` : ''}</p>
+                    <p className="font-mono text-xs text-slate-500">{formatTons(totalQty)} t{firstItem ? ` @ ${formatBRL(firstItem.unitPrice)}/t` : ''}</p>
+                  </div>
+                  <div className="hidden lg:block">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold uppercase border ${statusChip.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${statusChip.dot}`} />{statusChip.label}</span>
+                    <p className={`text-xs mt-1 ${statusChip.subCls}`}>{statusChip.sub}</p>
+                  </div>
+                  <div className="hidden lg:block">
+                    <div className="flex justify-between text-xs text-slate-600"><span>{formatTons(totalWithdrawn)} de {formatTons(totalQty)} t</span><span className={`font-mono ${withdrawalProgress >= 100 ? 'text-emerald-700' : withdrawalProgress > 0 ? 'text-blue-600' : 'text-slate-400'}`}>{Math.round(withdrawalProgress)}%</span></div>
+                    <div className="h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden"><div className={`h-full rounded-full ${withdrawalProgress >= 100 ? 'bg-emerald-600' : 'bg-blue-600'}`} style={{ width: `${withdrawalProgress}%` }} /></div>
+                    <p className="text-[11px] text-slate-400 mt-1">{isBudget ? 'Liberação pendente' : `${(order.withdrawals || []).length} viagem(ns)`}</p>
+                  </div>
+                  <div className="hidden lg:block text-right">
+                    <p className="font-mono text-sm font-semibold text-slate-900">{formatBRL(order.total)}</p>
+                    <p className={`font-mono text-xs ${isBudget ? 'text-slate-400' : remainingDebt > 0.01 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {isBudget ? (order.validUntil ? `Válido até ${order.validUntil}` : 'Proposta') : `Saldo: ${formatBRL(remainingDebt)}`}
+                    </p>
+                  </div>
+                </div>
+                {isExpanded && (
+              <div className="mx-3 md:mx-6 mb-5 bg-white rounded-2xl border border-slate-200 p-4 md:p-6 shadow-sm space-y-4 md:space-y-5">
                 
                 {/* Linha Superior: Cabeçalho do Pedido, Cliente e Badges de Pagamento */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
@@ -1204,7 +1264,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               {pedidoNfe.nfeStatus === 'rejeitada' && (
                                 <button
                                   onClick={() => openEmitNfe(order)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-sm"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-sm"
                                 >
                                   <Send size={12} /> Reenviar
                                 </button>
@@ -1238,7 +1298,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 <>
                                   <button
                                     onClick={() => openEmitNfe(order)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-sm transition-all"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-sm transition-all"
                                   >
                                     <Send size={12} /> Emitir NF-e
                                   </button>
@@ -1486,6 +1546,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 </div>
 
               </div>
+                )}
+              </div>
             );
           })
         )}
@@ -1717,7 +1779,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               setIsQuickCustomerModalOpen(true);
                               setIsCustomerDropdownOpen(false);
                             }}
-                            className="w-full text-left px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-between transition-all shadow-sm"
+                            className="w-full text-left px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-between transition-all shadow-sm"
                           >
                             <span className="flex items-center gap-2">
                               <UserPlus size={14} />
@@ -2413,7 +2475,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           onClick={() => {
                             setViewingReceipt(r);
                           }}
-                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1"
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1"
                         >
                           <Printer size={12} /> Ver Recibo
                         </button>
