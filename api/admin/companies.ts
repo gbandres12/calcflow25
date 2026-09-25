@@ -67,6 +67,77 @@ async function listBranches(admin: any, companyId: string) {
   }));
 }
 
+/**
+ * Filial sempre pendura na matriz: se o admin estiver com uma filial
+ * selecionada no topo, sobe pro parent em vez de criar filial de filial.
+ */
+async function resolveMatrizId(admin: any, companyId: string): Promise<string> {
+  const { data } = await admin
+    .from('companies')
+    .select('parent_company_id')
+    .eq('id', companyId)
+    .maybeSingle();
+  return data?.parent_company_id || companyId;
+}
+
+/**
+ * Emitente em branco: filial tem CNPJ, IE, endereço e certificado próprios.
+ * Gravar isso já na criação evita que o app caia no DEFAULT_FISCAL_CONFIG
+ * (CNPJ de exemplo) e a emissão fica travada até alguém preencher. O app
+ * completa o resto (CFOP, CST, alíquotas) com o padrão em fiscalService.getConfig.
+ */
+const FISCAL_CONFIG_ID = 'fiscal-main-config';
+
+function blankBranchFiscalConfig(companyId: string, name: string) {
+  return {
+    id: FISCAL_CONFIG_ID,
+    companyId,
+    apiKey: '',
+    environment: 'sandbox',
+    cnpjEmitente: '',
+    inscricaoEstadual: '',
+    inscricaoMunicipal: '',
+    razaoSocial: '',
+    nomeFantasia: name,
+    telefoneEmitente: '',
+    emailEmitente: '',
+    logradouroEmitente: '',
+    numeroEmitente: '',
+    complementoEmitente: '',
+    bairroEmitente: '',
+    cidadeEmitente: '',
+    ufEmitente: '',
+    cepEmitente: '',
+    ibgeEmitente: '',
+    proxNumeroNFe: 1
+  };
+}
+
+/**
+ * Equipe compartilhada: quem ganha acesso numa empresa do grupo aparece
+ * também na equipe dela, com o mesmo cadastro que já tem na matriz.
+ */
+async function shareUserRecord(admin: any, groupIds: string[], targetCompanyId: string, userId: string) {
+  const { data } = await admin
+    .from('app_records')
+    .select('data')
+    .eq('table_name', 'users')
+    .eq('id', userId)
+    .in('company_id', groupIds)
+    .limit(1);
+  const source = data?.[0]?.data;
+  if (!source) return;
+  const { passwordHash, ...rest } = source;
+  const { error } = await admin.from('app_records').upsert({
+    id: userId,
+    table_name: 'users',
+    company_id: targetCompanyId,
+    data: { ...rest, companyId: targetCompanyId, updatedAt: new Date().toISOString() },
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'table_name,company_id,id' });
+  if (error) throw new Error(error.message);
+}
+
 export default async function handler(req: any, res: any) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -75,9 +146,11 @@ export default async function handler(req: any, res: any) {
   if (!context) return;
 
   try {
+    const matrizId = await resolveMatrizId(context.admin, context.companyId);
+
     if (req.method === 'GET') {
-      const branches = await listBranches(context.admin, context.companyId);
-      return res.status(200).json({ companyId: context.companyId, branches });
+      const branches = await listBranches(context.admin, matrizId);
+      return res.status(200).json({ companyId: matrizId, branches });
     }
 
     if (req.method !== 'POST') {
@@ -94,7 +167,7 @@ export default async function handler(req: any, res: any) {
       const { error } = await context.admin.from('companies').insert({
         id,
         name,
-        parent_company_id: context.companyId,
+        parent_company_id: matrizId,
         owner_user_id: context.userId,
         is_active: true
       });
@@ -110,8 +183,20 @@ export default async function handler(req: any, res: any) {
       }, { onConflict: 'company_id,user_id' });
       if (membershipError) throw new Error(membershipError.message);
 
-      const branches = await listBranches(context.admin, context.companyId);
-      return res.status(201).json({ companyId: context.companyId, branches });
+      const now = new Date().toISOString();
+      const { error: fiscalError } = await context.admin.from('app_records').upsert({
+        id: FISCAL_CONFIG_ID,
+        table_name: 'fiscal_config',
+        company_id: id,
+        data: { ...blankBranchFiscalConfig(id, name), updatedAt: now },
+        updated_at: now
+      }, { onConflict: 'table_name,company_id,id' });
+      if (fiscalError) throw new Error(fiscalError.message);
+
+      await shareUserRecord(context.admin, [matrizId], id, context.userId);
+
+      const branches = await listBranches(context.admin, matrizId);
+      return res.status(201).json({ companyId: matrizId, branches });
     }
 
     if (action === 'grant-access' || action === 'revoke-access') {
@@ -121,15 +206,15 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Informe a empresa e o usuário.' });
       }
 
-      // Só quem administra a matriz (context.companyId) ou já administra a
+      // Só quem administra a matriz ou já administra a
       // própria empresa/filial de destino pode gerir acesso nela.
       const { data: companyRow } = await context.admin
         .from('companies')
         .select('id, parent_company_id, owner_user_id')
         .eq('id', targetCompanyId)
         .maybeSingle();
-      const isMatrizItself = targetCompanyId === context.companyId;
-      const isBranchOfMyMatriz = companyRow?.parent_company_id === context.companyId;
+      const isMatrizItself = targetCompanyId === matrizId;
+      const isBranchOfMyMatriz = companyRow?.parent_company_id === matrizId;
       const isOwner = companyRow?.owner_user_id === context.userId;
 
       const { data: callerMembership } = await context.admin
@@ -154,6 +239,14 @@ export default async function handler(req: any, res: any) {
           .eq('company_id', targetCompanyId)
           .eq('user_id', targetUserId);
         if (error) throw new Error(error.message);
+        if (!isMatrizItself) {
+          await context.admin
+            .from('app_records')
+            .delete()
+            .eq('table_name', 'users')
+            .eq('company_id', targetCompanyId)
+            .eq('id', targetUserId);
+        }
       } else {
         const role = String(req.body?.role || 'Operador');
         const permissions = req.body?.permissions && typeof req.body.permissions === 'object'
@@ -166,10 +259,13 @@ export default async function handler(req: any, res: any) {
           permissions
         }, { onConflict: 'company_id,user_id' });
         if (error) throw new Error(error.message);
+        if (!isMatrizItself) {
+          await shareUserRecord(context.admin, [matrizId], targetCompanyId, targetUserId);
+        }
       }
 
-      const branches = await listBranches(context.admin, context.companyId);
-      return res.status(200).json({ companyId: context.companyId, branches });
+      const branches = await listBranches(context.admin, matrizId);
+      return res.status(200).json({ companyId: matrizId, branches });
     }
 
     return res.status(400).json({ error: 'Ação não reconhecida.' });

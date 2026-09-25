@@ -52,17 +52,9 @@ export async function getFiscalConfigForCompany(companyId: string): Promise<any 
     return null;
   }
 
-  // Fallback: busca qualquer registro válido de fiscal_config
-  const { data: fallbackData, error: fallbackError } = await supabase
-    .from('app_records')
-    .select('data')
-    .eq('table_name', 'fiscal_config')
-    .limit(5);
-  if (!fallbackError && Array.isArray(fallbackData) && fallbackData.length > 0) {
-    const row = fallbackData.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || fallbackData[0];
-    return row?.data || null;
-  }
-
+  // Sem companyId não há como saber de quem é a nota: com matriz + filiais
+  // (cada uma com CNPJ e certificado próprios), "pegar qualquer um" emitiria
+  // pelo emitente errado.
   return null;
 }
 

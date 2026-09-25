@@ -1,6 +1,6 @@
 import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
-import { db, resolveCompanyKey } from './dataService';
+import { db, resolveCompanyKey, isDemoCompany } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
@@ -14,6 +14,24 @@ export { mapRemoteNfeStatus } from './nfeRemoteStatus';
  * Documentação: https://docs.notaas.com.br/docs/nfe/endpoints
  */
 export const NOTAAS_API_BASE_URL = 'https://platform.notaas.com.br/api/v1';
+
+/**
+ * Empresa real (matriz ou filial) só emite com emitente próprio preenchido.
+ * Filial nova nasce com esses campos vazios — sem isso a nota sairia com o
+ * CNPJ de exemplo do DEFAULT_FISCAL_CONFIG.
+ */
+export function emitenteConfigError(config: FiscalConfig, companyId?: string | null): string | null {
+  if (isDemoCompany(companyId || config.companyId)) return null;
+  const cnpj = String(config.cnpjEmitente || '').replace(/\D/g, '');
+  const demoCnpj = String(DEFAULT_FISCAL_CONFIG.cnpjEmitente || '').replace(/\D/g, '');
+  if (cnpj.length !== 14 || cnpj === demoCnpj) {
+    return 'CNPJ do emitente não configurado para esta empresa. Preencha CNPJ, inscrição estadual, endereço e a Project Key da NotaAs em Configurações Fiscais antes de emitir.';
+  }
+  if (!String(config.inscricaoEstadual || '').trim()) {
+    return 'Inscrição estadual do emitente não configurada para esta empresa (Configurações Fiscais).';
+  }
+  return null;
+}
 
 /**
  * Tipagens oficiais do payload NotaAs NF-e 55
@@ -870,6 +888,16 @@ export const fiscalService = {
     console.info('📄 [PAYLOAD COMPLETO EM JSON]:', JSON.stringify(payload, null, 2));
     console.groupEnd();
     console.groupEnd();
+
+    const emitenteError = emitenteConfigError(config, resolvedCompanyId);
+    if (emitenteError) {
+      return {
+        success: false,
+        nfeStatus: 'rejeitada',
+        nfeErro: emitenteError,
+        rawResponse: { invoiceRequestId, error: 'Emitente not configured' }
+      };
+    }
 
     if (!apiKey) {
       console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
