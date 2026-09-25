@@ -23,13 +23,14 @@ export default {
         },
         olive: 'rgb(141 152 81 / <alpha-value>)',
         sand: { DEFAULT: 'rgb(201 162 76 / <alpha-value>)', soft: 'rgb(246 239 220 / <alpha-value>)' },
-        cream: 'rgb(245 247 241 / <alpha-value>)',
+        cream: 'rgb(248 250 252 / <alpha-value>)',
         paper: 'rgb(255 255 255 / <alpha-value>)',
-        line: 'rgb(223 231 223 / <alpha-value>)',
+        line: 'rgb(226 232 240 / <alpha-value>)',
         muted: 'rgb(114 128 120 / <alpha-value>)'
       },
       fontFamily: {
-        sans: ['Manrope', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace']
       }
     }
   },

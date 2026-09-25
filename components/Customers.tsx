@@ -40,7 +40,9 @@ const Customers: React.FC<CustomersProps> = ({
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterDebtOnly, setFilterDebtOnly] = useState<'ALL' | 'DEBT_ONLY' | 'SETTLED_ONLY'>('ALL');
+  const [filterDebtOnly, setFilterDebtOnly] = useState<'ALL' | 'DEBT_ONLY' | 'SETTLED_ONLY' | 'NO_PURCHASE'>('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [importError, setImportError] = useState('');
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<Customer | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +133,7 @@ const Customers: React.FC<CustomersProps> = ({
       const stats = customerFinancialStats[c.id] || { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
       if (filterDebtOnly === 'DEBT_ONLY' && stats.totalDebt <= 0.01) return false;
       if (filterDebtOnly === 'SETTLED_ONLY' && (stats.totalPurchased === 0 || stats.totalDebt > 0.01)) return false;
+      if (filterDebtOnly === 'NO_PURCHASE' && stats.totalPurchased > 0) return false;
 
       return true;
     });
@@ -289,230 +292,235 @@ const Customers: React.FC<CustomersProps> = ({
     reader.readAsText(file);
   };
 
+  const noPurchaseCount = safeCustomerList.filter(c => !(customerFinancialStats[c.id]?.totalPurchased > 0)).length;
+  const adimplencia = safeCustomerList.length > 0 ? Math.round(((safeCustomerList.length - walletStats.customersWithDebtCount) / safeCustomerList.length) * 100) : 100;
+  const paidShare = walletStats.totalPurchased > 0 ? Math.min(100, ((walletStats.totalPurchased - walletStats.totalDebt) / walletStats.totalPurchased) * 100) : 0;
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const splitCents = (v: number) => {
+    const [int, dec] = formatBRL(v).split(',');
+    return <>{int}<span className="text-lg text-slate-400 font-semibold">,{dec}</span></>;
+  };
+  const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+  const avatarTone = (c: Customer) => c.tipoPessoa === 'PJ' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700';
+  const categoryOf = (c: Customer) => {
+    if (c.tipoPessoa === 'PJ') return { label: 'PJ / Revenda', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+    if (c.tipoPessoa === 'PF') return { label: 'Pessoa Física', cls: 'bg-slate-50 text-slate-700 border-slate-200' };
+    return { label: 'Produtor Rural', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
+  };
+  const filterChips: { key: typeof filterDebtOnly; label: string; count: number; active: string; idle: string; dot?: string }[] = [
+    { key: 'ALL', label: 'Todos', count: safeCustomerList.length, active: 'bg-slate-900 text-white border-slate-900', idle: 'bg-white text-slate-700 border-slate-200' },
+    { key: 'DEBT_ONLY', label: 'Com Débito', count: walletStats.customersWithDebtCount, active: 'bg-rose-600 text-white border-rose-600', idle: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+    { key: 'SETTLED_ONLY', label: 'Quites', count: walletStats.settledCustomersCount, active: 'bg-emerald-600 text-white border-emerald-600', idle: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+    { key: 'NO_PURCHASE', label: 'Sem Compras', count: noPurchaseCount, active: 'bg-slate-700 text-white border-slate-700', idle: 'bg-white text-slate-600 border-slate-200' }
+  ];
+
+  const exportCsv = () => {
+    const rows = [['Nome', 'Documento', 'Cidade', 'UF', 'Telefone', 'E-mail', 'Comprado', 'Débito']];
+    filteredCustomers.forEach(c => {
+      const st = customerFinancialStats[c.id];
+      rows.push([c.name || '', c.document || '', c.city || '', c.state || '', c.phone || '', c.email || '', String((st?.totalPurchased || 0).toFixed(2)).replace('.', ','), String((st?.totalDebt || 0).toFixed(2)).replace('.', ',')]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'clientes.csv'; a.click(); URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
-      <header className="flex justify-between items-center">
+      <header className="flex flex-wrap justify-between items-start gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Gestão de Clientes</h2>
-          <p className="text-slate-500 text-sm font-medium">Controle de produtores rurais, parceiros e revendas</p>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Gestão de Clientes</h2>
+          <p className="text-slate-500 text-sm mt-1">Controle de produtores rurais, parceiros comerciais e revendas autorizadas</p>
         </div>
         <div className="flex gap-3">
           <button 
             onClick={() => { setImportError(''); setIsImportModalOpen(true); }}
-            className="bg-white border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm shadow-sm"
+            className="bg-white border border-slate-300 text-slate-800 px-4 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all text-sm shadow-sm"
           >
-            <FileUp size={18} /> Importar Base
+            <FileUp size={17} /> Importar Base
           </button>
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="bg-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg shadow-purple-100 text-sm"
+            className="bg-emerald-800 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-900 transition-all flex items-center gap-2 shadow-sm text-sm"
           >
-            <UserPlus size={18} /> Novo Cliente
+            <UserPlus size={17} /> Novo Cliente
           </button>
         </div>
       </header>
 
-      {/* Stats Rápidas da Carteira */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-4 bg-purple-50 text-purple-600 rounded-2xl"><UserCheck size={24}/></div>
-            <div>
-               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total de Clientes</p>
-               <p className="text-2xl font-black text-slate-800">{safeCustomerList.length}</p>
-               <p className="text-xs font-bold text-slate-500">Produtores & Revendas</p>
-            </div>
-         </div>
-
-         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl"><ShoppingCart size={24}/></div>
-            <div>
-               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Faturamento da Carteira</p>
-               <p className="text-2xl font-black text-slate-800">{formatBRL(walletStats.totalPurchased)}</p>
-               <p className="text-xs font-bold text-emerald-600 font-black">{walletStats.settledCustomersCount} cliente(s) quites</p>
-            </div>
-         </div>
-
-         <div className={`p-6 rounded-[2rem] border shadow-sm flex items-center gap-4 ${
-           walletStats.totalDebt > 0 
-             ? 'bg-rose-50/50 border-rose-200' 
-             : 'bg-white border-slate-100'
-         }`}>
-            <div className={`p-4 rounded-2xl ${walletStats.totalDebt > 0 ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-              <AlertTriangle size={24}/>
-            </div>
-            <div>
-               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Débito a Receber</p>
-               <p className={`text-2xl font-black ${walletStats.totalDebt > 0 ? 'text-rose-700' : 'text-slate-800'}`}>
-                 {formatBRL(walletStats.totalDebt)}
-               </p>
-               <p className="text-xs font-bold text-rose-600 font-black">
-                 {walletStats.customersWithDebtCount} cliente(s) com débitos
-               </p>
-            </div>
-         </div>
-
-         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-            <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CheckCircle2 size={24}/></div>
-            <div>
-               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Taxa de Adimplência</p>
-               <p className="text-2xl font-black text-slate-800">
-                 {safeCustomerList.length > 0 ? Math.round(((safeCustomerList.length - walletStats.customersWithDebtCount) / safeCustomerList.length) * 100) : 100}%
-               </p>
-               <p className="text-xs font-bold text-blue-600 font-black">Adimplência da base</p>
-            </div>
-         </div>
-      </div>
-
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-50 bg-slate-50/30 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por nome, CPF/CNPJ, e-mail ou telefone..." 
-              className="w-full pl-12 pr-6 py-3 bg-white border border-slate-200 rounded-2xl outline-none focus:border-purple-500 transition-all font-medium text-sm"
-            />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-start">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total de Clientes</p>
+            <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100"><UserCheck size={20}/></div>
           </div>
-
-          {/* Filtros de Status Financeiro */}
-          <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
-            <button
-              onClick={() => setFilterDebtOnly('ALL')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                filterDebtOnly === 'ALL' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              Todos ({safeCustomerList.length})
-            </button>
-            <button
-              onClick={() => setFilterDebtOnly('DEBT_ONLY')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                filterDebtOnly === 'DEBT_ONLY' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500 hover:text-rose-700'
-              }`}
-            >
-              <AlertTriangle size={13} /> Com Débito ({walletStats.customersWithDebtCount})
-            </button>
-            <button
-              onClick={() => setFilterDebtOnly('SETTLED_ONLY')}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                filterDebtOnly === 'SETTLED_ONLY' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:text-emerald-700'
-              }`}
-            >
-              <CheckCircle2 size={13} /> Quites ({walletStats.settledCustomersCount})
-            </button>
+          <p className="text-3xl font-bold text-slate-900 -mt-2">{safeCustomerList.length}</p>
+          <div className="flex justify-between text-sm text-slate-500 border-t border-slate-100 mt-4 pt-3">
+            <span>Produtores & Revendas</span>
+            <span className="text-slate-700">{walletStats.customersWithDebtCount + walletStats.settledCustomersCount} com compras</span>
           </div>
         </div>
 
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-start">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faturamento da Carteira</p>
+            <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100"><ShoppingCart size={20}/></div>
+          </div>
+          <p className="text-3xl font-bold text-slate-900 -mt-2 tracking-tight">{splitCents(walletStats.totalPurchased)}</p>
+          <div className="flex justify-between text-sm mt-4"><span className="text-emerald-700 font-medium">{walletStats.settledCustomersCount} cliente(s) quites</span><span className="text-slate-400">{paidShare.toFixed(1).replace('.', ',')}% realizado</span></div>
+          <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden"><div className="h-full bg-emerald-600 rounded-full" style={{ width: `${paidShare}%` }} /></div>
+        </div>
+
+        <div className={`p-5 rounded-2xl border shadow-sm ${walletStats.totalDebt > 0 ? 'bg-rose-50/50 border-rose-200' : 'bg-white border-slate-200'}`}>
+          <div className="flex justify-between items-start">
+            <p className={`text-xs font-semibold uppercase tracking-wider ${walletStats.totalDebt > 0 ? 'text-rose-700' : 'text-slate-500'}`}>Débito a Receber</p>
+            <div className={`p-2.5 rounded-xl border ${walletStats.totalDebt > 0 ? 'bg-rose-100 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}><AlertTriangle size={20}/></div>
+          </div>
+          <p className={`text-3xl font-bold -mt-2 tracking-tight ${walletStats.totalDebt > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{splitCents(walletStats.totalDebt)}</p>
+          <div className="flex justify-between text-sm mt-4"><span className="text-rose-600 font-medium">{walletStats.customersWithDebtCount} cliente(s) com débitos</span>{walletStats.totalDebt > 0 && <span className="text-rose-500">Crítico</span>}</div>
+          <div className="h-1.5 bg-rose-100 rounded-full mt-2 overflow-hidden"><div className="h-full bg-rose-500 rounded-full" style={{ width: `${walletStats.totalPurchased > 0 ? Math.min(100, walletStats.totalDebt / walletStats.totalPurchased * 100) : 0}%` }} /></div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-start">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Taxa de Adimplência</p>
+            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-100"><CheckCircle2 size={20}/></div>
+          </div>
+          <p className="text-3xl font-bold text-slate-900 -mt-2">{adimplencia}% <span className={`text-sm font-medium ${adimplencia >= 95 ? 'text-emerald-700' : 'text-amber-600'}`}>{adimplencia >= 95 ? 'Excepcional' : 'Atenção'}</span></p>
+          <div className="flex justify-between text-sm mt-4"><span className="text-blue-700 font-medium">Adimplência da base</span><span className="text-slate-400">Meta: 95%</span></div>
+          <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{ width: `${adimplencia}%` }} /></div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex flex-col lg:flex-row gap-3 lg:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+          <input 
+            type="text" 
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            placeholder="Buscar por nome, CPF/CNPJ, e-mail ou telefone..." 
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50/60 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:bg-white transition-all text-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {filterChips.map(chip => (
+            <button
+              key={chip.key}
+              onClick={() => { setFilterDebtOnly(chip.key); setPage(1); }}
+              className={`px-3.5 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-all ${filterDebtOnly === chip.key ? chip.active : chip.idle}`}
+            >
+              {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${filterDebtOnly === chip.key ? 'bg-white' : chip.dot}`} />}
+              {chip.label}
+              <span className={`text-xs px-1.5 rounded-full ${filterDebtOnly === chip.key ? 'bg-white/20' : 'bg-black/5'}`}>{chip.count}</span>
+            </button>
+          ))}
+          <button onClick={exportCsv} className="px-3.5 py-2 rounded-lg text-sm font-medium border border-slate-200 bg-white text-slate-700 flex items-center gap-2 hover:bg-slate-50">
+            <Download size={15} /> Exportar Excel
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-black uppercase tracking-widest">
-                <th className="px-8 py-4">Cliente / Contato</th>
-                <th className="px-6 py-4">Documento</th>
-                <th className="px-6 py-4 text-right">Volume Comprado</th>
-                <th className="px-6 py-4 text-center">Situação Financeira</th>
-                <th className="px-6 py-4 text-center">Ações</th>
+              <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                <th className="px-5 py-4">Cliente / Contato</th>
+                <th className="px-3 py-4">Documento</th>
+                <th className="px-3 py-4">Categoria</th>
+                <th className="px-3 py-4 text-right">Volume Comprado</th>
+                <th className="px-3 py-4 text-center">Situação Financeira</th>
+                <th className="px-3 py-4 text-center">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredCustomers.length === 0 ? (
+            <tbody className="divide-y divide-slate-100">
+              {pagedCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-20 text-center opacity-30">
+                  <td colSpan={6} className="py-20 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
-                      <UserPlus size={48} />
-                      <p className="font-bold">Nenhum cliente encontrado</p>
+                      <UserPlus size={40} />
+                      <p className="font-medium">Nenhum cliente encontrado</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map(c => {
+                pagedCustomers.map(c => {
                   const stats = customerFinancialStats[c.id] || { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
                   const totalSpent = stats.totalPurchased > 0 ? stats.totalPurchased : (c.totalSpent || 0);
+                  const hasDebt = stats.totalDebt > 0.01;
+                  const cat = categoryOf(c);
 
                   return (
                     <tr 
                       key={c.id} 
                       onClick={() => setSelectedCustomerForDetails(c)}
-                      className="hover:bg-purple-50/40 transition-colors group cursor-pointer"
+                      className={`transition-colors group cursor-pointer ${hasDebt ? 'bg-rose-50/40 hover:bg-rose-50' : 'hover:bg-slate-50'}`}
                     >
-                      <td className="px-8 py-5">
-                        <div className="font-black text-slate-800 text-sm mb-1 uppercase tracking-tight group-hover:text-purple-700 transition-colors flex items-center gap-2">
-                          {c.name || 'Cliente Sem Razão Social'}
-                          {stats.orderCount > 0 && (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
-                              {stats.orderCount} pedido(s)
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex gap-4 text-[11px] font-bold text-slate-500 uppercase">
-                          {c.email && (
-                            <span className="flex items-center gap-1"><Mail size={12} className="text-purple-400" /> {c.email}</span>
-                          )}
-                          {c.phone && (
-                            <span className="flex items-center gap-1"><Phone size={12} className="text-purple-400" /> {c.phone}</span>
-                          )}
-                          {c.city && (
-                            <span className="text-slate-500 font-medium">{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>
-                          )}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-9 h-9 shrink-0 rounded-full grid place-items-center text-xs font-bold ${hasDebt ? 'bg-rose-100 text-rose-700' : avatarTone(c)}`}>{initials(c.name || '')}</span>
+                          <div className="min-w-[220px]">
+                            <div className="font-bold text-slate-900 text-sm uppercase tracking-tight leading-snug group-hover:text-emerald-800 transition-colors">
+                              {c.name || 'Cliente Sem Razão Social'}
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 text-xs text-slate-500 uppercase mt-0.5">
+                              {c.city && <span>{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>}
+                              {!c.city && c.phone && <span className="flex items-center gap-1"><Phone size={11} /> {c.phone}</span>}
+                              {!c.city && !c.phone && c.email && <span className="flex items-center gap-1 normal-case"><Mail size={11} /> {c.email}</span>}
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-xs text-slate-600 font-mono font-bold bg-slate-50/30">{c.document || '—'}</td>
-                      <td className="px-6 py-5 text-right font-black text-slate-900 text-sm">
-                        {formatBRL(totalSpent)}
+                      <td className="px-3 py-4 text-sm text-slate-700 font-mono whitespace-nowrap">{c.document || '—'}</td>
+                      <td className="px-3 py-4"><span className={`text-xs font-medium px-2 py-1 rounded-md border whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>
+                      <td className="px-3 py-4 text-right whitespace-nowrap">
+                        <div className="font-bold text-slate-900 text-sm">{formatBRL(totalSpent)}</div>
+                        <div className={`text-xs ${hasDebt ? 'text-rose-600 font-medium' : stats.totalPurchased > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                          {hasDebt ? `Saldo: ${formatBRL(stats.totalDebt)}` : stats.totalPurchased > 0 ? '100% Pago' : `${stats.orderCount} pedido(s)`}
+                        </div>
                       </td>
-                      <td className="px-6 py-5 text-center">
-                        {stats.totalDebt > 0.01 ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-300">
-                            <AlertTriangle size={12} /> Débito: {formatBRL(stats.totalDebt)}
+                      <td className="px-3 py-4 text-center">
+                        {hasDebt ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Débito pendente
                           </span>
                         ) : stats.totalPurchased > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-300">
-                            <CheckCircle2 size={12} /> Quitado (100%)
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Quitado
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
-                            Sem Compras
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Sem compras
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-5 text-center">
+                      <td className="px-3 py-4">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedCustomerForDetails(c);
-                            }}
-                            className="p-2 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-xl transition-all font-black text-xs inline-flex items-center gap-1 shadow-xs"
+                            onClick={(e) => { e.stopPropagation(); setSelectedCustomerForDetails(c); }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 border transition-all ${hasDebt ? 'bg-rose-600 border-rose-600 text-white hover:bg-rose-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
                             title="Ver Detalhes e Extrato"
                           >
-                            <Eye size={14} />
-                            <span className="hidden xl:inline">Detalhes</span>
+                            {hasDebt ? <DollarSign size={14} /> : <Eye size={14} />}
+                            <span className="hidden 2xl:inline">{hasDebt ? 'Cobrança' : 'Detalhes'}</span>
                           </button>
-                          
                           <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCustomerToEdit(c);
-                            }}
-                            className="p-2 bg-slate-100 hover:bg-slate-700 text-slate-700 hover:text-white rounded-xl transition-all font-bold text-xs inline-flex items-center gap-1 shadow-xs"
+                            onClick={(e) => { e.stopPropagation(); setCustomerToEdit(c); }}
+                            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
                             title="Editar Cadastro do Cliente"
                           >
-                            <Edit3 size={14} />
-                            <span className="hidden xl:inline">Editar</span>
+                            <Edit3 size={15} />
                           </button>
-
                           {onDeleteCustomer && (
                             <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCustomerToDelete(c);
-                              }}
-                              className="p-2 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-xl transition-all font-bold text-xs inline-flex items-center shadow-xs"
+                              onClick={(e) => { e.stopPropagation(); setCustomerToDelete(c); }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                               title="Excluir Cliente"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={15} />
                             </button>
                           )}
                         </div>
@@ -523,6 +531,27 @@ const Customers: React.FC<CustomersProps> = ({
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50/40 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            Mostrando
+            <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="border border-slate-200 rounded-md px-2 py-1 bg-white">
+              {[20, 50, 100].map(n => <option key={n} value={n}>{n} linhas</option>)}
+            </select>
+            de <b className="text-slate-900">{filteredCustomers.length}</b> clientes encontrados
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="px-3 py-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40">Anterior</button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - currentPage) <= 1)
+              .map((n, i, arr) => (
+                <React.Fragment key={n}>
+                  {i > 0 && n - arr[i - 1] > 1 && <span className="px-1 text-slate-400">…</span>}
+                  <button onClick={() => setPage(n)} className={`min-w-9 px-2.5 py-1.5 rounded-md border ${n === currentPage ? 'bg-emerald-800 border-emerald-800 text-white' : 'bg-white border-slate-200'}`}>{n}</button>
+                </React.Fragment>
+              ))}
+            <button disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)} className="px-3 py-1.5 rounded-md border border-slate-200 bg-white disabled:opacity-40">Próxima</button>
+          </div>
         </div>
       </div>
 
