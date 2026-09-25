@@ -7,6 +7,7 @@ import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { useToast } from './ui/Toast';
 import { fiscalService } from '../services/fiscalService';
+import NfeRejectionHint from './NfeRejectionHint';
 
 interface OrderWithdrawalModalProps {
   order: SaleOrder;
@@ -367,8 +368,11 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     <Loader2 size={16} className="animate-spin" /> Transmitindo NF-e à SEFAZ...
                   </div>
                 ) : nfeError ? (
-                  <div className="flex items-center gap-2 text-rose-700 bg-rose-50 px-4 py-2 rounded-xl border border-rose-200 text-xs font-bold">
-                    <AlertCircle size={16} /> {nfeError}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-rose-700 bg-rose-50 px-4 py-2 rounded-xl border border-rose-200 text-xs font-bold">
+                      <AlertCircle size={16} /> {nfeError}
+                    </div>
+                    <NfeRejectionHint message={nfeError} />
                   </div>
                 ) : !savedWithdrawal.nfeNumero ? (
                   <Button type="button" onClick={handleEmitirNfeWithdrawal}>

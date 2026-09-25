@@ -54,6 +54,8 @@ import {
 } from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
 import { useToast } from './ui/Toast';
+import OrderTimeline from './OrderTimeline';
+import { formatTons } from '../services/domain/loadings';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -861,7 +863,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           </div>
           <div>
             <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Volume Comercializado</p>
-            <p className="text-base md:text-xl font-black text-blue-700">{totalVolumeTon.toFixed(1)} TON</p>
+            <p className="text-base md:text-xl font-black text-blue-700">{formatTons(totalVolumeTon)} t</p>
           </div>
         </div>
       </div>
@@ -975,7 +977,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               Exibindo <strong className="text-slate-800">{filteredOrders.length}</strong> de {orders.length} pedidos
               {filteredOrders.length > 0 && (
                 <span className="hidden sm:inline text-slate-500 font-medium ml-1">
-                  ({filteredVolumeTon.toFixed(1)} TON · {formatBRL(filteredTotalAmount)})
+                  ({formatTons(filteredVolumeTon)} t · {formatBRL(filteredTotalAmount)})
                 </span>
               )}
             </span>
@@ -1369,19 +1371,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <Truck size={14} className="text-blue-600" /> Expedição & Retiradas de Carga
                       </span>
                       <span className="text-xs font-black text-slate-800">
-                        {totalQty.toFixed(1)} TON
+                        {formatTons(totalQty)} t
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                       <div>
                         <span className="text-[11px] text-slate-500 font-bold uppercase">Já Retirado</span>
-                        <p className="font-black text-blue-600 text-sm">{totalWithdrawn.toFixed(1)} TON</p>
+                        <p className="font-black text-blue-600 text-sm">{formatTons(totalWithdrawn)} t</p>
                       </div>
                       <div className="text-right">
                         <span className="text-[11px] text-slate-500 font-bold uppercase">Saldo a Retirar</span>
                         <p className={`font-black text-sm ${remainingWithdraw === 0 ? 'text-emerald-600' : 'text-purple-600'}`}>
-                          {remainingWithdraw.toFixed(1)} TON
+                          {formatTons(remainingWithdraw)} t
                         </p>
                       </div>
                     </div>
@@ -2377,6 +2379,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             }
           >
             <div className="space-y-5">
+
+            <div className="space-y-3">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-500">Linha do tempo</h4>
+              <OrderTimeline order={selectedOrderDetails} />
+            </div>
 
             {/* Recibos de Pagamento */}
             <div className="space-y-3">

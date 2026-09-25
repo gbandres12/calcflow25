@@ -15,6 +15,7 @@ import {
 import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { useToast } from './ui/Toast';
+import NfeRejectionHint from './NfeRejectionHint';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -1262,8 +1263,11 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           )}
 
           {errorMsg && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-bold flex items-center gap-2">
-              <AlertCircle size={16} /> {errorMsg}
+            <div className="space-y-2">
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-bold flex items-center gap-2">
+                <AlertCircle size={16} /> {errorMsg}
+              </div>
+              <NfeRejectionHint message={errorMsg} />
             </div>
           )}
 

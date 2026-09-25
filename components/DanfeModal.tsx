@@ -7,6 +7,7 @@ import {
   Printer, Download, AlertTriangle, Ban, RefreshCw, FileX, Copy
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
+import NfeRejectionHint from './NfeRejectionHint';
 
 interface DanfeModalProps {
   order: SaleOrder;
@@ -358,6 +359,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       {status === 'rejeitada' && current.nfeErro && (
         <div className="px-4 py-3 bg-rose-50 border-b border-rose-100 text-sm text-rose-800 font-bold">
           Rejeição SEFAZ: {current.nfeErro}
+          <NfeRejectionHint message={current.nfeErro} className="mt-2 font-normal" />
         </div>
       )}
 

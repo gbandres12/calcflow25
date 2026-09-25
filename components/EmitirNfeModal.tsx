@@ -22,6 +22,7 @@ import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
+import NfeRejectionHint from './NfeRejectionHint';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -1033,6 +1034,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2">
               <p className="font-bold text-rose-900">A SEFAZ não autorizou</p>
               <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-xs break-words">{errorMsg}</p>
+              <NfeRejectionHint message={errorMsg} />
               <button type="button" onClick={() => setShowDatabaseModal(true)} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5">
                 <Database size={13} /> Status do banco
               </button>
