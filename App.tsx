@@ -818,13 +818,14 @@ const App: React.FC = () => {
         paidAmount: 0,
         date: order.date,
         status: TransactionStatus.PENDENTE,
-        accountId: accounts[0]?.id || 'acc-1',
+        // A receber não pertence a caixa nenhum: o caixa só é escolhido no recebimento.
+        accountId: '',
         description: 'Saldo em aberto da venda'
       }] : [])
     ];
 
     const transactionWrites = financialSchedule.map((payment, index) => {
-      const accId = payment.accountId || accounts[0]?.id || 'acc-1';
+      const accId = payment.accountId || '';
       return handleAddTransaction({
         accountId: accId,
         costCenterId: 'cc4',
@@ -906,9 +907,19 @@ const App: React.FC = () => {
   const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
     setTransactions(prev => {
-      const orderTxs = prev.filter(t => t.orderId === (receipt.orderId || order.id) && t.type === TransactionType.SALE);
-      const alreadyReceipt = orderTxs.some(t => t.receiptId === receipt.id);
-      if (alreadyReceipt) return prev;
+      // Trava de duplicidade: o recibo pode já ter entrado em qualquer
+      // lançamento, mesmo que depois outro recibo tenha sobrescrito o
+      // receiptId dele. Checa cada pagamento (e o texto dos antigos, que
+      // ainda não guardavam o receiptId).
+      const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
+      const alreadyApplied = prev.some(t =>
+        t.receiptId === receipt.id ||
+        (t.payments || []).some(p =>
+          p.receiptId === receipt.id ||
+          (!p.receiptId && t.orderId === (receipt.orderId || order.id) && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01)
+        )
+      );
+      if (alreadyApplied) return prev;
 
       let remainingReceipt = Number(receipt.amount || 0);
       const updatedTransactions = prev.map(transaction => {
@@ -938,7 +949,8 @@ const App: React.FC = () => {
               paymentDate: receipt.date,
               accountId: accId,
               paymentMethod: receipt.paymentMethod || 'PIX',
-              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
+              receiptId: receipt.id
             }
           ]
         };
@@ -972,7 +984,8 @@ const App: React.FC = () => {
           paymentDate: receipt.date,
           accountId: accId,
           paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
+          receiptId: receipt.id
         }]
       };
       tx.payments![0].transactionId = tx.id;
@@ -1526,6 +1539,7 @@ const App: React.FC = () => {
               activeCompanyId={activeCompanyId}
               currentUser={currentUser}
               matrizUsers={displayUsers}
+              accounts={accounts}
             />
           )}
           {currentView === 'fleet' && (

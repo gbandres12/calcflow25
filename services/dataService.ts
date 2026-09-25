@@ -30,6 +30,7 @@ import {
   stripSeedDocs
 } from './persistSeed';
 import { pickMembershipCompanyId } from './membershipCompany';
+import { getFinanceAccountScope, isInFinanceScope } from './companyPermissions';
 import { decideEmptyCloudRead } from './cloudRead';
 
 // Cache local e fila de reenvio. A fonte da verdade é o Supabase.
@@ -228,6 +229,33 @@ const createSupabaseRows = (tableName: string, companyId: string, records: any[]
     data: record,
     updated_at: new Date().toISOString()
   }));
+
+// Caixas liberados pro usuário logado nesta empresa (null = todos). A RLS já
+// filtra o que vem do banco; isto limpa o cache local do aparelho, que pode
+// ter lançamentos de outros caixas de um login anterior — sem isso eles
+// apareceriam na tela e o app tentaria reenviá-los.
+const FINANCE_SCOPED_TABLES = new Set(['transactions', 'financial_accounts']);
+const financeScopeCache = new Map<string, { at: number; scope: Promise<string[] | null> }>();
+
+const getFinanceScope = (compKey: string): Promise<string[] | null> => {
+  const hit = financeScopeCache.get(compKey);
+  if (hit && Date.now() - hit.at < 60_000) return hit.scope;
+  const scope = (async () => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return null;
+    const { data } = await supabase
+      .from('company_memberships')
+      .select('permissions')
+      .eq('company_id', compKey)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    return getFinanceAccountScope(data?.permissions);
+  })().catch(() => null);
+  financeScopeCache.set(compKey, { at: Date.now(), scope });
+  return scope;
+};
 
 export const waitForAuthUser = async (timeoutMs = 2500): Promise<boolean> => {
   const supabase = getSupabase();
@@ -576,7 +604,11 @@ export const db = {
           };
           // Lê o cache de novo depois do fetch: um save no meio da espera não pode ser apagado.
           const visible = latestVisible();
-          const safeRecords = visible.rows;
+          let safeRecords = visible.rows;
+          if (!demo && FINANCE_SCOPED_TABLES.has(tableName)) {
+            const scope = await getFinanceScope(compKey);
+            if (scope) safeRecords = safeRecords.filter((row) => isInFinanceScope(tableName, row, scope));
+          }
 
           if (initialized || cleanRecords.length > 0 || safeRecords.length > 0) {
             storage.set(storageKey, safeRecords);

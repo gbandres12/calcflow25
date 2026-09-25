@@ -95,7 +95,8 @@ export interface Company {
 }
 
 /** read/write por módulo (mesma chave de ALL_TABLES em dataService.ts). */
-export type CompanyModulePermissions = Record<string, { read: boolean; write: boolean }>;
+/** accounts só existe em financial_accounts: caixas liberados (sem = todos). */
+export type CompanyModulePermissions = Record<string, { read: boolean; write: boolean; accounts?: string[] }>;
 
 /** Vínculo do usuário logado com uma empresa (matriz ou filial). */
 export interface CompanyMembership {
@@ -116,13 +117,15 @@ export interface CompanyBranch {
   isActive: boolean;
   isBranch: boolean;
   createdAt?: string;
-  members: Array<{
-    userId: string;
-    role: string;
-    permissions: CompanyModulePermissions;
-    name?: string;
-    email?: string;
-  }>;
+  members: CompanyBranchMember[];
+}
+
+export interface CompanyBranchMember {
+  userId: string;
+  role: string;
+  permissions: CompanyModulePermissions;
+  name?: string;
+  email?: string;
 }
 
 export interface FinancialAccount {
@@ -336,6 +339,8 @@ export interface TransactionPayment {
   notes?: string;
   isDiscountOrDeduction?: boolean;
   createdAt?: string;
+  /** Recibo que gerou este pagamento — trava contra aplicar o mesmo recibo duas vezes. */
+  receiptId?: string;
 }
 
 export interface Transaction {

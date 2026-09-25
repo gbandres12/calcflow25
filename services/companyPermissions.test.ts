@@ -4,7 +4,10 @@ import {
   PERMISSION_GROUPS,
   buildEmptyPermissions,
   buildFullAccessPermissions,
+  getFinanceAccountScope,
   groupHasAccess,
+  isInFinanceScope,
+  setFinanceAccountScope,
   setGroupAccess
 } from './companyPermissions';
 
@@ -49,5 +52,33 @@ describe('permissão de filial: liberar/bloquear por grupo (o que a tela de dele
     const partial = { ...base, transactions: { read: true, write: false } };
     assert.equal(groupHasAccess(partial, financeiro, 'write'), false);
     assert.equal(groupHasAccess(partial, financeiro, 'read'), true);
+  });
+});
+
+describe('acesso por caixa', () => {
+  it('sem lista de caixas = todos (null)', () => {
+    assert.equal(getFinanceAccountScope(buildFullAccessPermissions()), null);
+  });
+
+  it('restringe ao Asaas sem mexer no read/write do módulo', () => {
+    const perms = setFinanceAccountScope(buildFullAccessPermissions(), ['acc-1']);
+    assert.deepEqual(getFinanceAccountScope(perms), ['acc-1']);
+    assert.equal(perms.financial_accounts.read, true);
+    assert.equal(perms.financial_accounts.write, true);
+  });
+
+  it('voltar pra "todos os caixas" remove a lista', () => {
+    const scoped = setFinanceAccountScope(buildFullAccessPermissions(), ['acc-1']);
+    const all = setFinanceAccountScope(scoped, null);
+    assert.equal(getFinanceAccountScope(all), null);
+    assert.equal('accounts' in all.financial_accounts, false);
+  });
+
+  it('lançamento vale pelo accountId, conta pelo id', () => {
+    assert.equal(isInFinanceScope('transactions', { id: 'tx-1', accountId: 'acc-1' }, ['acc-1']), true);
+    assert.equal(isInFinanceScope('transactions', { id: 'tx-2', accountId: 'acc-bradesco' }, ['acc-1']), false);
+    assert.equal(isInFinanceScope('transactions', { id: 'tx-3' }, ['acc-1']), false);
+    assert.equal(isInFinanceScope('financial_accounts', { id: 'acc-1' }, ['acc-1']), true);
+    assert.equal(isInFinanceScope('customers', { id: 'c-1' }, ['acc-1']), true);
   });
 });

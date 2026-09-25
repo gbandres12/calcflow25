@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Plus, ShieldCheck, Trash2, UserPlus, Users as UsersIcon, X } from 'lucide-react';
-import { CompanyBranch, CompanyModulePermissions, User } from '../types';
+import { Building2, Pencil, Plus, ShieldCheck, Trash2, UserPlus, Users as UsersIcon, Wallet } from 'lucide-react';
+import { CompanyBranch, CompanyBranchMember, CompanyModulePermissions, FinancialAccount, User } from '../types';
 import { fetchBranches, createBranch, grantBranchAccess, revokeBranchAccess } from '../services/adminApi';
 import {
   PERMISSION_GROUPS,
   buildEmptyPermissions,
+  getFinanceAccountScope,
   groupHasAccess,
+  setFinanceAccountScope,
   setGroupAccess
 } from '../services/companyPermissions';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -15,6 +17,8 @@ interface Props {
   currentUser: User;
   /** Colaboradores já cadastrados na matriz — é de quem escolhemos pra delegar. */
   matrizUsers: User[];
+  /** Caixas da empresa ativa — pra restringir o financeiro a contas específicas. */
+  accounts: FinancialAccount[];
 }
 
 const AUTH_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,15 +30,31 @@ const DelegateForm: React.FC<{
   activeCompanyId: string;
   candidates: User[];
   existingUserIds: string[];
+  /** Caixas da empresa — vazio quando a empresa editada não é a ativa. */
+  accounts: FinancialAccount[];
+  /** Preenchido = editando o acesso de quem já é membro. */
+  editing?: CompanyBranchMember;
   onDone: (branches: CompanyBranch[]) => void;
   onCancel: () => void;
-}> = ({ companyId, activeCompanyId, candidates, existingUserIds, onDone, onCancel }) => {
+}> = ({ companyId, activeCompanyId, candidates, existingUserIds, accounts, editing, onDone, onCancel }) => {
   // Só dá pra delegar a quem tem login (id = uuid do Supabase Auth); cadastros
   // antigos com id local (u-…) quebrariam a FK de company_memberships.
-  const pickable = candidates.filter((u) => AUTH_ID.test(u.id) && !existingUserIds.includes(u.id));
+  const pickable = editing
+    ? [{ id: editing.userId, name: editing.name || editing.email || editing.userId, email: editing.email || '' } as User]
+    : candidates.filter((u) => AUTH_ID.test(u.id) && !existingUserIds.includes(u.id));
   const [userId, setUserId] = useState(pickable[0]?.id || '');
-  const [role, setRole] = useState('Gerente');
-  const [permissions, setPermissions] = useState<CompanyModulePermissions>(buildEmptyPermissions());
+  const [role, setRole] = useState(editing?.role || 'Gerente');
+  const [permissions, setPermissions] = useState<CompanyModulePermissions>(
+    editing ? { ...buildEmptyPermissions(), ...editing.permissions } : buildEmptyPermissions()
+  );
+  const accountScope = getFinanceAccountScope(permissions);
+  const financeGroup = PERMISSION_GROUPS.find((g) => g.key === 'financeiro');
+  const canSeeFinance = financeGroup ? groupHasAccess(permissions, financeGroup, 'read') : false;
+  const toggleAccount = (accountId: string, checked: boolean) => {
+    const current = accountScope || accounts.map((a) => a.id);
+    const next = checked ? Array.from(new Set([...current, accountId])) : current.filter((id) => id !== accountId);
+    setPermissions((prev) => setFinanceAccountScope(prev, next));
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,13 +75,13 @@ const DelegateForm: React.FC<{
   return (
     <div className="mt-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50/60 space-y-3">
       {pickable.length === 0 ? (
-        <p className="text-sm text-slate-600">Todos os colaboradores da matriz já têm acesso aqui.</p>
+        <p className="text-sm text-slate-600">Todos os colaboradores com login já têm acesso aqui.</p>
       ) : (
         <>
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="text-xs font-semibold text-slate-600">
               Colaborador
-              <select value={userId} onChange={(e) => setUserId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-white">
+              <select value={userId} disabled={Boolean(editing)} onChange={(e) => setUserId(e.target.value)} className="mt-1 w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm bg-white">
                 {pickable.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
               </select>
             </label>
@@ -106,6 +126,35 @@ const DelegateForm: React.FC<{
               })}
             </div>
           </div>
+
+          {canSeeFinance && accounts.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5"><Wallet size={13} /> Quais caixas pode acessar</p>
+              <label className="flex items-center gap-2 text-sm mb-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!accountScope}
+                  onChange={(e) => setPermissions((prev) => setFinanceAccountScope(prev, e.target.checked ? null : []))}
+                />
+                Todos os caixas
+              </label>
+              {accountScope && (
+                <div className="space-y-1.5">
+                  {accounts.map((account) => (
+                    <label key={account.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={accountScope.includes(account.id)}
+                        onChange={(e) => toggleAccount(account.id, e.target.checked)}
+                      />
+                      {account.name}
+                    </label>
+                  ))}
+                  <p className="text-[11px] text-slate-500">Com caixa restrito, a pessoa vê, lança e dá baixa só nesses caixas. Não exclui lançamentos nem cria ou edita contas.</p>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -115,7 +164,7 @@ const DelegateForm: React.FC<{
         <button type="button" onClick={onCancel} className="px-3 py-1.5 text-xs font-semibold text-slate-600 rounded-lg border border-slate-200 bg-white">Cancelar</button>
         {pickable.length > 0 && (
           <button type="button" onClick={submit} disabled={saving} className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-emerald-600 disabled:opacity-50">
-            {saving ? 'Salvando…' : 'Delegar acesso'}
+            {saving ? 'Salvando…' : editing ? 'Salvar acesso' : 'Delegar acesso'}
           </button>
         )}
       </div>
@@ -123,7 +172,7 @@ const DelegateForm: React.FC<{
   );
 };
 
-export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser, matrizUsers }) => {
+export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser, matrizUsers, accounts }) => {
   const confirmDialog = useConfirm();
   const [branches, setBranches] = useState<CompanyBranch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +180,7 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
   const [newBranchName, setNewBranchName] = useState('');
   const [creating, setCreating] = useState(false);
   const [delegatingFor, setDelegatingFor] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<{ companyId: string; member: CompanyBranchMember } | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -211,7 +261,7 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
             </div>
             <button
               type="button"
-              onClick={() => setDelegatingFor(delegatingFor === branch.id ? null : branch.id)}
+              onClick={() => { setEditingMember(null); setDelegatingFor(delegatingFor === branch.id ? null : branch.id); }}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 rounded-lg bg-emerald-50"
             >
               <UserPlus size={13} /> {delegatingFor === branch.id ? 'Fechar' : 'Delegar acesso'}
@@ -227,9 +277,19 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
                   <span className="text-xs text-slate-500">{member.role}</span>
                 </div>
                 {member.userId !== currentUser.id && (
+                  <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setDelegatingFor(null); setEditingMember(editingMember?.member.userId === member.userId && editingMember.companyId === branch.id ? null : { companyId: branch.id, member }); }}
+                    className="text-slate-500 hover:text-emerald-600"
+                    title="Editar acesso"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button type="button" onClick={() => handleRevoke(branch.id, member.userId)} className="text-slate-500 hover:text-rose-600" title="Remover acesso">
                     <Trash2 size={14} />
                   </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -238,12 +298,27 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
             )}
           </div>
 
+          {editingMember?.companyId === branch.id && (
+            <DelegateForm
+              key={editingMember.member.userId}
+              companyId={branch.id}
+              activeCompanyId={activeCompanyId}
+              candidates={matrizUsers}
+              existingUserIds={[]}
+              accounts={branch.id === activeCompanyId ? accounts : []}
+              editing={editingMember.member}
+              onDone={(next) => { setBranches(next); setEditingMember(null); }}
+              onCancel={() => setEditingMember(null)}
+            />
+          )}
+
           {delegatingFor === branch.id && (
             <DelegateForm
               companyId={branch.id}
               activeCompanyId={activeCompanyId}
               candidates={matrizUsers}
               existingUserIds={branch.members.map((m) => m.userId)}
+              accounts={branch.id === activeCompanyId ? accounts : []}
               onDone={(next) => { setBranches(next); setDelegatingFor(null); }}
               onCancel={() => setDelegatingFor(null)}
             />

@@ -69,3 +69,30 @@ export const groupHasAccess = (
   if (!permissions) return false;
   return group.modules.every((module) => Boolean(permissions[module]?.[action]));
 };
+
+/**
+ * Caixas liberados (permissions.financial_accounts.accounts). null = sem
+ * restrição, vê todos. A RLS (migration 013) aplica a mesma regra no banco.
+ */
+export const getFinanceAccountScope = (permissions: CompanyModulePermissions | undefined): string[] | null => {
+  const accounts = permissions?.financial_accounts?.accounts;
+  return Array.isArray(accounts) ? accounts.map(String) : null;
+};
+
+export const setFinanceAccountScope = (
+  permissions: CompanyModulePermissions,
+  accounts: string[] | null
+): CompanyModulePermissions => {
+  const { accounts: _drop, ...current } = permissions.financial_accounts || { read: false, write: false };
+  return {
+    ...permissions,
+    financial_accounts: accounts ? { ...current, accounts } : current
+  };
+};
+
+/** Mesma regra da RLS: lançamento pelo accountId, conta pelo próprio id. */
+export const isInFinanceScope = (tableName: string, record: any, scope: string[]): boolean => {
+  if (tableName === 'transactions') return scope.includes(String(record?.accountId || ''));
+  if (tableName === 'financial_accounts') return scope.includes(String(record?.id || ''));
+  return true;
+};
