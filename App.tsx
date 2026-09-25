@@ -63,6 +63,8 @@ import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancel
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 import CompanyBranches from './components/CompanyBranches';
 import SetNewPassword from './components/SetNewPassword';
+import Loadings from './components/Loadings';
+import { isViewAllowed } from './services/viewAccess';
 import { getSupabase, initialAuthRedirect } from './services/supabaseClient';
 
 const App: React.FC = () => {
@@ -1171,7 +1173,7 @@ const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full lg:ml-[276px] p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
+      <main className="flex-1 w-full min-w-0 lg:ml-[276px] p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
         <div className="max-w-[1440px] mx-auto print:max-w-none">
           {/* Topbar com suporte Mobile e Desktop */}
           <header className="cf-topbar print:hidden">
@@ -1477,6 +1479,9 @@ const App: React.FC = () => {
               onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
+          {currentView === 'loadings' && isViewAllowed(currentUser, 'loadings') && (
+            <Loadings orders={orders} customers={customers} />
+          )}
           {currentView === 'branches' && (
             <CompanyBranches
               activeCompanyId={activeCompanyId}
@@ -1508,6 +1513,8 @@ const App: React.FC = () => {
               orders={orders}
               customers={customers}
               company={operatingCompany}
+              transportadores={transportadores}
+              operatorName={currentUser.name}
               onAddMaintenance={handleAddMaintenance} 
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
@@ -1548,15 +1555,17 @@ const App: React.FC = () => {
           <span className="text-[10px] tracking-tight">Início</span>
         </button>
 
-        <button
-          onClick={() => setCurrentView('orders')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <FileText size={18} />
-          <span className="text-[10px] tracking-tight">Vendas</span>
-        </button>
+        {isViewAllowed(currentUser, 'orders') && (
+          <button
+            onClick={() => setCurrentView('orders')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <FileText size={18} />
+            <span className="text-[10px] tracking-tight">Vendas</span>
+          </button>
+        )}
 
         <button
           onClick={() => setCurrentView('yard')}
@@ -1568,35 +1577,41 @@ const App: React.FC = () => {
           <span className="text-[10px] tracking-tight">Balança</span>
         </button>
 
-        <button
-          onClick={() => setCurrentView('inventory')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <Package size={18} />
-          <span className="text-[10px] tracking-tight">Estoque</span>
-        </button>
+        {isViewAllowed(currentUser, 'inventory') && (
+          <button
+            onClick={() => setCurrentView('inventory')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <Package size={18} />
+            <span className="text-[10px] tracking-tight">Estoque</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setCurrentView('transfers')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <ArrowRightLeft size={18} />
-          <span className="text-[10px] tracking-tight">Remessas</span>
-        </button>
+        {isViewAllowed(currentUser, 'transfers') && (
+          <button
+            onClick={() => setCurrentView('transfers')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <ArrowRightLeft size={18} />
+            <span className="text-[10px] tracking-tight">Remessas</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setCurrentView('fiscal')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'fiscal' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <FileCheck size={18} />
-          <span className="text-[10px] tracking-tight">Emitir NF-e</span>
-        </button>
+        {isViewAllowed(currentUser, 'fiscal') && (
+          <button
+            onClick={() => setCurrentView('fiscal')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'fiscal' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <FileCheck size={18} />
+            <span className="text-[10px] tracking-tight">Emitir NF-e</span>
+          </button>
+        )}
 
         <button
           onClick={() => setMobileMenuOpen(true)}

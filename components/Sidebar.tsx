@@ -4,7 +4,8 @@ import {
   Truck, Fuel, Boxes, UserCog, Settings, LogOut, ShieldCheck, Briefcase, Wrench,
   FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound
 } from 'lucide-react';
-import { View, UserRole, User, UserPermissions } from '../types';
+import { View, User } from '../types';
+import { isViewAllowed } from '../services/viewAccess';
 
 interface SidebarProps {
   currentView: View;
@@ -18,32 +19,14 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogout, onChangePassword, mobileOpen = false, onCloseMobile }) => {
-  const userPermissions: UserPermissions = user.permissions || {
-    financial: user.role === UserRole.ADMIN || user.role === UserRole.MANAGER,
-    fiscal: false,
-    users: user.role === UserRole.ADMIN || user.role === UserRole.OPERATIONAL_SUPERVISOR,
-    inventory: true,
-    orders: true
-  };
-
-  const isItemAllowed = (itemId: string, itemRoles?: UserRole[]) => {
-    if (user.role === UserRole.ADMIN) return true;
-    if (itemRoles && !itemRoles.includes(user.role)) return false;
-    if (itemId === 'fiscal') return Boolean(userPermissions.fiscal || userPermissions.financial);
-    if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(itemId)) return userPermissions.financial;
-    if (['users'].includes(itemId)) return userPermissions.users;
-    if (['inventory', 'milling'].includes(itemId)) return userPermissions.inventory;
-    if (['orders', 'quotes', 'customers', 'transportadores', 'yard', 'transfers'].includes(itemId)) return userPermissions.orders;
-    return true;
-  };
-
   const allGroups = [
     { title: 'Visão Geral', items: [{ id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard }] },
     { title: 'Comercial & Clientes', items: [
       { id: 'orders', label: 'Vendas & Romaneios', icon: FileText },
       { id: 'quotes', label: 'Orçamentos', icon: ClipboardList },
+      { id: 'loadings', label: 'Carregamentos', icon: Truck },
       { id: 'customers', label: 'Clientes & Fornecedores', icon: Users },
-      { id: 'fiscal', label: 'Notas Fiscais', icon: FileCheck, roles: [UserRole.ADMIN, UserRole.MANAGER] },
+      { id: 'fiscal', label: 'Notas Fiscais', icon: FileCheck },
     ]},
     { title: 'Produção & Fábrica', items: [
       { id: 'inventory', label: 'Produtos & NCM', icon: Package },
@@ -64,15 +47,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     ]},
     { title: 'Gestão & Sistema', items: [
       { id: 'users', label: 'Usuários & Equipe', icon: UserCog },
-      { id: 'branches', label: 'Filiais e Acessos', icon: Briefcase, roles: [UserRole.ADMIN] },
-      { id: 'fiscal_config', label: 'Configuração de NF-e', icon: Sliders, roles: [UserRole.ADMIN, UserRole.MANAGER] },
-      { id: 'settings', label: 'Configurações', icon: Settings, roles: [UserRole.ADMIN] },
+      { id: 'branches', label: 'Filiais e Acessos', icon: Briefcase },
+      { id: 'fiscal_config', label: 'Configuração de NF-e', icon: Sliders },
+      { id: 'settings', label: 'Configurações', icon: Settings },
     ]},
   ];
 
   const groups = allGroups.map(group => ({
     ...group,
-    items: group.items.filter(item => isItemAllowed(item.id, item.roles))
+    items: group.items.filter(item => isViewAllowed(user, item.id))
   })).filter(group => group.items.length > 0);
 
   return (

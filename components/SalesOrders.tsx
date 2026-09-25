@@ -2550,6 +2550,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderForWithdrawal.customerId)}
           company={company}
           fiscalConfig={fiscalConfig}
+          transportadores={transportadores}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setOrderForWithdrawal(null)}
         />

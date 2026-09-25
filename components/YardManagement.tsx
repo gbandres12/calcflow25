@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company } from '../types';
+import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company, Transportador } from '../types';
 import { 
   Boxes, Plus, Wrench, Search, Package, AlertTriangle, 
   X, Edit, Scale, Truck, Printer, Send, Calendar, 
   CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight
 } from 'lucide-react';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
+import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
 
 interface YardManagementProps {
   machines: Machine[];
@@ -14,6 +15,8 @@ interface YardManagementProps {
   orders?: SaleOrder[];
   customers?: Customer[];
   company?: Company;
+  transportadores?: Transportador[];
+  operatorName?: string;
   onAddMaintenance: (record: Omit<MaintenanceRecord, 'id' | 'companyId'>) => void;
   onAddStoreItem: (item: Omit<StoreItem, 'id' | 'companyId'>) => void;
   onUpdateStoreItem: (item: StoreItem) => void;
@@ -27,6 +30,8 @@ const YardManagement: React.FC<YardManagementProps> = ({
   orders = [],
   customers = [],
   company,
+  transportadores = [],
+  operatorName,
   onAddMaintenance, 
   onAddStoreItem, 
   onUpdateStoreItem,
@@ -95,11 +100,8 @@ const YardManagement: React.FC<YardManagementProps> = ({
   );
 
   // Pedidos com saldo disponível para carregamento na balança
-  const ordersWithAvailableBalance = orders.filter(order => {
-    const totalOrdered = order.items.reduce((acc, it) => acc + (it.quantity || 0), 0);
-    const totalWithdrawn = (order.withdrawals || []).reduce((acc, w) => acc + (w.quantityWithdrawn || 0), 0);
-    return (totalOrdered - totalWithdrawn) > 0.01;
-  });
+  // Só venda confirmada com saldo: orçamento e pedido cancelado não carregam.
+  const ordersWithAvailableBalance = openOrdersForLoading(orders);
 
   const handleOpenStoreModal = (item?: StoreItem) => {
     if (item) {
@@ -153,7 +155,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
   };
 
   const handleSendWhatsAppTicket = (w: OrderWithdrawal, custName?: string) => {
-    const text = `*COMPROVANTE DE PESAGEM / EXPEDIÇÃO DE CALCÁRIO*\nUsina: ${defaultCompany.name}\nTicket Nº: ${w.weighTicketNumber}\nData: ${w.date}\n\n👤 Cliente: ${custName || 'Cliente'}\n🚛 Placa / Veículo: ${w.plateNumber} ${w.truckModel ? `(${w.truckModel})` : ''}\n👨‍✈️ Motorista: ${w.driverName || 'N/I'}\n📦 Produto: ${w.productName || 'Calcário Agrícola'}\n⚖️ Peso Líquido Carregado: *${w.quantityWithdrawn.toLocaleString('pt-BR')} Toneladas*\n\nSaldo Restante do Pedido: ${w.remainingBalanceQuantity !== undefined ? `${w.remainingBalanceQuantity.toLocaleString('pt-BR')} Ton` : '-'}`;
+    const text = `*COMPROVANTE DE PESAGEM / EXPEDIÇÃO DE CALCÁRIO*\nUsina: ${defaultCompany.name}\nTicket Nº: ${w.weighTicketNumber}\nData: ${w.date}\n\n👤 Cliente: ${custName || 'Cliente'}\n🚛 Placa / Veículo: ${w.plateNumber} ${w.truckModel ? `(${w.truckModel})` : ''}\n👨‍✈️ Motorista: ${w.driverName || 'N/I'}\n📦 Produto: ${w.productName || 'Calcário Agrícola'}\n📄 Quantidade da nota: *${formatTons(w.quantityWithdrawn)} t*${w.netWeight != null ? `\n⚖️ Peso líquido: ${formatTons(w.netWeight)} t` : ''}\n\nSaldo Restante do Pedido: ${w.remainingBalanceQuantity !== undefined ? `${formatTons(w.remainingBalanceQuantity)} t` : '-'}`;
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
@@ -225,7 +227,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Volume Total Expedido</span>
                 <p className="text-xl font-black text-slate-800">
-                  {allWithdrawals.reduce((sum, item) => sum + (item.withdrawal.quantityWithdrawn || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} Ton
+                  {formatTons(sumTons(allWithdrawals.map((item) => item.withdrawal.quantityWithdrawn || 0)))} t
                 </p>
               </div>
             </div>
@@ -260,9 +262,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {ordersWithAvailableBalance.map(order => {
                   const customer = customers.find(c => c.id === order.customerId);
-                  const totalQty = order.items.reduce((acc, it) => acc + (it.quantity || 0), 0);
-                  const withdrawn = (order.withdrawals || []).reduce((acc, w) => acc + (w.quantityWithdrawn || 0), 0);
-                  const balance = Math.max(0, totalQty - withdrawn);
+                  const { contracted: totalQty, remaining: balance } = orderLoadingProgress(order);
 
                   return (
                     <div key={order.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200 transition-all flex flex-col justify-between gap-3">
@@ -272,7 +272,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             {order.reference}
                           </span>
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            Saldo: {balance.toFixed(1)} Ton
+                            Saldo: {formatTons(balance)} t
                           </span>
                         </div>
                         <p className="font-bold text-slate-900 text-sm mt-2 leading-tight">{customer?.name || 'Cliente'}</p>
@@ -323,7 +323,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                     <th className="px-4 py-3">Cliente / Fazenda</th>
                     <th className="px-4 py-3">Veículo / Placa</th>
                     <th className="px-4 py-3">Motorista</th>
-                    <th className="px-4 py-3 text-right">Peso Líquido</th>
+                    <th className="px-4 py-3 text-right">Nota / Peso líq.</th>
                     <th className="px-4 py-3 text-center">Comprovante</th>
                   </tr>
                 </thead>
@@ -367,8 +367,11 @@ const YardManagement: React.FC<YardManagementProps> = ({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="font-black text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            {item.withdrawal.quantityWithdrawn.toLocaleString('pt-BR')} Ton
+                            {formatTons(item.withdrawal.quantityWithdrawn)} t
                           </span>
+                          {item.withdrawal.netWeight != null && (
+                            <span className="block text-[10px] text-slate-500 mt-1">{formatTons(item.withdrawal.netWeight)} t líq.</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
@@ -759,6 +762,8 @@ const YardManagement: React.FC<YardManagementProps> = ({
           order={selectedOrderForWeigh}
           customer={customers.find(c => c.id === selectedOrderForWeigh.customerId)}
           company={defaultCompany}
+          transportadores={transportadores}
+          operatorName={operatorName}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setSelectedOrderForWeigh(null)}
         />
@@ -798,8 +803,11 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 </div>
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Volume Pesado / Expedido</span>
-                <p className="text-lg font-black text-emerald-700">{viewingWithdrawal.withdrawal.quantityWithdrawn.toLocaleString('pt-BR')} Toneladas</p>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Quantidade da nota</span>
+                <p className="text-lg font-black text-emerald-700">{formatTons(viewingWithdrawal.withdrawal.quantityWithdrawn)} t</p>
+                {viewingWithdrawal.withdrawal.netWeight != null && (
+                  <p className="text-xs font-bold text-slate-500">Peso líquido: {formatTons(viewingWithdrawal.withdrawal.netWeight)} t</p>
+                )}
               </div>
 
               {viewingWithdrawal.withdrawal.nfeNumero && (
