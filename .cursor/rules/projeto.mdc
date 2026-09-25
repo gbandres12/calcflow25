@@ -1,0 +1,36 @@
+---
+description: Contexto e regras do CalcárioFlow ERP
+alwaysApply: true
+---
+# CalcárioFlow ERP — regras para o agente
+
+ERP de usina de calcário (vendas, balança/pátio, estoque, financeiro, NF-e). React 19 + Vite + TypeScript, API Express (`server.ts`, `api/`), deploy Vercel.
+
+## Dados
+- Persistência principal: **Supabase** (`app_records`). localStorage é só cache/fila de reenvio. Firestore é legado — não adicionar código novo nele.
+- Mudança de schema = nova migration numerada em `supabase/migrations/`. Nunca editar migration antiga.
+- Multi-tenant: todo registro pertence a uma empresa/filial. Respeitar `companyPermissions`/`membershipCompany` ao ler e gravar.
+
+## Onde colocar código
+- Regra de negócio pura (cálculo, PDF, montagem de NF-e, romaneio) → `services/domain/*.ts`, sem React, com teste `*.test.ts` ao lado.
+- Componentes em `components/` só orquestram UI. Não aumentar arquivos gigantes (`SalesOrders.tsx`, `TransferManagement.tsx`, `App.tsx`): extraia para arquivo novo.
+- Tipos compartilhados em `types.ts`. Evitar `any` novo.
+
+## NF-e / fiscal (sensível)
+- Não mudar `modFrete`, CFOP, CST, totais ou dados de transporte sem teste cobrindo o caso (ver commits `fix(nfe)`).
+- Provedor: Notaas (`api/nfe`, `services/fiscalService.ts`).
+
+## Verificação obrigatória antes de dizer "pronto"
+1. `npx tsc --noEmit` sem erros
+2. `npm test` — ao criar `*.test.ts`, **adicione-o ao script `test` do package.json** (a lista é explícita)
+3. Mudança visual: rodar `npm run dev` e conferir a tela
+
+## UI
+- Tela nova usa só componentes de `components/ui` e cores do tema (`forest`, `ink`, `sand`, `olive`, `cream`, `line`, `muted`). Não introduzir `slate-*` nem `text-[Npx]`.
+- Raio: `rounded-xl` em card e modal, `rounded-lg` em controle. Conteúdo no mínimo 12px; 11px só em rótulo em caixa-alta.
+- Confirmação e aviso passam por `ConfirmDialog` e `Toast`, sem `alert()` nem `confirm()`.
+
+## Estilo
+- Textos de UI, commits e comentários em português. Commits: `feat(escopo): ...`, `fix(escopo): ...`.
+- Diffs pequenos e focados; não reformatar arquivos inteiros.
+- Nunca commitar chaves/tokens (usar `.env.local`).

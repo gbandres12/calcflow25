@@ -289,7 +289,12 @@ export interface OrderWithdrawal {
   plateNumber: string;
   truckModel?: string;
   truckType?: string;
+  /** Quantidade da nota (t) — é o que abate do saldo do pedido. */
   quantityWithdrawn: number;
+  /** Peso líquido da balança (t), guardado exatamente como pesado, pra conferência. */
+  netWeight?: number;
+  /** Quem transportou: nome livre (pode ser a própria CBA ou um terceiro não cadastrado). */
+  transporterName?: string;
   productName?: string;
   weighTicketNumber?: string;
   totalOrderQuantity?: number;
@@ -659,4 +664,4 @@ export interface TransferShipment {
   supplierName?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';

@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider } from './components/ui/Toast';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -14,7 +15,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary label="aplicação">
-      <App />
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
