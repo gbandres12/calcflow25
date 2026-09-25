@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { SaleOrder, OrderWithdrawal, Customer, Company, FiscalConfig, Transportador } from '../types';
+import { SaleOrder, OrderWithdrawal, Customer, Company, FiscalConfig, Transportador, LoadingBillingTerm } from '../types';
+import { TERM_LABEL, loadingDueDate } from '../services/domain/receivables';
 import { formatTons, localIsoDate, roundTons, sumTons } from '../services/domain/loadings';
 import { printThermalTicket } from '../services/domain/thermalTicket';
 import { Truck, Printer, X, CheckCircle, Scale, Calendar, User, FileText, Package, Loader2, AlertCircle } from 'lucide-react';
@@ -47,6 +48,11 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   const [weighTicket, setWeighTicket] = useState(`PES-${Math.floor(100000 + Math.random() * 900000)}`);
   const [loadedBy, setLoadedBy] = useState(operatorName || 'Balança / Expedição');
   const [notes, setNotes] = useState('');
+  // Cobrança desta carga. Padrão = segue o pedido (a balança nem precisa mexer).
+  const orderPrice = Number(order.items[0]?.unitPrice) || 0;
+  const [billingTerm, setBillingTerm] = useState<LoadingBillingTerm>('pedido');
+  const [unitPriceStr, setUnitPriceStr] = useState(orderPrice ? String(orderPrice).replace('.', ',') : '');
+  const [termDaysStr, setTermDaysStr] = useState('30');
   const [savedWithdrawal, setSavedWithdrawal] = useState<OrderWithdrawal | null>(null);
   const [formError, setFormError] = useState('');
 
@@ -54,6 +60,11 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   const qtyNum = parseTons(quantity);
   const netWeightNum = parseTons(netWeight);
   const newBalance = Math.max(0, roundTons(remainingToWithdraw - qtyNum));
+  const ownBilling = billingTerm !== 'pedido';
+  const unitPriceNum = Math.round((parseFloat(unitPriceStr.replace(/\./g, '').replace(',', '.')) || 0) * 100) / 100;
+  const termDaysNum = Math.max(0, parseInt(termDaysStr, 10) || 0);
+  const billingDueDate = loadingDueDate(billingTerm, localIsoDate(), termDaysNum);
+  const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +78,10 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
     }
     if (qtyNum > remainingToWithdraw + 0.01) {
       setFormError(`Quantidade da nota (${formatTons(qtyNum)} t) passa do saldo do pedido (${formatTons(remainingToWithdraw)} t).`);
+      return;
+    }
+    if (ownBilling && unitPriceNum <= 0) {
+      setFormError('Informe o preço por tonelada negociado nesta carga.');
       return;
     }
     setFormError('');
@@ -89,7 +104,15 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
       totalWithdrawnSoFar: roundTons(alreadyWithdrawn + qtyNum),
       remainingBalanceQuantity: newBalance,
       loadedBy: loadedBy.trim(),
-      notes: notes.trim()
+      notes: notes.trim(),
+      ...(ownBilling
+        ? {
+            billingTerm,
+            unitPrice: unitPriceNum,
+            termDays: billingTerm === 'prazo' ? termDaysNum : undefined,
+            dueDate: billingDueDate
+          }
+        : {})
     };
 
     onSaveWithdrawal(withdrawal);
@@ -134,7 +157,8 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
 
     try {
       const config = fiscalConfig || await fiscalService.getConfig(company.id);
-      const unitPrice = order.items[0]?.unitPrice || 0;
+      // Carga com preço próprio sai na nota com o preço negociado.
+      const unitPrice = savedWithdrawal.unitPrice ?? (order.items[0]?.unitPrice || 0);
       const withdrawalTotal = Number((savedWithdrawal.quantityWithdrawn * unitPrice).toFixed(2));
       const firstItem = order.items[0];
 
@@ -531,6 +555,50 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
                   />
                 </div>
+              </div>
+
+              <div className="p-4 border border-slate-200 rounded-2xl space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Cobrança desta carga</label>
+                    <select
+                      value={billingTerm}
+                      onChange={e => setBillingTerm(e.target.value as LoadingBillingTerm)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
+                    >
+                      {(Object.keys(TERM_LABEL) as LoadingBillingTerm[]).map((t) => <option key={t} value={t}>{TERM_LABEL[t]}</option>)}
+                    </select>
+                  </div>
+                  {ownBilling && (
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Preço por tonelada (R$)</label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={unitPriceStr}
+                        onChange={e => setUnitPriceStr(e.target.value)}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm tabular-nums focus:border-purple-500"
+                      />
+                    </div>
+                  )}
+                  {billingTerm === 'prazo' && (
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Prazo (dias)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={termDaysStr}
+                        onChange={e => setTermDaysStr(e.target.value)}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm tabular-nums focus:border-purple-500"
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 font-bold">
+                  {ownBilling
+                    ? <>Esta carga vira uma conta a receber própria: <strong className="text-slate-700">{brl(qtyNum * unitPriceNum)}</strong>, vence <strong className="text-slate-700">{billingDueDate.split('-').reverse().join('/')}</strong>. Não entra no caixa até ser recebida.</>
+                    : 'Cobrada junto com o pedido, no preço e nas parcelas dele.'}
+                </p>
               </div>
 
               <div className="space-y-1.5">

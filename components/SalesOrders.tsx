@@ -12,7 +12,8 @@ import {
   FiscalConfig,
   PaymentReceipt,
   OrderWithdrawal,
-  Transportador
+  Transportador,
+  Transaction,
 } from '../types';
 import { 
   Plus, Printer, FileCheck, Search, X, 
@@ -56,6 +57,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { useToast } from './ui/Toast';
 import OrderTimeline from './OrderTimeline';
 import { formatTons } from '../services/domain/loadings';
+import { financePaidByOrder } from '../services/domain/receivables';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -75,6 +77,8 @@ interface SalesOrdersProps {
   /** Pedido nasceu sem lançamento financeiro — usuário clicou pra lançar agora. */
   onPostFinance?: (order: SaleOrder) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
+  /** Pra saber o que já foi baixado no Financeiro e não receber a mesma venda duas vezes. */
+  transactions?: Transaction[];
   mode?: 'orders' | 'quotes';
 }
 
@@ -129,6 +133,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onFinalizeOrder,
   onPostFinance,
   onPaymentReceived,
+  transactions = [],
   mode = 'orders'
 }) => {
   const toast = useToast();
@@ -2544,6 +2549,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {orderForPayment && (
         <RegisterPaymentModal
           order={orderForPayment}
+          financePaid={financePaidByOrder(transactions).get(orderForPayment.id) || 0}
           customer={customers.find(c => c.id === orderForPayment.customerId)}
           accounts={accounts}
           company={company}

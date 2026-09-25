@@ -608,7 +608,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                         </p>
                       </td>
                       <td className="px-4 py-4 text-xs font-bold text-slate-600">
-                        {account?.name || 'Caixa'}
+                        {account?.name || (isPendingOrPartial ? 'A receber' : 'Caixa')}
                       </td>
                       <td className={`px-6 py-4 text-right font-black text-sm whitespace-nowrap ${isSale ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {isSale ? '+ ' : '- '} {formatBRL(t.amount)}

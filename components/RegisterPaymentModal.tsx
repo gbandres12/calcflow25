@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company } from '../types';
 import { orderReceiptsPaid } from '../services/saleNfe';
 import { CheckCircle } from 'lucide-react';
+import { newId } from '../services/ids';
 import { FlowSheet } from './ui/FlowSheet';
 
 interface RegisterPaymentModalProps {
   order: SaleOrder;
+  /** Já baixado direto no Financeiro (sem recibo no pedido). */
+  financePaid?: number;
   customer?: Customer;
   accounts: FinancialAccount[];
   company: Company;
@@ -15,13 +18,14 @@ interface RegisterPaymentModalProps {
 
 export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   order,
+  financePaid = 0,
   customer,
   accounts,
   company,
   onSavePayment,
   onClose
 }) => {
-  const totalPaidSoFar = orderReceiptsPaid(order);
+  const totalPaidSoFar = Math.max(orderReceiptsPaid(order), financePaid);
   const currentDebt = Math.max(0, Number(order.total || 0) - totalPaidSoFar);
 
   const [amount, setAmount] = useState(currentDebt > 0 ? (currentDebt > 5000 ? '5000' : currentDebt.toString()) : '0');
@@ -29,7 +33,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
     (order.receipts || []).length === 0 ? 'ENTRADA' : 'ABATIMENTO'
   );
   const [paymentMethod, setPaymentMethod] = useState('PIX');
-  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(accounts.length === 1 ? accounts[0].id : '');
   const [receivedBy, setReceivedBy] = useState('Setor Financeiro / Caixa');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -50,10 +54,16 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       setFormError(`O valor informado é maior que o saldo em aberto de ${formatBRL(currentDebt)}.`);
       return;
     }
+    const selectedAccount = accounts.find(a => a.id === accountId);
+    if (!selectedAccount) {
+      setFormError('Escolha em qual banco/caixa o dinheiro entrou.');
+      return;
+    }
     setFormError('');
 
-    const receiptId = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const selectedAccount = accounts.find(a => a.id === accountId);
+    // Id único de verdade: o antigo (4 dígitos aleatórios) podia repetir e
+    // fazer um recibo novo ser tratado como já lançado.
+    const receiptId = newId(`REC-${new Date().getFullYear()}`);
 
     const newReceipt: PaymentReceipt = {
       id: receiptId,
@@ -66,7 +76,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       date,
       paymentMethod,
       accountId,
-      accountName: selectedAccount?.name || 'Caixa Geral',
+      accountName: selectedAccount.name,
       receivedBy,
       description: paymentType === 'ENTRADA' ? `Entrada Pedido #${order.reference}` : 
                    paymentType === 'ABATIMENTO' ? `Abatimento Pedido #${order.reference}` : `Parcela Pedido #${order.reference}`,
@@ -202,9 +212,11 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
               <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Conta Bancária / Caixa Destino</label>
               <select
                 value={accountId}
+                required
                 onChange={e => setAccountId(e.target.value)}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm focus:border-purple-500"
               >
+                <option value="" disabled>Selecione o banco/caixa…</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
                     {acc.name} ({acc.bankName || 'Caixa'})

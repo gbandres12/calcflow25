@@ -19,6 +19,7 @@ const VIEW_LABELS: Record<string, string> = {
   fleet: 'Frota e Maquinário',
   fuel: 'Combustível',
   daily: 'Movimentação Diária',
+  receivables: 'Contas a Receber',
   transactions: 'Lançamentos / Extrato',
   cashflow: 'Fluxo de Caixa',
   accounts: 'Contas Bancárias',

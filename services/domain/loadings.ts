@@ -1,4 +1,4 @@
-import { Customer, OrderStatus, SaleOrder } from '../../types.js';
+import { Customer, LoadingBillingTerm, OrderStatus, SaleOrder } from '../../types.js';
 
 /** Uma linha da planilha de carregamentos: um caminhão que saiu da balança. */
 export interface LoadingRow {
@@ -16,6 +16,11 @@ export interface LoadingRow {
   weighTicketNumber: string;
   quantity: number;
   netWeight: number | null;
+  /** 'pedido' quando a carga segue o pedido. */
+  billingTerm: LoadingBillingTerm;
+  unitPrice: number;
+  /** Toneladas da nota × preço (o da carga, ou o do pedido). */
+  amount: number;
 }
 
 export interface LoadingFilter {
@@ -53,7 +58,10 @@ export function buildLoadingRows(orders: SaleOrder[], customers: Customer[]): Lo
         nfeNumero: w.nfeNumero || '',
         weighTicketNumber: w.weighTicketNumber || '',
         quantity: roundTons(w.quantityWithdrawn),
-        netWeight: w.netWeight == null || Number.isNaN(Number(w.netWeight)) ? null : roundTons(w.netWeight)
+        netWeight: w.netWeight == null || Number.isNaN(Number(w.netWeight)) ? null : roundTons(w.netWeight),
+        billingTerm: w.billingTerm || 'pedido',
+        unitPrice: w.unitPrice ?? (Number(order.items?.[0]?.unitPrice) || 0),
+        amount: Math.round((Number(w.quantityWithdrawn) || 0) * (w.unitPrice ?? (Number(order.items?.[0]?.unitPrice) || 0)) * 100) / 100
       });
     }
   }
@@ -130,13 +138,21 @@ const brDate = (iso: string) => {
 };
 
 /** CSV no formato que o Excel brasileiro abre direto: ponto e vírgula e vírgula decimal. */
+export const BILLING_LABEL: Record<LoadingBillingTerm, string> = {
+  pedido: 'Conforme pedido',
+  avista: 'À vista',
+  semanal: 'Fechamento semanal',
+  prazo: 'A prazo'
+};
+
 export function loadingsToCsv(rows: LoadingRow[]): string {
-  const header = ['Data', 'Cliente', 'Pedido', 'Transportador', 'Motorista', 'Produto', 'Placa', 'NF', 'Ticket', 'Quant. nota (t)', 'Peso líquido (t)'];
+  const header = ['Data', 'Cliente', 'Pedido', 'Transportador', 'Motorista', 'Produto', 'Placa', 'NF', 'Ticket', 'Quant. nota (t)', 'Peso líquido (t)', 'Cobrança', 'Preço/t (R$)', 'Valor (R$)'];
   const decimal = (value: number | null) => (value == null ? '' : String(value).replace('.', ','));
   const lines = rows.map((row) => [
     brDate(row.date), row.customerName, row.orderReference, row.transporterName, row.driverName,
     row.productName, row.plateNumber, row.nfeNumero, row.weighTicketNumber,
-    decimal(row.quantity), decimal(row.netWeight)
+    decimal(row.quantity), decimal(row.netWeight),
+    BILLING_LABEL[row.billingTerm], row.unitPrice.toFixed(2).replace('.', ','), row.amount.toFixed(2).replace('.', ',')
   ].map(csvCell).join(';'));
   return '﻿' + [header.map(csvCell).join(';'), ...lines].join('\r\n');
 }

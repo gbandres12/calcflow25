@@ -25,7 +25,7 @@ export function isViewAllowed(user: User, viewId: string): boolean {
   if (roles && !roles.includes(user.role)) return false;
   const perms = effectivePermissions(user);
   if (viewId === 'fiscal') return Boolean(perms.fiscal || perms.financial);
-  if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(viewId)) return perms.financial;
+  if (['daily', 'receivables', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(viewId)) return perms.financial;
   if (viewId === 'users') return perms.users;
   if (['inventory', 'milling'].includes(viewId)) return perms.inventory;
   if (['orders', 'quotes', 'customers', 'transportadores', 'transfers'].includes(viewId)) return perms.orders;
