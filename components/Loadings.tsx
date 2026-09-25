@@ -8,6 +8,7 @@ import {
   buildLoadingRows,
   filterLoadingRows,
   formatTons,
+  BILLING_LABEL,
   loadingsToCsv,
   orderLoadingProgress,
   roundTons,
@@ -124,7 +125,15 @@ export const Loadings: React.FC<Props> = ({ orders, customers }) => {
       sortValue: (r) => Number(r.nfeNumero) || 0
     },
     { key: 'qty', header: 'Quant. nota', align: 'right', render: (r) => <b className="whitespace-nowrap">{formatTons(r.quantity)}</b>, sortValue: (r) => r.quantity },
-    { key: 'net', header: 'P. líquido', align: 'right', render: (r) => <b className="whitespace-nowrap">{formatTons(r.netWeight)}</b>, sortValue: (r) => r.netWeight ?? -1 }
+    { key: 'net', header: 'P. líquido', align: 'right', render: (r) => <b className="whitespace-nowrap">{formatTons(r.netWeight)}</b>, sortValue: (r) => r.netWeight ?? -1 },
+    { key: 'billing', header: 'Cobrança', render: (r) => <span className="whitespace-nowrap">{BILLING_LABEL[r.billingTerm]}</span>, sortValue: (r) => r.billingTerm },
+    {
+      key: 'amount',
+      header: 'Valor',
+      align: 'right',
+      render: (r) => <span className="tabular-nums whitespace-nowrap">{r.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>,
+      sortValue: (r) => r.amount
+    }
   ];
 
   return (

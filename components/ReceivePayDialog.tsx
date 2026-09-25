@@ -45,7 +45,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
   // States do formulário
   const [payAmountStr, setPayAmountStr] = useState(remainingBalance.toString());
   const [paymentDate, setPaymentDate] = useState(getLocalDateStr());
-  const [accountId, setAccountId] = useState(transaction.accountId || accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(transaction.accountId || (accounts.length === 1 ? accounts[0].id : ''));
   const [paymentMethod, setPaymentMethod] = useState(transaction.paymentMethod || 'PIX');
   const [isDeduction, setIsDeduction] = useState(false); // Flag se é Abatimento ou Pagamento Normal
   const [notes, setNotes] = useState('');
@@ -60,6 +60,8 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (numPayAmount <= 0 || numPayAmount > remainingBalance + 0.01) return;
+    // Sem banco escolhido o dinheiro cairia em lugar nenhum (ou no caixa errado).
+    if (!isDeduction && !accounts.some(a => a.id === accountId)) return;
 
     setSaving(true);
     try {
@@ -113,7 +115,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
         <button
           type="submit"
           form="receive-pay-form"
-          disabled={saving || numPayAmount <= 0}
+          disabled={saving || numPayAmount <= 0 || (!isDeduction && !accountId)}
           className={`w-full min-h-11 text-white font-bold text-sm rounded-xl inline-flex items-center justify-center gap-2 disabled:opacity-50 ${
             isIncome ? 'bg-emerald-600' : 'bg-rose-600'
           }`}
@@ -217,8 +219,10 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
+                required={!isDeduction}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-amber-500"
               >
+                <option value="" disabled>Selecione o banco/caixa…</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>{acc.name}</option>
                 ))}

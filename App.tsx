@@ -64,6 +64,7 @@ import { applyStoreIntegration, StoreIntegrationIncoming } from './services/stor
 import CompanyBranches from './components/CompanyBranches';
 import SetNewPassword from './components/SetNewPassword';
 import Loadings from './components/Loadings';
+import Receivables, { ReceivedPayment } from './components/Receivables';
 import CommandPalette from './components/CommandPalette';
 import { isViewAllowed } from './services/viewAccess';
 import { useToast } from './components/ui/Toast';
@@ -998,6 +999,17 @@ const App: React.FC = () => {
     applyReceiptToFinance(receipt, updatedOrder);
   };
 
+  // Um pagamento do cliente quitando várias vendas: um recibo por venda,
+  // cada um grava no pedido e entra uma vez só no banco escolhido.
+  const handleBatchReceived = (payments: ReceivedPayment[]) => {
+    payments.forEach(({ receipt, updatedOrder }) => {
+      handleUpdateOrder(updatedOrder);
+      applyReceiptToFinance(receipt, updatedOrder);
+    });
+    const total = payments.reduce((s, p) => s + p.receipt.amount, 0);
+    toast.push(`Recebimento de ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} lançado em ${payments.length} venda(s).`, 'success');
+  };
+
   const handleDeleteOrder = (orderId: string) => {
     const order = orders.find(item => item.id === orderId);
     if (!order) return;
@@ -1348,6 +1360,7 @@ const App: React.FC = () => {
             <ErrorBoundary label="vendas">
               <SalesOrders 
                 orders={orders} 
+                transactions={transactions}
                 customers={customers} 
                 inventory={inventory} 
                 accounts={accounts} 
@@ -1529,6 +1542,15 @@ const App: React.FC = () => {
               onDeleteUser={handleDeleteUser}
               onOpenOnboarding={() => setShowOnboardingModal(true)}
               onVerifyDeletionPassword={verifyCurrentUserPassword}
+            />
+          )}
+          {currentView === 'receivables' && isViewAllowed(currentUser, 'receivables') && (
+            <Receivables
+              orders={orders}
+              transactions={transactions}
+              customers={customers}
+              accounts={accounts}
+              onReceive={handleBatchReceived}
             />
           )}
           {currentView === 'loadings' && isViewAllowed(currentUser, 'loadings') && (

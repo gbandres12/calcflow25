@@ -279,7 +279,15 @@ export interface PaymentReceipt {
   totalPaidSoFar?: number;
   remainingDebt?: number;
   notes?: string;
+  /** Um pagamento dividido entre várias vendas gera um recibo por venda, todos com o mesmo batchId. */
+  batchId?: string;
 }
+
+/**
+ * Como esta carga é cobrada. 'pedido' (ou ausente) = segue o pedido;
+ * as demais fazem a carga virar uma conta a receber própria.
+ */
+export type LoadingBillingTerm = 'pedido' | 'avista' | 'semanal' | 'prazo';
 
 export interface OrderWithdrawal {
   id: string;
@@ -305,6 +313,13 @@ export interface OrderWithdrawal {
   remainingBalanceQuantity?: number;
   loadedBy?: string;
   operatorName?: string;
+  billingTerm?: LoadingBillingTerm;
+  /** Preço por tonelada negociado nesta carga; ausente = preço do pedido. */
+  unitPrice?: number;
+  /** Só pra 'prazo'. */
+  termDays?: number;
+  /** Vencimento desta carga (calculado ao registrar). */
+  dueDate?: string;
   notes?: string;
   nfeStatus?: NfeStatus;
   nfeId?: string;
@@ -669,4 +684,4 @@ export interface TransferShipment {
   supplierName?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings' | 'receivables';

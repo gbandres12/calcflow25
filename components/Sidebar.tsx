@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Package, FileText, Users, Wallet, TrendingUp, CreditCard,
   Truck, Fuel, Boxes, UserCog, Settings, LogOut, ShieldCheck, Briefcase, Wrench,
-  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound
+  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound, HandCoins
 } from 'lucide-react';
 import { View, User } from '../types';
 import { isViewAllowed } from '../services/viewAccess';
@@ -41,6 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
     ]},
     { title: 'Financeiro & Caixa', items: [
       { id: 'daily', label: 'Movimentação Diária', icon: Calendar },
+      { id: 'receivables', label: 'Contas a Receber', icon: HandCoins },
       { id: 'transactions', label: 'Lançamentos / Extrato', icon: CreditCard },
       { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
       { id: 'accounts', label: 'Contas Bancárias', icon: Wallet },
