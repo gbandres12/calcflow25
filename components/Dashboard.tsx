@@ -5,7 +5,6 @@ import {
 } from '../types';
 import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { OnboardingChecklist } from './OnboardingChecklist';
 import { isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
 
 interface DashboardProps {
@@ -17,7 +16,6 @@ interface DashboardProps {
   transfers?: TransferShipment[];
   user?: User | null;
   onNavigate?: (view: View) => void;
-  onOpenOnboardingModal?: () => void;
 }
 
 const brl = (n: number) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -34,7 +32,7 @@ const stockOf = (inventory: InventoryItem[], keys: string[]) =>
 
 const Dashboard: React.FC<DashboardProps> = ({
   transactions, inventory, customers, orders = [], accounts = [], transfers = [],
-  user, onNavigate, onOpenOnboardingModal
+  user, onNavigate
 }) => {
   const today = todayISO();
   const commercialOrders = useMemo(
@@ -91,9 +89,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-4">
-      {user && (
-        <OnboardingChecklist user={user} customers={customers} orders={commercialOrders} transactions={transactions} accounts={accounts} onNavigate={onNavigate} onOpenOnboardingModal={onOpenOnboardingModal} />
-      )}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Escritório operacional</h2>

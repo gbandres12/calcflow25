@@ -1288,7 +1288,6 @@ const App: React.FC = () => {
               transfers={transfers}
               user={currentUser}
               onNavigate={setCurrentView} 
-              onOpenOnboardingModal={() => setShowOnboardingModal(true)}
             />
           )}
           {(currentView === 'orders' || currentView === 'quotes') && (
