@@ -421,7 +421,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     inputMode="decimal"
                     value={quantity}
                     onChange={e => setQuantity(e.target.value)}
-                    className="w-full p-3.5 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-lg focus:border-emerald-500"
+                    className="w-full min-h-16 px-4 bg-emerald-50/50 border-2 border-emerald-300 text-emerald-900 rounded-xl outline-none font-black text-3xl tabular-nums focus:border-emerald-600"
                     placeholder="Ex: 46,23"
                   />
                   <span className="text-xs text-slate-500 font-bold">
@@ -437,7 +437,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     inputMode="decimal"
                     value={netWeight}
                     onChange={e => setNetWeight(e.target.value)}
-                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-lg focus:border-emerald-500"
+                    className="w-full min-h-16 px-4 bg-slate-50 border-2 border-slate-300 text-slate-900 rounded-xl outline-none font-black text-3xl tabular-nums focus:border-emerald-600"
                     placeholder="Ex: 50,98"
                   />
                 </div>

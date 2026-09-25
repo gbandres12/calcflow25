@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
+import { printThermalTicket } from '../services/domain/thermalTicket';
 
 interface YardManagementProps {
   machines: Machine[];
@@ -160,6 +161,31 @@ const YardManagement: React.FC<YardManagementProps> = ({
     window.open(url, '_blank');
   };
 
+  // Reimpressão sai no mesmo ticket térmico de 80 mm do lançamento.
+  const reprintTicket = (w: OrderWithdrawal, order: SaleOrder) => {
+    const customer = customers.find((c) => c.id === order.customerId);
+    printThermalTicket({
+      companyName: defaultCompany.name,
+      companyCity: [defaultCompany.city, defaultCompany.state].filter(Boolean).join('-'),
+      ticketNumber: w.weighTicketNumber || w.id,
+      date: w.date,
+      customerName: customer?.name || 'Cliente',
+      customerDocument: customer?.document,
+      orderReference: order.reference,
+      productName: w.productName || order.items?.[0]?.productName || '',
+      transporterName: w.transporterName,
+      driverName: w.driverName,
+      driverCpf: w.driverCpf,
+      plateNumber: w.plateNumber,
+      quantity: w.quantityWithdrawn,
+      netWeight: w.netWeight,
+      nfeNumero: w.nfeNumero,
+      totalOrder: w.totalOrderQuantity,
+      remaining: w.remainingBalanceQuantity,
+      operatorName: w.loadedBy
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header com Abas */}
@@ -283,9 +309,9 @@ const YardManagement: React.FC<YardManagementProps> = ({
                         <span className="text-slate-500 text-xs">Total: {totalQty} Ton</span>
                         <button
                           onClick={() => setSelectedOrderForWeigh(order)}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-1 text-xs active:scale-95"
+                          className="min-h-12 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm active:scale-95"
                         >
-                          <Scale size={13} /> Pesar Carga
+                          <Scale size={16} /> Pesar carga
                         </button>
                       </div>
                     </div>
@@ -315,7 +341,50 @@ const YardManagement: React.FC<YardManagementProps> = ({
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Celular: um card por caminhão, com os botões grandes */}
+            <div className="md:hidden divide-y divide-slate-100 px-4">
+              {filteredWithdrawals.length === 0 ? (
+                <p className="py-10 text-center text-slate-500 text-sm">Nenhum registro de pesagem encontrado.</p>
+              ) : (
+                filteredWithdrawals.map((item) => (
+                  <div key={item.withdrawal.id} className="py-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{item.customer?.name || 'Cliente'}</p>
+                        <p className="text-sm text-slate-500">
+                          {item.withdrawal.date.split('-').reverse().join('/')} · <span className="font-mono font-bold text-slate-700">{item.withdrawal.plateNumber}</span>
+                        </p>
+                        <p className="text-sm text-slate-500 truncate">{item.withdrawal.driverName || 'Motorista não informado'}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-2xl font-black text-emerald-700 tabular-nums">{formatTons(item.withdrawal.quantityWithdrawn)} t</p>
+                        {item.withdrawal.netWeight != null && (
+                          <p className="text-sm text-slate-500 tabular-nums">{formatTons(item.withdrawal.netWeight)} t líq.</p>
+                        )}
+                        <p className="text-xs font-bold text-purple-700">{item.withdrawal.nfeNumero ? `NF-e ${item.withdrawal.nfeNumero}` : 'Sem NF-e'}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => reprintTicket(item.withdrawal, item.order)}
+                        className="flex-1 min-h-12 inline-flex items-center justify-center gap-2 text-sm font-bold text-white bg-slate-900 rounded-lg"
+                      >
+                        <Printer size={16} /> Reimprimir ticket
+                      </button>
+                      <button
+                        onClick={() => handleSendWhatsAppTicket(item.withdrawal, item.customer?.name)}
+                        aria-label="Enviar no WhatsApp"
+                        className="min-h-12 min-w-12 inline-flex items-center justify-center text-emerald-700 border border-emerald-200 rounded-lg"
+                      >
+                        <Send size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
@@ -342,7 +411,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             {item.withdrawal.weighTicketNumber || item.withdrawal.id}
                           </span>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-xs text-slate-500">{item.withdrawal.date}</span>
+                            <span className="text-xs text-slate-500">{item.withdrawal.date.split('-').reverse().join('/')}</span>
                             {item.withdrawal.nfeNumero ? (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
                                 NF-e {item.withdrawal.nfeNumero}
@@ -381,24 +450,33 @@ const YardManagement: React.FC<YardManagementProps> = ({
                                 target="_blank"
                                 rel="noreferrer"
                                 title={`Abrir DANFE (NF-e ${item.withdrawal.nfeNumero})`}
-                                className="p-1.5 text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg transition-all"
+                                className="min-h-11 min-w-11 inline-flex items-center justify-center text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg transition-all"
                               >
-                                <FileText size={13} />
+                                <FileText size={16} />
                               </a>
                             )}
                             <button
                               onClick={() => handleSendWhatsAppTicket(item.withdrawal, item.customer?.name)}
                               title="Enviar Romaneio no WhatsApp"
-                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-all"
+                              aria-label="Enviar no WhatsApp"
+                              className="min-h-11 min-w-11 inline-flex items-center justify-center text-emerald-600 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-all"
                             >
-                              <Send size={13} />
+                              <Send size={16} />
                             </button>
                             <button
                               onClick={() => setViewingWithdrawal({ withdrawal: item.withdrawal, order: item.order })}
-                              title="Visualizar Ticket / Detalhes"
-                              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all"
+                              title="Ver detalhes do ticket"
+                              aria-label="Ver detalhes"
+                              className="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all"
                             >
-                              <Printer size={13} />
+                              <FileText size={16} />
+                            </button>
+                            <button
+                              onClick={() => reprintTicket(item.withdrawal, item.order)}
+                              title="Reimprimir ticket térmico"
+                              className="min-h-11 px-3 inline-flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-all"
+                            >
+                              <Printer size={16} /> Reimprimir
                             </button>
                           </div>
                         </td>
@@ -841,10 +919,10 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <Send size={14} /> Compartilhar no WhatsApp
               </button>
               <button
-                onClick={() => window.print()}
-                className="px-4 py-2.5 border border-slate-300 rounded-xl font-bold text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+                onClick={() => reprintTicket(viewingWithdrawal.withdrawal, viewingWithdrawal.order)}
+                className="min-h-11 px-4 border border-slate-300 rounded-xl font-bold text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
               >
-                <Printer size={14} /> Imprimir
+                <Printer size={16} /> Imprimir ticket
               </button>
             </div>
           </div>

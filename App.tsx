@@ -1622,7 +1622,7 @@ const App: React.FC = () => {
             }`}
           >
             <FileCheck size={18} />
-            <span className="text-xs tracking-tight">Emitir NF-e</span>
+            <span className="text-xs tracking-tight">NF-e</span>
           </button>
         )}
 
