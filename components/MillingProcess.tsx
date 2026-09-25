@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Factory, ArrowRight, Save, History, Info } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 interface MillingProcessProps {
   onMilling: (input: number, output: number) => void;
@@ -8,6 +9,7 @@ interface MillingProcessProps {
 }
 
 const MillingProcess: React.FC<MillingProcessProps> = ({ onMilling, availableBritado }) => {
+  const toast = useToast();
   const [input, setInput] = useState<number>(0);
   const [output, setOutput] = useState<number>(0);
 
@@ -24,9 +26,9 @@ const MillingProcess: React.FC<MillingProcessProps> = ({ onMilling, availableBri
       onMilling(input, output);
       setInput(0);
       setOutput(0);
-      alert('Produção registrada com sucesso!');
+      toast.push('Produção registrada com sucesso!', 'success');
     } else {
-      alert('Valores inválidos ou estoque insuficiente.');
+      toast.push('Valores inválidos ou estoque insuficiente.', 'danger');
     }
   };
 

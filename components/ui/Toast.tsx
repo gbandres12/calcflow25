@@ -26,9 +26,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const push = useCallback((message: string, tone: ToastTone = 'info') => {
     const id = Date.now() + Math.random();
     setItems((current) => [...current, { id, message, tone }]);
+    // Erro fica mais tempo na tela: normalmente tem algo pra ler e corrigir.
     window.setTimeout(() => {
       setItems((current) => current.filter((item) => item.id !== id));
-    }, 4000);
+    }, tone === 'danger' ? 7000 : 4000);
   }, []);
 
   const value = useMemo(() => ({ push }), [push]);
@@ -36,9 +37,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[300] flex flex-col gap-2 max-w-sm" aria-live="polite">
+      <div className="fixed top-4 left-4 right-4 sm:left-auto z-[300] flex flex-col gap-2 sm:max-w-sm" aria-live="polite">
         {items.map((item) => (
-          <div key={item.id} className={`rounded-lg px-4 py-3 text-sm font-medium ${toneClass[item.tone]}`}>
+          <div key={item.id} role={item.tone === 'danger' ? 'alert' : 'status'} className={`rounded-lg px-4 py-3 text-sm font-medium whitespace-pre-line shadow-lg ${toneClass[item.tone]}`}>
             {item.message}
           </div>
         ))}

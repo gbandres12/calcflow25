@@ -5,6 +5,7 @@ import {
   CreditCard, Settings, Wallet, TrendingUp, TrendingDown, 
   Info, X, Lock, ShieldAlert, CheckCircle2, Building, Scale, AlertTriangle 
 } from 'lucide-react';
+import { useToast } from './ui/Toast';
 
 interface AccountsProps {
   accounts: FinancialAccount[];
@@ -15,6 +16,7 @@ interface AccountsProps {
 }
 
 const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, onUpdateAccount, onAddTransaction, onVerifyPassword }) => {
+  const toast = useToast();
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   const [reconcilingAccount, setReconcilingAccount] = useState<FinancialAccount | null>(null);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -127,9 +129,9 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
         amount: Math.abs(diff),
         paidAmount: Math.abs(diff)
       });
-      alert(`Ajuste de R$ ${Math.abs(diff).toFixed(2)} lançado com sucesso!`);
+      toast.push(`Ajuste de R$ ${Math.abs(diff).toFixed(2)} lançado com sucesso!`, 'success');
     } else {
-      alert('Saldos já estão reconciliados!');
+      toast.push('Saldos já estão reconciliados!', 'success');
     }
     
     setReconcilingAccount(null);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Link2, Loader2, MessageCircle, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { getSupabase } from '../services/supabaseClient';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface TelegramLinkView {
   chatId: string;
@@ -56,6 +57,7 @@ async function authorizedFetch(input: string, init: RequestInit = {}) {
 }
 
 export const TelegramAccessCard: React.FC = () => {
+  const confirmDialog = useConfirm();
   const [links, setLinks] = useState<TelegramLinkView[]>([]);
   const [pairing, setPairing] = useState<PairingCode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export const TelegramAccessCard: React.FC = () => {
   };
 
   const revoke = async (chatId: string) => {
-    if (!window.confirm('Desconectar este Telegram do ERP?')) return;
+    if (!(await confirmDialog({ title: 'Desconectar este Telegram?', description: 'O chat perde o acesso ao ERP até ser pareado de novo.', confirmLabel: 'Desconectar', danger: true }))) return;
     try {
       await authorizedFetch('/api/telegram/pair', {
         method: 'DELETE',

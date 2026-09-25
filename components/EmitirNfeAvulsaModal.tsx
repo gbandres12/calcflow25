@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
+import { useToast } from './ui/Toast';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -67,6 +68,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   onAddTransportador,
   duplicateFrom
 }) => {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -279,7 +281,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
   const handleRemoveItem = (idx: number) => {
     if (items.length <= 1) {
-      alert("A nota fiscal deve conter pelo menos 1 item.");
+      toast.push("A nota fiscal deve conter pelo menos 1 item.", 'danger');
       return;
     }
     setItems(items.filter((_, i) => i !== idx));
@@ -472,7 +474,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const handleEmitirAvulsa = async () => {
     if (isSubmittingRef.current || loading) return;
     if (!validation.valid) {
-      alert(`Corrija as pendências antes de emitir: \n- ${validation.errors.join('\n- ')}`);
+      toast.push(`Corrija as pendências antes de emitir: \n- ${validation.errors.join('\n- ')}`, 'danger');
       return;
     }
 

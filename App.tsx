@@ -65,6 +65,8 @@ import CompanyBranches from './components/CompanyBranches';
 import SetNewPassword from './components/SetNewPassword';
 import Loadings from './components/Loadings';
 import { isViewAllowed } from './services/viewAccess';
+import { useToast } from './components/ui/Toast';
+import { useConfirm } from './components/ui/ConfirmDialog';
 import { getSupabase, initialAuthRedirect } from './services/supabaseClient';
 
 const App: React.FC = () => {
@@ -90,6 +92,8 @@ const App: React.FC = () => {
       } catch {}
     }
   };
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
@@ -972,7 +976,7 @@ const App: React.FC = () => {
     if (!order) return;
 
     if (hasAuthorizedFiscalDocument(order)) {
-      window.alert('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.');
+      toast.push('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.', 'danger');
       return;
     }
 
@@ -1047,10 +1051,15 @@ const App: React.FC = () => {
   // Resetar empresa para banco 100% limpo
   const handleResetCompanyDatabase = async () => {
     if (activeCompanyId !== 'matriz-demo' && activeCompanyId !== 'demo') {
-      window.alert('Reset de base está bloqueado em produção para não perder pedidos reais.');
+      toast.push('Reset de base está bloqueado em produção para não perder pedidos reais.', 'danger');
       return;
     }
-    if (!window.confirm(`Tem certeza que deseja zerar todos os registros de "${currentUser.companyName || 'sua empresa'}" e deixar a base 100% limpa?`)) {
+    if (!(await confirmDialog({
+      title: 'Zerar a base?',
+      description: `Todos os registros de "${currentUser.companyName || 'sua empresa'}" serão apagados e a base volta limpa.`,
+      confirmLabel: 'Zerar base',
+      danger: true
+    }))) {
       return;
     }
     setSyncing(true);
@@ -1074,7 +1083,11 @@ const App: React.FC = () => {
 
   // Carregar dados de demonstração para testes
   const handleLoadDemoData = async () => {
-    if (!window.confirm("Deseja carregar dados de demonstração para teste nesta empresa?")) return;
+    if (!(await confirmDialog({
+      title: 'Carregar dados de demonstração?',
+      description: 'Pedidos, clientes e estoque de exemplo serão adicionados nesta empresa.',
+      confirmLabel: 'Carregar'
+    }))) return;
     setSyncing(true);
     await db.loadDemoDataForCompany(activeCompanyId);
     const [

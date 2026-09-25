@@ -10,6 +10,8 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   wide?: boolean;
+  /** Diálogo curto (confirmação). */
+  narrow?: boolean;
   /** Overlay some na impressão; o conteúdo permanece. */
   printSafe?: boolean;
 }
@@ -21,6 +23,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   footer,
   wide,
+  narrow,
   printSafe,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -70,7 +73,7 @@ export const Modal: React.FC<ModalProps> = ({
     <div className={`fixed inset-0 z-[200] flex items-end sm:items-center justify-center ${printSafe ? 'print:static print:block' : 'print:hidden'}`}>
       <button
         type="button"
-        className="absolute inset-0 bg-[var(--cf-ink)]/55 print:hidden"
+        className="absolute inset-0 bg-ink/55 print:hidden"
         aria-label="Fechar"
         onClick={onClose}
       />
@@ -79,8 +82,8 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`relative flex w-full flex-col bg-[var(--cf-paper)] max-h-[92dvh] sm:max-h-[90vh] rounded-t-xl sm:rounded-xl sm:mx-4 ${
-          wide ? 'sm:max-w-5xl' : 'sm:max-w-3xl'
+        className={`relative flex w-full flex-col bg-[var(--cf-paper)] max-h-[92dvh] sm:max-h-[90vh] rounded-t-xl sm:rounded-xl sm:mx-4 shadow-2xl ${
+          wide ? 'sm:max-w-5xl' : narrow ? 'sm:max-w-md' : 'sm:max-w-3xl'
         } ${printSafe ? 'print:max-h-none print:max-w-none print:mx-0 print:rounded-none print:shadow-none' : ''}`}
       >
         <header className="flex items-start justify-between gap-3 px-4 pt-4 pb-3 border-b border-[var(--cf-line)] shrink-0 print:hidden">

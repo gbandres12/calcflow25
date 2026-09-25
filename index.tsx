@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ui/Toast';
+import { ConfirmProvider } from './components/ui/ConfirmDialog';
 import './styles.css';
 
 const rootElement = document.getElementById('root');
@@ -16,7 +17,9 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary label="aplicação">
       <ToastProvider>
-        <App />
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
       </ToastProvider>
     </ErrorBoundary>
   </React.StrictMode>

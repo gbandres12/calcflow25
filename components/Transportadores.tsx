@@ -4,6 +4,7 @@ import {
   Search, Truck, Trash2, UserRound, X
 } from 'lucide-react';
 import { Transportador, TransportadorContratacao, TransportadorTipoServico } from '../types';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface TransportadoresProps {
   transportadores: Transportador[];
@@ -54,6 +55,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
   onUpdate,
   onDelete
 }) => {
+  const confirmDialog = useConfirm();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'TODOS' | TransportadorTipoServico>('TODOS');
   const [showForm, setShowForm] = useState(false);
@@ -137,8 +139,8 @@ const Transportadores: React.FC<TransportadoresProps> = ({
     setShowForm(false);
   };
 
-  const requestDelete = (item: Transportador) => {
-    if (window.confirm(`Excluir o cadastro de ${item.nome}? As notas já emitidas não serão alteradas.`)) {
+  const requestDelete = async (item: Transportador) => {
+    if (await confirmDialog({ title: `Excluir ${item.nome}?`, description: 'O cadastro sai da lista. As notas já emitidas não serão alteradas.', confirmLabel: 'Excluir', danger: true })) {
       onDelete(item.id);
     }
   };

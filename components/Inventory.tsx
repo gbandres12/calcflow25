@@ -25,6 +25,8 @@ import {
   FileText,
   Boxes
 } from 'lucide-react';
+import { useToast } from './ui/Toast';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface InventoryProps {
   inventory: InventoryItem[];
@@ -114,6 +116,8 @@ export const Inventory: React.FC<InventoryProps> = ({
   onUpdateProduct,
   onDeleteProduct
 }) => {
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'catalog' | 'overview'>('catalog');
   const [activeModal, setActiveModal] = useState<'purchase' | 'sale' | 'productForm' | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -320,11 +324,11 @@ export const Inventory: React.FC<InventoryProps> = ({
     const total = quantity * unitCost;
     const initialPayment = parseFloat(purchaseInitialPayment || '0');
     if (!quantity || !unitCost || quantity <= 0 || unitCost <= 0) {
-      alert('Informe uma quantidade e um custo unitário válidos.');
+      toast.push('Informe uma quantidade e um custo unitário válidos.', 'danger');
       return;
     }
     if (initialPayment < 0 || initialPayment > total + 0.01) {
-      alert('A entrada não pode ser maior que o valor total da compra.');
+      toast.push('A entrada não pode ser maior que o valor total da compra.', 'danger');
       return;
     }
     onPurchase(quantity, unitCost, {
@@ -340,12 +344,12 @@ export const Inventory: React.FC<InventoryProps> = ({
   const submitSale = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId) {
-      alert("Selecione um cliente da lista de sugestões.");
+      toast.push("Selecione um cliente da lista de sugestões.", 'danger');
       return;
     }
     const currentMoidoQty = moido?.quantity || 0;
     if (parseFloat(qty) > currentMoidoQty) {
-      alert('Estoque insuficiente de calcário moído!');
+      toast.push('Estoque insuficiente de calcário moído!', 'danger');
       return;
     }
     onSale(parseFloat(qty), parseFloat(val), customerId);
@@ -356,7 +360,7 @@ export const Inventory: React.FC<InventoryProps> = ({
     e.preventDefault();
 
     if (!formData.name) {
-      alert("Informe o nome do produto.");
+      toast.push("Informe o nome do produto.", 'danger');
       return;
     }
 
@@ -402,8 +406,8 @@ export const Inventory: React.FC<InventoryProps> = ({
     handleClose();
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Tem certeza que deseja remover o produto "${name}"?`)) {
+  const handleDelete = async (id: string, name: string) => {
+    if (await confirmDialog({ title: `Remover "${name}"?`, description: 'O produto sai do cadastro. Pedidos e notas já emitidos não mudam.', confirmLabel: 'Remover', danger: true })) {
       if (onDeleteProduct) {
         onDeleteProduct(id);
       }

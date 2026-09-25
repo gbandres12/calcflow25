@@ -12,6 +12,7 @@ import { CustomerDetailsModal } from './CustomerDetailsModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
 import { calculateOrderPayment } from './SalesOrders';
 import { isFiscalOnlyOrder } from '../services/saleNfe';
+import { useToast } from './ui/Toast';
 
 interface CustomersProps {
   customers: Customer[];
@@ -32,6 +33,7 @@ const Customers: React.FC<CustomersProps> = ({
   onUpdateCustomer,
   onDeleteCustomer
 }) => {
+  const toast = useToast();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
@@ -270,7 +272,7 @@ const Customers: React.FC<CustomersProps> = ({
 
         onImportCustomers(newCustomers);
         setIsImportModalOpen(false);
-        alert(`${newCustomers.length} clientes importados com sucesso!`);
+        toast.push(`${newCustomers.length} clientes importados com sucesso!`, 'success');
       } catch (err: any) {
         setImportError(err.message || "Erro ao processar arquivo.");
       } finally {

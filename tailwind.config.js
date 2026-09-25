@@ -12,16 +12,21 @@ export default {
   ],
   theme: {
     extend: {
-      // Cores da marca: as mesmas variáveis --cf-* de styles.css.
+      // Cores da marca — mesmos valores de --cf-* em styles.css, em rgb pra
+      // aceitar transparência (bg-ink/55). var() não aceita o "/55".
       colors: {
-        ink: { DEFAULT: 'var(--cf-ink)', soft: 'var(--cf-ink-soft)' },
-        forest: { DEFAULT: 'var(--cf-forest)', deep: 'var(--cf-forest-deep)', soft: 'var(--cf-forest-soft)' },
-        olive: 'var(--cf-olive)',
-        sand: { DEFAULT: 'var(--cf-sand)', soft: 'var(--cf-sand-soft)' },
-        cream: 'var(--cf-cream)',
-        paper: 'var(--cf-paper)',
-        line: 'var(--cf-line)',
-        muted: 'var(--cf-muted)'
+        ink: { DEFAULT: 'rgb(22 60 53 / <alpha-value>)', soft: 'rgb(54 87 78 / <alpha-value>)' },
+        forest: {
+          DEFAULT: 'rgb(15 89 72 / <alpha-value>)',
+          deep: 'rgb(12 70 57 / <alpha-value>)',
+          soft: 'rgb(227 238 231 / <alpha-value>)'
+        },
+        olive: 'rgb(141 152 81 / <alpha-value>)',
+        sand: { DEFAULT: 'rgb(201 162 76 / <alpha-value>)', soft: 'rgb(246 239 220 / <alpha-value>)' },
+        cream: 'rgb(245 247 241 / <alpha-value>)',
+        paper: 'rgb(255 255 255 / <alpha-value>)',
+        line: 'rgb(223 231 223 / <alpha-value>)',
+        muted: 'rgb(114 128 120 / <alpha-value>)'
       },
       fontFamily: {
         sans: ['Manrope', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif']

@@ -8,6 +8,7 @@ import {
   groupHasAccess,
   setGroupAccess
 } from '../services/companyPermissions';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface Props {
   activeCompanyId: string;
@@ -119,6 +120,7 @@ const DelegateForm: React.FC<{
 };
 
 export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser, matrizUsers }) => {
+  const confirmDialog = useConfirm();
   const [branches, setBranches] = useState<CompanyBranch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,7 +155,7 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
   };
 
   const handleRevoke = async (companyId: string, userId: string) => {
-    if (!window.confirm('Remover o acesso desse colaborador a esta empresa?')) return;
+    if (!(await confirmDialog({ title: 'Remover acesso?', description: 'Esse colaborador deixa de ver e editar os dados desta empresa.', confirmLabel: 'Remover', danger: true }))) return;
     try {
       const result = await revokeBranchAccess(activeCompanyId, { companyId, userId });
       setBranches(result.branches);

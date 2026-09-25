@@ -53,6 +53,7 @@ import {
   sumLineDrafts
 } from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
+import { useToast } from './ui/Toast';
 
 interface SalesOrdersProps {
   orders: SaleOrder[];
@@ -128,6 +129,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onPaymentReceived,
   mode = 'orders'
 }) => {
+  const toast = useToast();
   // Dados legados podem conter registros parciais ou nulos. Normalizar aqui evita
   // que um único cadastro inválido derrube toda a tela de vendas.
   const customers = useMemo<Customer[]>(() => {
@@ -502,19 +504,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const handleCreateOrUpdateOrder = (e?: React.FormEvent | React.MouseEvent) => {
     e?.preventDefault?.();
     if (!selectedCustomerId) {
-      alert("Por favor, selecione um cliente da lista.");
+      toast.push("Por favor, selecione um cliente da lista.", 'danger');
       return;
     }
 
     if (!isBudget && Math.abs(remainingToProgram) > 0.01 && payments.length > 0) {
-      alert(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`);
+      toast.push(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`, 'danger');
       return;
     }
 
     const isInter = Boolean(selectedCustomer?.state && selectedCustomer.state !== 'PA');
     const builtItems = buildItemsFromDrafts(lineItems, sellableProducts, inventory, isInter);
     if (!builtItems.length) {
-      alert('Informe ao menos um item com quantidade e preço unitário válidos.');
+      toast.push('Informe ao menos um item com quantidade e preço unitário válidos.', 'danger');
       return;
     }
     const itemsSubtotal = builtItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
@@ -631,17 +633,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!selectedCustomerId) {
-        alert("Por favor, selecione um cliente da lista antes de avançar.");
+        toast.push("Por favor, selecione um cliente da lista antes de avançar.", 'danger');
         return;
       }
       if (!hasValidLineItems) {
-        alert('Adicione ao menos um item com quantidade e preço unitário válidos.');
+        toast.push('Adicione ao menos um item com quantidade e preço unitário válidos.', 'danger');
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (!isBudget && payments.length > 0 && Math.abs(remainingToProgram) > 0.05) {
-        alert(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`);
+        toast.push(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`, 'danger');
         return;
       }
       setCurrentStep(3);
@@ -2600,7 +2602,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 setOrderToViewDanfe(updatedOrder);
               }
             } catch (err) {
-              window.alert('A NF-e foi transmitida, mas o banco ainda não confirmou. Não limpe o navegador e toque em Reenviar agora.');
+              toast.push('A NF-e foi transmitida, mas o banco ainda não confirmou. Não limpe o navegador e toque em Reenviar agora.', 'danger');
             }
           }}
         />

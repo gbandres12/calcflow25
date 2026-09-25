@@ -13,6 +13,7 @@ import {
   isSupabaseConfigured 
 } from '../services/supabaseClient';
 import { dedupeTenantUsers, fetchTenants, mergeTenants } from '../services/adminApi';
+import { useConfirm } from './ui/ConfirmDialog';
 
 interface DatabaseStatusModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface DatabaseStatusModalProps {
 }
 
 export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen, onClose, isAdmin, companyId }) => {
+  const confirmDialog = useConfirm();
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingPersistence, setTestingPersistence] = useState(false);
@@ -288,7 +290,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
                         type="button"
                         disabled={tenantBusy}
                         onClick={async () => {
-                          if (!window.confirm('Copiar os dados desta pasta antiga para a pasta atual da Alana? A pasta antiga não será apagada.')) return;
+                          if (!(await confirmDialog({ title: 'Copiar dados desta pasta?', description: 'Os registros desta pasta antiga serão copiados para a pasta atual. A pasta antiga não será apagada.', confirmLabel: 'Copiar' }))) return;
                           setTenantBusy(true);
                           setTenantMessage(null);
                           try {
