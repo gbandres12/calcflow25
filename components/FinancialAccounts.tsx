@@ -155,7 +155,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
       <header className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight">Caixa da Empresa</h2>
-          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest text-[10px]">Gestão de Contas e Saldos • Unidades Ativas</p>
+          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest text-[11px]">Gestão de Contas e Saldos • Unidades Ativas</p>
         </div>
       </header>
 
@@ -169,7 +169,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
                   {acc.type === AccountType.BANCO ? <Building size={24} /> : <Wallet size={24} />}
                 </div>
                 <div className="flex flex-col items-end">
-                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo do Sistema</span>
+                   <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo do Sistema</span>
                    <p className={`text-2xl font-black ${currentBalance >= 0 ? 'text-slate-900' : 'text-rose-600'}`}>
                      R$ {currentBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                    </p>
@@ -180,19 +180,19 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
                 <div className="flex justify-between items-end">
                   <div>
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-1">{acc.name}</h4>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase px-2 py-0.5 bg-slate-50 rounded-md inline-block">{acc.type}</p>
+                    <p className="text-[11px] font-bold text-slate-500 uppercase px-2 py-0.5 bg-slate-50 rounded-md inline-block">{acc.type}</p>
                   </div>
                   <div className="flex gap-1">
                     <button 
                       onClick={() => handleReconcileClick(acc)}
-                      className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                      className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                       title="Conciliar com Caixa Real"
                     >
                       <Scale size={18} />
                     </button>
                     <button 
                       onClick={() => handleEditClick(acc)}
-                      className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                      className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
                       title="Configurações da Conta"
                     >
                       <Settings size={18} />
@@ -202,11 +202,11 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
 
                 <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-50">
                    <div className="space-y-1">
-                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><TrendingUp size={10} className="text-emerald-500"/> Entradas</p>
+                      <p className="text-[11px] font-black text-slate-500 uppercase flex items-center gap-1"><TrendingUp size={10} className="text-emerald-500"/> Entradas</p>
                       <p className="text-xs font-bold text-emerald-600">R$ {totalIn.toLocaleString('pt-BR')}</p>
                    </div>
                    <div className="space-y-1 text-right">
-                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center justify-end gap-1"><TrendingDown size={10} className="text-rose-500"/> Saídas</p>
+                      <p className="text-[11px] font-black text-slate-500 uppercase flex items-center justify-end gap-1"><TrendingDown size={10} className="text-rose-500"/> Saídas</p>
                       <p className="text-xs font-bold text-rose-600">R$ {totalOut.toLocaleString('pt-BR')}</p>
                    </div>
                 </div>
@@ -232,12 +232,12 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
 
             <form onSubmit={handleConfirmReconciliation} className="space-y-6">
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
-                 <span className="text-[10px] font-black text-slate-400 uppercase">Saldo em Sistema</span>
+                 <span className="text-[11px] font-black text-slate-500 uppercase">Saldo em Sistema</span>
                  <span className="text-lg font-black text-slate-900">R$ {calculateBalances(reconcilingAccount).currentBalance.toLocaleString('pt-BR')}</span>
               </div>
 
               <div className="space-y-2">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                 <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     Valor no Caixa Real / Extrato
                  </label>
                  <div className="relative">
@@ -259,7 +259,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
                  <button 
                     type="button"
                     onClick={() => setReconcilingAccount(null)}
-                    className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl hover:bg-slate-50"
+                    className="flex-1 py-4 text-xs font-black uppercase text-slate-500 border border-slate-200 rounded-2xl hover:bg-slate-50"
                  >
                     Fechar
                  </button>
@@ -274,7 +274,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
 
             <div className="flex gap-3 p-4 bg-amber-50 rounded-2xl">
                <AlertTriangle size={20} className="text-amber-500 shrink-0" />
-               <p className="text-[10px] text-amber-700 font-bold uppercase leading-relaxed tracking-tighter">Se houver diferença, o sistema criará automaticamente um lançamento de ajuste para equalizar os saldos.</p>
+               <p className="text-[11px] text-amber-700 font-bold uppercase leading-relaxed tracking-tighter">Se houver diferença, o sistema criará automaticamente um lançamento de ajuste para equalizar os saldos.</p>
             </div>
           </div>
         </div>
@@ -294,7 +294,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
                   <p className="text-xs text-slate-500 font-medium tracking-tight">ID: {editingAccount.id}</p>
                 </div>
               </div>
-              <button onClick={() => setEditingAccount(null)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400">
+              <button onClick={() => setEditingAccount(null)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500">
                 <X size={24} />
               </button>
             </div>
@@ -302,11 +302,11 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
             <form onSubmit={handleSave} className="p-8 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Conta</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome da Conta</label>
                   <input required type="text" value={tempFormData.name} onChange={e => setTempFormData({...tempFormData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Conta</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Tipo de Conta</label>
                   <select value={tempFormData.type} onChange={e => setTempFormData({...tempFormData, type: e.target.value as AccountType})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-purple-500 outline-none font-bold text-sm appearance-none">
                     <option value={AccountType.BANCO}>Instituição Bancária</option>
                     <option value={AccountType.CAIXA}>Caixa Interno (Físico)</option>
@@ -318,19 +318,19 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
               <div className="p-6 bg-amber-50 rounded-[2rem] border border-amber-100 space-y-4">
                 <div className="flex items-center gap-3">
                   <ShieldAlert className="text-amber-600 shrink-0" size={20} />
-                  <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Controle de Integridade Financeira</p>
+                  <p className="text-[11px] font-black text-amber-700 uppercase tracking-widest">Controle de Integridade Financeira</p>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saldo Inicial Definido</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Inicial Definido</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">R$</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">R$</span>
                     <input required type="number" step="0.01" value={tempFormData.initialBalance} onChange={e => setTempFormData({...tempFormData, initialBalance: parseFloat(e.target.value)})} className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-black text-lg" />
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => setEditingAccount(null)} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-slate-400 border border-slate-200 hover:bg-slate-50 transition-all">Cancelar</button>
+                <button type="button" onClick={() => setEditingAccount(null)} className="flex-1 py-4 rounded-2xl font-black text-sm uppercase tracking-widest text-slate-500 border border-slate-200 hover:bg-slate-50 transition-all">Cancelar</button>
                 <button type="submit" className="flex-[2] py-4 bg-purple-600 rounded-2xl font-black text-sm uppercase tracking-widest text-white shadow-xl shadow-purple-100 hover:bg-purple-700 transition-all">Salvar Alterações</button>
               </div>
             </form>
@@ -357,9 +357,9 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
               className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-rose-500 outline-none font-bold"
               placeholder="••••••••"
             />
-            {error && <p className="text-[10px] font-bold text-rose-600">{error}</p>}
+            {error && <p className="text-xs font-bold text-rose-600">{error}</p>}
             <div className="flex gap-2">
-              <button onClick={() => setShowPasswordPrompt(false)} className="flex-1 py-3 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-xl">Voltar</button>
+              <button onClick={() => setShowPasswordPrompt(false)} className="flex-1 py-3 text-xs font-black uppercase text-slate-500 border border-slate-200 rounded-xl">Voltar</button>
               <button onClick={confirmBalanceChange} className="flex-1 py-3 bg-rose-600 text-white text-xs font-black uppercase rounded-xl">Confirmar</button>
             </div>
           </div>

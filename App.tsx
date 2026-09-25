@@ -1215,7 +1215,7 @@ const App: React.FC = () => {
                         className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 ${m.companyId === activeCompanyId ? 'bg-emerald-50 font-semibold text-emerald-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <span className="truncate">{m.companyName || (m.isBranch ? 'Filial' : (currentUser.companyName || 'Matriz'))}</span>
-                        <span className="text-[10px] uppercase text-slate-400 shrink-0">{m.role}</span>
+                        <span className="text-[11px] uppercase text-slate-500 shrink-0">{m.role}</span>
                       </button>
                     ))}
                   </div>
@@ -1552,7 +1552,7 @@ const App: React.FC = () => {
           }`}
         >
           <LayoutDashboard size={18} />
-          <span className="text-[10px] tracking-tight">Início</span>
+          <span className="text-xs tracking-tight">Início</span>
         </button>
 
         {isViewAllowed(currentUser, 'orders') && (
@@ -1563,7 +1563,7 @@ const App: React.FC = () => {
             }`}
           >
             <FileText size={18} />
-            <span className="text-[10px] tracking-tight">Vendas</span>
+            <span className="text-xs tracking-tight">Vendas</span>
           </button>
         )}
 
@@ -1574,7 +1574,7 @@ const App: React.FC = () => {
           }`}
         >
           <Scale size={18} />
-          <span className="text-[10px] tracking-tight">Balança</span>
+          <span className="text-xs tracking-tight">Balança</span>
         </button>
 
         {isViewAllowed(currentUser, 'inventory') && (
@@ -1585,7 +1585,7 @@ const App: React.FC = () => {
             }`}
           >
             <Package size={18} />
-            <span className="text-[10px] tracking-tight">Estoque</span>
+            <span className="text-xs tracking-tight">Estoque</span>
           </button>
         )}
 
@@ -1597,7 +1597,7 @@ const App: React.FC = () => {
             }`}
           >
             <ArrowRightLeft size={18} />
-            <span className="text-[10px] tracking-tight">Remessas</span>
+            <span className="text-xs tracking-tight">Remessas</span>
           </button>
         )}
 
@@ -1609,7 +1609,7 @@ const App: React.FC = () => {
             }`}
           >
             <FileCheck size={18} />
-            <span className="text-[10px] tracking-tight">Emitir NF-e</span>
+            <span className="text-xs tracking-tight">Emitir NF-e</span>
           </button>
         )}
 
@@ -1618,7 +1618,7 @@ const App: React.FC = () => {
           className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-[#D5E3DC] hover:text-white"
         >
           <Menu size={18} />
-          <span className="text-[10px] tracking-tight">Menu</span>
+          <span className="text-xs tracking-tight">Menu</span>
         </button>
       </div>
 

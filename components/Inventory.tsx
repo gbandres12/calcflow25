@@ -486,7 +486,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <Boxes size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Produtos</p>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total de Produtos</p>
                 <p className="text-2xl font-black text-slate-800 tracking-tight">{totalItemsCount} cadastrados</p>
               </div>
             </div>
@@ -496,7 +496,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <FileCheck size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Conformidade Fiscal (NCM)</p>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Conformidade Fiscal (NCM)</p>
                 <p className="text-2xl font-black text-emerald-600 tracking-tight">{itemsWithNcmCount} de {totalItemsCount} com NCM</p>
               </div>
             </div>
@@ -506,7 +506,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <DollarSign size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor do Estoque Comercial</p>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Valor do Estoque Comercial</p>
                 <p className="text-2xl font-black text-slate-800 tracking-tight">R$ {totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
@@ -543,7 +543,7 @@ export const Inventory: React.FC<InventoryProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-widest">
                     <th className="p-5">Código / Produto</th>
                     <th className="p-5">Categoria & Medida</th>
                     <th className="p-5">Preço Venda / Custo</th>
@@ -555,7 +555,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <tbody className="divide-y divide-slate-50 text-xs">
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-16 text-slate-400 font-bold">
+                      <td colSpan={6} className="text-center py-16 text-slate-500 font-bold">
                         Nenhum produto encontrado com os filtros selecionados.
                       </td>
                     </tr>
@@ -569,7 +569,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                             </div>
                             <div>
                               <p className="font-black text-slate-800 uppercase text-sm">{item.name}</p>
-                              <span className="text-[10px] font-bold text-slate-400 tracking-wider">
+                              <span className="text-xs font-bold text-slate-500 tracking-wider">
                                 SKU: {item.code || `ID-${item.id}`}
                               </span>
                             </div>
@@ -578,10 +578,10 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                         <td className="p-5">
                           <div className="space-y-1">
-                            <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md font-bold text-[10px] uppercase">
+                            <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md font-bold text-[11px] uppercase">
                               {item.category || 'Geral'}
                             </span>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">
+                            <p className="text-[11px] font-bold text-slate-500 uppercase">
                               Unidade: <strong className="text-slate-700">{item.unit || 'Ton'}</strong>
                             </p>
                           </div>
@@ -593,7 +593,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                               R$ {item.unitPrice.toFixed(2)}
                             </p>
                             {item.costPrice !== undefined && item.costPrice > 0 && (
-                              <p className="text-[10px] font-bold text-slate-400">
+                              <p className="text-xs font-bold text-slate-500">
                                 Custo: R$ {item.costPrice.toFixed(2)}
                               </p>
                             )}
@@ -604,9 +604,9 @@ export const Inventory: React.FC<InventoryProps> = ({
                           <div className="space-y-1">
                             <div className="flex items-baseline gap-1">
                               <span className="font-black text-slate-800 text-sm">{item.quantity.toFixed(1)}</span>
-                              <span className="text-[10px] font-bold text-slate-400">{item.unit || 'TON'}</span>
+                              <span className="text-xs font-bold text-slate-500">{item.unit || 'TON'}</span>
                             </div>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-black uppercase ${getStatusColor(item)}`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-black uppercase ${getStatusColor(item)}`}>
                               {getStatusText(item)}
                             </span>
                           </div>
@@ -615,14 +615,14 @@ export const Inventory: React.FC<InventoryProps> = ({
                         <td className="p-5">
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100 rounded-lg font-black text-[10px]">
+                              <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100 rounded-lg font-black text-xs">
                                 NCM: {item.ncm || 'Não informado'}
                               </span>
-                              <span className="px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-lg font-black text-[10px]">
+                              <span className="px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-lg font-black text-xs">
                                 CST: {item.cst || '102'}
                               </span>
                             </div>
-                            <p className="text-[10px] font-bold text-slate-400">
+                            <p className="text-xs font-bold text-slate-500">
                               CFOP: <strong className="text-slate-700">{item.cfop || '5101'}</strong> | ICMS: <strong className="text-slate-700">{item.aliquotaIcms || 0}%</strong>
                             </p>
                           </div>
@@ -639,7 +639,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                             </button>
                             <button
                               onClick={() => handleDelete(item.id, item.name)}
-                              className="p-2.5 bg-slate-100 text-slate-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all"
+                              className="p-2.5 bg-slate-100 text-slate-500 hover:bg-rose-500 hover:text-white rounded-xl transition-all"
                               title="Remover Produto"
                             >
                               <Trash2 size={16} />
@@ -678,50 +678,50 @@ export const Inventory: React.FC<InventoryProps> = ({
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 justify-end">
                     {item.ncm && (
-                      <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-black rounded-lg border border-purple-100">
+                      <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs font-black rounded-lg border border-purple-100">
                         NCM {item.ncm}
                       </span>
                     )}
                     {item.cst && (
-                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-black rounded-lg border border-blue-100" title="CST / CSOSN Padrão">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-black rounded-lg border border-blue-100" title="CST / CSOSN Padrão">
                         CST {item.cst}
                       </span>
                     )}
                     {item.cfop && (
-                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black rounded-lg border border-emerald-100" title="CFOP Padrão">
+                      <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-black rounded-lg border border-emerald-100" title="CFOP Padrão">
                         CFOP {item.cfop}
                       </span>
                     )}
                     {item.cClassTrib && (
-                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-black rounded-lg border border-indigo-100" title="Reforma Tributária (RTC)">
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-black rounded-lg border border-indigo-100" title="Reforma Tributária (RTC)">
                         RTC {item.cClassTrib === 'AGRO_60' ? 'Agro -60%' : item.cClassTrib === 'AGRO_ZERO' ? 'Agro 0%' : 'RTC'}
                       </span>
                     )}
-                    <div className={`px-2.5 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${getStatusColor(item)}`}>
+                    <div className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black uppercase tracking-wider flex items-center gap-1 ${getStatusColor(item)}`}>
                       {getStatusText(item)}
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-1 mb-8">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.category || (item.id === 'britado' ? 'Matéria-Prima' : 'Produto Final')}</h3>
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.category || (item.id === 'britado' ? 'Matéria-Prima' : 'Produto Final')}</h3>
                   <p className="text-2xl font-black text-slate-800 tracking-tight uppercase">{item.name}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Quantidade</p>
+                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1">Quantidade</p>
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-black text-slate-800 tracking-tighter">{item.quantity.toFixed(1)}</span>
-                      <span className="text-[10px] font-black text-slate-400">{item.unit || 'TONS'}</span>
+                      <span className="text-xs font-black text-slate-500">{item.unit || 'TONS'}</span>
                     </div>
-                    <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase">Mínimo: {item.minStock} {item.unit || 'T'}</p>
+                    <p className="text-[11px] font-bold text-slate-500 mt-2 uppercase">Mínimo: {item.minStock} {item.unit || 'T'}</p>
                   </div>
 
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Preço Venda</p>
+                    <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1">Preço Venda</p>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-[10px] font-black text-slate-400">R$</span>
+                      <span className="text-xs font-black text-slate-500">R$</span>
                       <span className="text-3xl font-black text-slate-800 tracking-tighter">{item.unitPrice.toFixed(2)}</span>
                     </div>
                   </div>
@@ -766,11 +766,11 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">
                   {editingItem ? 'Editar Produto e Parâmetros Fiscais' : 'Novo Cadastro de Produto'}
                 </h3>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
                   Parâmetros comerciais e tributários para emissão de NF-e
                 </p>
               </div>
-              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X /></button>
+              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500"><X /></button>
             </div>
 
             {/* Sub-abas na Modal (Comercial vs Fiscal) */}
@@ -781,7 +781,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 className={`py-4 px-6 font-black text-xs uppercase tracking-wider border-b-2 flex items-center gap-2 transition-all ${
                   formTab === 'commercial' 
                     ? 'border-purple-600 text-purple-600 bg-white' 
-                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-600'
                 }`}
               >
                 <Tag size={16} /> 1. Dados Comerciais & Estoque
@@ -792,7 +792,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 className={`py-4 px-6 font-black text-xs uppercase tracking-wider border-b-2 flex items-center gap-2 transition-all ${
                   formTab === 'fiscal' 
                     ? 'border-purple-600 text-purple-600 bg-white' 
-                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-600'
                 }`}
               >
                 <FileCheck size={16} /> 2. Área Fiscal (NCM / CST / CFOP)
@@ -804,7 +804,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5 md:col-span-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Código / SKU</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Código / SKU</label>
                       <input 
                         type="text" 
                         value={formData.code} 
@@ -815,7 +815,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome do Produto *</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome do Produto *</label>
                       <input 
                         required 
                         type="text" 
@@ -829,7 +829,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Categoria</label>
                       <select 
                         value={formData.category} 
                         onChange={e => setFormData({ ...formData, category: e.target.value })} 
@@ -840,7 +840,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade de Medida</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Unidade de Medida</label>
                       <select 
                         value={formData.unit} 
                         onChange={e => setFormData({ ...formData, unit: e.target.value })} 
@@ -857,7 +857,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço de Venda Unitário (R$) *</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Preço de Venda Unitário (R$) *</label>
                       <input 
                         required 
                         type="number" 
@@ -870,7 +870,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço de Custo (R$)</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Preço de Custo (R$)</label>
                       <input 
                         type="number" 
                         step="0.01" 
@@ -884,7 +884,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque Inicial / Atual</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Estoque Inicial / Atual</label>
                       <input 
                         type="number" 
                         step="0.1" 
@@ -896,7 +896,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque Mínimo de Alerta</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Estoque Mínimo de Alerta</label>
                       <input 
                         type="number" 
                         value={formData.minStock} 
@@ -921,7 +921,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                           type="button"
                           key={item.code}
                           onClick={() => setFormData({ ...formData, ncm: item.code })}
-                          className={`text-left p-2.5 rounded-xl border text-[10px] transition-all flex items-center justify-between ${
+                          className={`text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between ${
                             formData.ncm === item.code 
                               ? 'bg-purple-600 text-white border-purple-600 font-black shadow-md' 
                               : 'bg-white text-slate-700 border-purple-200 hover:bg-purple-100 font-bold'
@@ -929,7 +929,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         >
                           <div>
                             <span className="font-black block">{item.code}</span>
-                            <span className="text-[9px] opacity-80 line-clamp-1">{item.desc}</span>
+                            <span className="text-xs opacity-80 line-clamp-1">{item.desc}</span>
                           </div>
                           {formData.ncm === item.code && <Check size={14} />}
                         </button>
@@ -939,7 +939,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">NCM (8 Dígitos) *</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">NCM (8 Dígitos) *</label>
                       <input 
                         required 
                         type="text" 
@@ -952,8 +952,8 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST / CSOSN ICMS Padrão *</label>
-                        <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">NF-e Tag cst</span>
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CST / CSOSN ICMS Padrão *</label>
+                        <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">NF-e Tag cst</span>
                       </div>
                       <select 
                         value={formData.cst} 
@@ -976,7 +976,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CFOP Padrão</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CFOP Padrão</label>
                       <input 
                         type="text" 
                         value={formData.cfop} 
@@ -987,7 +987,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Origem da Mercadoria</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Origem da Mercadoria</label>
                       <select 
                         value={formData.origem} 
                         onChange={e => setFormData({ ...formData, origem: e.target.value })} 
@@ -1000,7 +1000,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade Tributável SEFAZ</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Unidade Tributável SEFAZ</label>
                       <input 
                         type="text" 
                         value={formData.unidadeTributavel} 
@@ -1014,7 +1014,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                   {/* CST e Alíquotas PIS / COFINS / ICMS */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST PIS Padrão</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CST PIS Padrão</label>
                       <select 
                         value={formData.cstPis} 
                         onChange={e => setFormData({ ...formData, cstPis: e.target.value })} 
@@ -1027,7 +1027,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CST COFINS Padrão</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CST COFINS Padrão</label>
                       <select 
                         value={formData.cstCofins} 
                         onChange={e => setFormData({ ...formData, cstCofins: e.target.value })} 
@@ -1042,7 +1042,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquota ICMS (%)</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Alíquota ICMS (%)</label>
                       <input 
                         type="number" 
                         step="0.01" 
@@ -1054,7 +1054,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquota PIS (%)</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Alíquota PIS (%)</label>
                       <input 
                         type="number" 
                         step="0.01" 
@@ -1066,7 +1066,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Alíquota COFINS (%)</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Alíquota COFINS (%)</label>
                       <input 
                         type="number" 
                         step="0.01" 
@@ -1087,16 +1087,16 @@ export const Inventory: React.FC<InventoryProps> = ({
                         </div>
                         <div>
                           <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wide">Reforma Tributária (RTC — EC 132/2023)</h4>
-                          <p className="text-[10px] text-indigo-600 font-bold">Enquadramento do IBS, CBS e Imposto Seletivo</p>
+                          <p className="text-xs text-indigo-600 font-bold">Enquadramento do IBS, CBS e Imposto Seletivo</p>
                         </div>
                       </div>
-                      <span className="text-[9px] font-black px-2.5 py-1 bg-indigo-100 text-indigo-800 rounded-full border border-indigo-200 uppercase tracking-wider">
+                      <span className="text-[11px] font-black px-2.5 py-1 bg-indigo-100 text-indigo-800 rounded-full border border-indigo-200 uppercase tracking-wider">
                         RTC 2026/2033
                       </span>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Regime / Classificação Específica</label>
+                      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Regime / Classificação Específica</label>
                       <select 
                         value={formData.cClassTrib} 
                         onChange={e => {
@@ -1119,7 +1119,7 @@ export const Inventory: React.FC<InventoryProps> = ({
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-500 uppercase">Alíquota IBS (%)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase">Alíquota IBS (%)</label>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -1130,7 +1130,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-500 uppercase">Redução BC IBS (%)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase">Redução BC IBS (%)</label>
                         <input 
                           type="number" 
                           step="1" 
@@ -1141,7 +1141,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-500 uppercase">Alíquota CBS (%)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase">Alíquota CBS (%)</label>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -1152,7 +1152,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-500 uppercase">Redução BC CBS (%)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase">Redução BC CBS (%)</label>
                         <input 
                           type="number" 
                           step="1" 
@@ -1172,11 +1172,11 @@ export const Inventory: React.FC<InventoryProps> = ({
                           onChange={e => setFormData({ ...formData, sujeitoIs: e.target.checked })} 
                           className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                         />
-                        <span className="text-[10px] font-black text-slate-700 uppercase">Sujeito ao Imposto Seletivo (IS)</span>
+                        <span className="text-[11px] font-black text-slate-700 uppercase">Sujeito ao Imposto Seletivo (IS)</span>
                       </label>
                       {formData.sujeitoIs && (
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-black text-slate-400 uppercase">Alíquota IS:</span>
+                          <span className="text-[11px] font-black text-slate-500 uppercase">Alíquota IS:</span>
                           <input 
                             type="number" 
                             step="0.1" 
@@ -1185,7 +1185,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                             className="w-20 p-2 bg-white border border-indigo-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500" 
                             placeholder="0.0" 
                           />
-                          <span className="text-[10px] font-bold text-slate-400">%</span>
+                          <span className="text-xs font-bold text-slate-500">%</span>
                         </div>
                       )}
                     </div>
@@ -1194,14 +1194,14 @@ export const Inventory: React.FC<InventoryProps> = ({
                   {/* Informações Complementares Pré-definidas no Produto */}
                   <div className="space-y-2 p-5 bg-slate-50 rounded-3xl border border-slate-200">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
+                      <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest">
                         Informações Complementares Pré-definidas (Tag infCpl da NF-e)
                       </label>
-                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
                         Auto-incorporada na Nota Fiscal
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-xs text-slate-500">
                       Este texto será incluído automaticamente nos dados adicionais da nota fiscal sempre que este produto for faturado:
                     </p>
 
@@ -1213,7 +1213,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                           ...formData,
                           informacoesComplementares: 'Isenção de ICMS para uso agrícola conforme Convênio ICMS 100/97.'
                         })}
-                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
+                        className="px-2.5 py-1 text-xs font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
                       >
                         + Convênio ICMS 100/97
                       </button>
@@ -1223,7 +1223,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                           ...formData,
                           informacoesComplementares: 'ICMS Diferido conforme art. 40 do RICMS/PA para operações internas com calcário agrícola.'
                         })}
-                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
+                        className="px-2.5 py-1 text-xs font-bold bg-white text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
                       >
                         + Diferimento RICMS/PA
                       </button>
@@ -1233,7 +1233,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                           ...formData,
                           informacoesComplementares: 'Produto enquadrado no regime favorecido de Insumos Agropecuários com redução de alíquota conforme Art. 9º da EC 132/2023 (Reforma Tributária).'
                         })}
-                        className="px-2.5 py-1 text-[9px] font-bold bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                        className="px-2.5 py-1 text-xs font-bold bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
                       >
                         + Reforma Tributária (Insumo Agro)
                       </button>
@@ -1248,10 +1248,10 @@ export const Inventory: React.FC<InventoryProps> = ({
                     />
 
                     <div className="pt-2 space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
+                      <label className="text-[11px] font-black text-slate-700 uppercase tracking-widest">
                         Informação adicional do item (tag infAdProd)
                       </label>
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-xs text-slate-500">
                         Texto curto por item na NF-e (até 500 caracteres). Não substitui o infCpl da nota.
                       </p>
                       <textarea
@@ -1262,7 +1262,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                         className="w-full p-3.5 bg-white border border-slate-200 rounded-2xl font-medium text-xs outline-none focus:border-purple-500 resize-none"
                         placeholder="Ex: Destinado exclusivamente à agricultura. PRNT > 85%."
                       />
-                      <p className="text-[9px] text-slate-400 text-right font-bold">{(formData.infAdProd || '').length}/500</p>
+                      <p className="text-xs text-slate-500 text-right font-bold">{(formData.infAdProd || '').length}/500</p>
                     </div>
                   </div>
                 </div>
@@ -1306,17 +1306,17 @@ export const Inventory: React.FC<InventoryProps> = ({
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
               <div>
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">Entrada de Britado</h3>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Registrar nova compra de minério</p>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Registrar nova compra de minério</p>
               </div>
-              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X /></button>
+              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500"><X /></button>
             </div>
             <form onSubmit={submitPurchase} className="p-8 space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade (Toneladas)</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Quantidade (Toneladas)</label>
                 <input required type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none text-2xl font-black" placeholder="0.0" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Custo Unitário (R$ por Ton)</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Custo Unitário (R$ por Ton)</label>
                 <input required type="number" step="0.01" value={val} onChange={e => setVal(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none text-2xl font-black" placeholder="0.00" />
               </div>
               <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-xs">
@@ -1324,24 +1324,24 @@ export const Inventory: React.FC<InventoryProps> = ({
                   <span>Valor total da compra</span>
                   <span className="text-amber-700">R$ {((parseFloat(qty) || 0) * (parseFloat(val) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>
-                <p className="mt-1 text-[10px] font-medium text-slate-500">O saldo não pago ficará em aberto no Financeiro para baixas parciais.</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">O saldo não pago ficará em aberto no Financeiro para baixas parciais.</p>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fornecedor</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Fornecedor</label>
                 <input type="text" value={purchaseSupplier} onChange={e => setPurchaseSupplier(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm" placeholder="Ex.: Pedreira São José" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entrada paga agora (R$)</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Entrada paga agora (R$)</label>
                   <input type="number" min="0" step="0.01" value={purchaseInitialPayment} onChange={e => setPurchaseInitialPayment(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-black text-lg" placeholder="0,00" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento do saldo</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Vencimento do saldo</label>
                   <input type="date" value={purchaseDueDate} onChange={e => setPurchaseDueDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm" />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma da entrada</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Forma da entrada</label>
                 <select value={purchasePaymentMethod} onChange={e => setPurchasePaymentMethod(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-bold text-sm">
                   <option value="PIX">PIX</option>
                   <option value="Transferência Bancária">Transferência bancária</option>
@@ -1351,7 +1351,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Observações</label>
                 <input type="text" value={purchaseNotes} onChange={e => setPurchaseNotes(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:border-amber-500 outline-none font-medium text-sm" placeholder="NF, romaneio ou acordo de pagamento" />
               </div>
               <button type="submit" className="w-full py-5 bg-slate-900 text-white text-xs font-black uppercase rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-100">Confirmar Compra e Lançar Saldo</button>
@@ -1366,13 +1366,13 @@ export const Inventory: React.FC<InventoryProps> = ({
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
               <div>
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">Venda de Moído</h3>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Registrar saída para cliente</p>
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Registrar saída para cliente</p>
               </div>
-              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400"><X /></button>
+              <button onClick={handleClose} className="p-2 hover:bg-white rounded-full transition-colors text-slate-500"><X /></button>
             </div>
             <form onSubmit={submitSale} className="p-8 space-y-6">
               <div className="space-y-2 relative" ref={customerDropdownRef}>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Cliente</label>
                 <div className="relative">
                   <input 
                     required
@@ -1397,7 +1397,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                 {isCustomerDropdownOpen && (
                   <div className="absolute z-[110] top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl max-h-56 overflow-y-auto custom-scrollbar">
                     {filteredCustomers.length === 0 ? (
-                      <div className="p-6 text-center text-slate-400">
+                      <div className="p-6 text-center text-slate-500">
                          <p className="text-xs font-bold uppercase">Nenhum resultado</p>
                       </div>
                     ) : (
@@ -1413,7 +1413,7 @@ export const Inventory: React.FC<InventoryProps> = ({
                           className={`w-full text-left px-5 py-4 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex flex-col gap-1 ${customerId === c.id ? 'bg-emerald-50' : ''}`}
                         >
                           <span className="text-sm font-black text-slate-800 uppercase">{c.name}</span>
-                          <div className="flex gap-3 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                          <div className="flex gap-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
                              <span className="flex items-center gap-1"><Fingerprint size={10}/> {c.document}</span>
                              {c.phone && <span className="flex items-center gap-1"><Phone size={10}/> {c.phone}</span>}
                           </div>
@@ -1424,12 +1424,12 @@ export const Inventory: React.FC<InventoryProps> = ({
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade (Toneladas)</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Quantidade (Toneladas)</label>
                 <input required type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-emerald-500 outline-none text-2xl font-black" placeholder="0.0" />
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Máximo disponível: {moido?.quantity || 0}T</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-tighter">Máximo disponível: {moido?.quantity || 0}T</p>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preço de Venda Unitário (R$)</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Preço de Venda Unitário (R$)</label>
                 <input required type="number" step="0.01" value={val} onChange={e => setVal(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-emerald-500 outline-none text-2xl font-black" placeholder="0.00" />
               </div>
               <button type="submit" className="w-full py-5 bg-amber-500 text-slate-900 text-xs font-black uppercase rounded-2xl hover:bg-amber-400 transition-all shadow-xl shadow-amber-100">Confirmar Venda</button>

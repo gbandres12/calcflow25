@@ -93,7 +93,7 @@ export const CategorySuggestion: React.FC<CategorySuggestionProps> = ({
 
   if (!suggestion && !loading) {
     return (
-      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
         <button
           type="button"
           onClick={() => fetchSuggestion(true)}
@@ -108,19 +108,19 @@ export const CategorySuggestion: React.FC<CategorySuggestionProps> = ({
   return (
     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
       {loading ? (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-xl text-[10px] font-bold border border-purple-100 animate-pulse">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-xl text-xs font-bold border border-purple-100 animate-pulse">
           <Loader2 size={11} className="animate-spin" /> Analisando com IA...
         </span>
       ) : suggestion ? (
         <div className="inline-flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+          <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
             Sugestão IA:
           </span>
           <button
             type="button"
             onClick={handleApply}
             disabled={applied}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-black transition-all ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black transition-all ${
               applied
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
                 : 'bg-purple-100 hover:bg-purple-200 text-purple-800 border border-purple-200 active:scale-95 shadow-sm'

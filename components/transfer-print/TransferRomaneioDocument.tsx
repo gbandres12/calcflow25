@@ -65,26 +65,26 @@ export const TransferRomaneioDocument: React.FC<Props> = ({ transfer, company })
                 {brand.corporateName || brand.tradeName || 'Empresa'}
               </h2>
               {brand.tradeName && brand.tradeName !== brand.corporateName && (
-                <p className="text-[11px] font-semibold text-slate-600 mt-0.5">{brand.tradeName}</p>
+                <p className="text-xs font-semibold text-slate-600 mt-0.5">{brand.tradeName}</p>
               )}
-              <p className="text-[11px] text-slate-700 mt-1.5 font-medium">
+              <p className="text-xs text-slate-700 mt-1.5 font-medium">
                 {brand.cnpj ? `CNPJ ${brand.cnpj}` : 'CNPJ não informado no cadastro fiscal'}
                 {brand.ie ? `  ·  IE ${brand.ie}` : ''}
               </p>
               {brand.addressLine && (
-                <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{brand.addressLine}</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">{brand.addressLine}</p>
               )}
-              {brand.phone && <p className="text-[10px] text-slate-500">Tel. {brand.phone}</p>}
+              {brand.phone && <p className="text-xs text-slate-500">Tel. {brand.phone}</p>}
             </div>
           </div>
 
           <div className="text-right shrink-0">
-            <span className="inline-block text-[9px] font-black uppercase tracking-[0.16em] text-white px-2 py-1 rounded" style={{ background: '#0F5948' }}>
+            <span className="inline-block text-[11px] font-black uppercase tracking-[0.16em] text-white px-2 py-1 rounded" style={{ background: '#0F5948' }}>
               Guia de transferência
             </span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mt-2">Nº da guia</span>
+            <span className="text-[11px] font-black uppercase tracking-widest text-slate-500 block mt-2">Nº da guia</span>
             <span className="text-xl font-mono font-black text-slate-900 block leading-none">{transfer.code}</span>
-            <span className="text-[11px] text-slate-500 mt-1 block">Emissão: {formatDate(transfer.dateSent)}</span>
+            <span className="text-xs text-slate-500 mt-1 block">Emissão: {formatDate(transfer.dateSent)}</span>
           </div>
         </div>
       </header>
@@ -93,14 +93,14 @@ export const TransferRomaneioDocument: React.FC<Props> = ({ transfer, company })
         Remessa de materiais entre filiais
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-[11px] mb-5">
+      <div className="grid grid-cols-2 gap-3 text-xs mb-5">
         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400 block">Origem / expedição</span>
+          <span className="text-[11px] uppercase font-black tracking-wider text-slate-500 block">Origem / expedição</span>
           <span className="font-bold text-slate-900 block mt-1">{transfer.originLocation}</span>
           <span className="text-slate-600 block mt-1">Expedido por: <strong>{transfer.sentBy}</strong></span>
         </div>
         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-          <span className="text-[9px] uppercase font-black tracking-wider text-slate-400 block">Destino / recebimento</span>
+          <span className="text-[11px] uppercase font-black tracking-wider text-slate-500 block">Destino / recebimento</span>
           <span className="font-bold text-slate-900 block mt-1">{transfer.destinationLocation}</span>
           <span className="text-slate-600 block mt-1">
             Motorista: <strong>{transfer.carrierOrDriver || 'Próprio'}</strong>
@@ -109,12 +109,12 @@ export const TransferRomaneioDocument: React.FC<Props> = ({ transfer, company })
         </div>
       </div>
 
-      <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-2">
+      <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 block mb-2">
         Relação de produtos e suprimentos
       </span>
 
-      <table className="w-full text-left text-[11px] border-collapse border border-slate-300">
-        <thead className="text-white font-bold uppercase text-[9px] tracking-wide" style={{ background: '#0F5948' }}>
+      <table className="w-full text-left text-xs border-collapse border border-slate-300">
+        <thead className="text-white font-bold uppercase text-[11px] tracking-wide" style={{ background: '#0F5948' }}>
           <tr>
             <th className="border border-slate-300 px-2 py-2 text-center w-8">#</th>
             <th className="border border-slate-300 px-2 py-2">Descrição</th>
@@ -156,20 +156,20 @@ export const TransferRomaneioDocument: React.FC<Props> = ({ transfer, company })
       </table>
 
       {transfer.notes && (
-        <div className="mt-3 text-[11px] text-slate-600">
+        <div className="mt-3 text-xs text-slate-600">
           <strong>Observações:</strong> {transfer.notes}
         </div>
       )}
 
-      <div className="pt-8 mt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-[11px]">
+      <div className="pt-8 mt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-xs">
         <div className="space-y-3 text-center">
           <div className="border-b border-slate-400 pb-1 h-14 flex items-end justify-center">
             <span className="font-serif italic text-slate-800 text-sm">{transfer.sentBy}</span>
           </div>
           <div>
             <span className="font-bold text-slate-900 block">Expedição — origem</span>
-            <span className="text-[10px] text-slate-500 block">{transfer.originLocation}</span>
-            <span className="text-[10px] text-slate-500">Data: {formatDate(transfer.dateSent)}</span>
+            <span className="text-xs text-slate-500 block">{transfer.originLocation}</span>
+            <span className="text-xs text-slate-500">Data: {formatDate(transfer.dateSent)}</span>
           </div>
         </div>
         <div className="space-y-3 text-center">
@@ -181,24 +181,24 @@ export const TransferRomaneioDocument: React.FC<Props> = ({ transfer, company })
                 ✓ {transfer.receivedBy}
               </span>
             ) : (
-              <span className="text-slate-300 italic text-[11px]">Assinatura do recebedor</span>
+              <span className="text-slate-300 italic text-xs">Assinatura do recebedor</span>
             )}
           </div>
           <div>
             <span className="font-bold text-slate-900 block">
               {transfer.receivedBy ? `Recebido por ${transfer.receivedBy}` : 'Recebimento — destino'}
             </span>
-            <span className="text-[10px] text-slate-500 block">
+            <span className="text-xs text-slate-500 block">
               {transfer.receiverRole || transfer.destinationLocation}
             </span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-500">
               Data: {transfer.receivedDate ? formatDate(transfer.receivedDate) : '____/____/________'}
             </span>
           </div>
         </div>
       </div>
 
-      <p className="pt-4 mt-2 text-center text-[9px] text-slate-400 border-t border-slate-200">
+      <p className="pt-4 mt-2 text-center text-xs text-slate-500 border-t border-slate-200">
         Documento interno de conferência logística. Emitente conforme cadastro fiscal da empresa (CNPJ e logotipo da NF-e).
       </p>
     </article>

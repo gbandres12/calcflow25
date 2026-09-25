@@ -94,40 +94,40 @@ const Dashboard: React.FC<DashboardProps> = ({
           <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Escritório operacional</h2>
           <p className="text-xs text-slate-500">Fila de carga, estoque ao vivo e alerta fiscal.</p>
         </div>
-        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">Dados atualizados agora</span>
+        <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-md">Dados atualizados agora</span>
       </header>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fila operacional</p>
-            <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{romaneios.length + remessas.length}</span>
+            <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{romaneios.length + remessas.length}</span>
           </div>
           <div className="px-4 pt-3 pb-1">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Romaneios a carregar</p>
-            {romaneios.length === 0 && <p className="text-xs text-slate-400 pb-3">Nenhum romaneio na fila.</p>}
+            <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Romaneios a carregar</p>
+            {romaneios.length === 0 && <p className="text-xs text-slate-500 pb-3">Nenhum romaneio na fila.</p>}
             {romaneios.map((o) => (
               <button key={o.id} type="button" onClick={() => onNavigate?.('orders')} className="w-full text-left py-2 border-b border-slate-50">
                 <div className="flex justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-700 truncate">{o.reference}</span>
-                  <span className="text-slate-400">{(o.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0).toFixed(1)} t</span>
+                  <span className="text-slate-500">{(o.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0).toFixed(1)} t</span>
                 </div>
-                <p className="text-[11px] text-slate-500 truncate">{custName(o.customerId)}</p>
+                <p className="text-xs text-slate-500 truncate">{custName(o.customerId)}</p>
               </button>
             ))}
           </div>
           <div className="px-4 pt-3 pb-3 border-t border-slate-100">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase mb-2">Transferências aguardando fazenda</p>
-            {remessas.length === 0 && <p className="text-xs text-slate-400">Nenhuma remessa em trânsito.</p>}
+            <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Transferências aguardando fazenda</p>
+            {remessas.length === 0 && <p className="text-xs text-slate-500">Nenhuma remessa em trânsito.</p>}
             {remessas.map((t) => (
               <button key={t.id} type="button" onClick={() => onNavigate?.('transfers')} className="w-full text-left py-2 border-b border-slate-50">
                 <div className="flex justify-between gap-2 text-xs">
                   <span className="font-semibold text-slate-700">{t.code}</span>
                   <span className="text-amber-700 bg-amber-50 px-1.5 rounded">Em trânsito</span>
                 </div>
-                <p className="text-[11px] text-slate-500 truncate">{t.originLocation} → {t.destinationLocation}</p>
+                <p className="text-xs text-slate-500 truncate">{t.originLocation} → {t.destinationLocation}</p>
               </button>
             ))}
-            <button type="button" onClick={() => onNavigate?.('yard')} className="mt-2 text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver filas <ArrowRight size={12} /></button>
+            <button type="button" onClick={() => onNavigate?.('yard')} className="mt-2 text-xs font-semibold text-blue-700 inline-flex items-center gap-1">Ver filas <ArrowRight size={12} /></button>
           </div>
         </section>
         <section className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
@@ -141,24 +141,24 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div key={item!.id} className="border border-slate-100 rounded-lg p-3">
                 <p className="text-xs font-semibold text-slate-600 uppercase">{item!.name}</p>
                 <p className="text-2xl font-semibold text-slate-800">{tons(qty)}</p>
-                <p className="text-[11px] text-slate-400 mb-2">mínimo {tons(min)}</p>
+                <p className="text-xs text-slate-500 mb-2">mínimo {tons(min)}</p>
                 <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                   <div className={`h-full ${qty <= min ? 'bg-amber-500' : 'bg-emerald-600'}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
             );
           })}
-          {inventory.length === 0 && <p className="text-xs text-slate-400">Sem estoque carregado.</p>}
-          <button type="button" onClick={() => onNavigate?.('inventory')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Ver estoque <ArrowRight size={12} /></button>
+          {inventory.length === 0 && <p className="text-xs text-slate-500">Sem estoque carregado.</p>}
+          <button type="button" onClick={() => onNavigate?.('inventory')} className="text-xs font-semibold text-blue-700 inline-flex items-center gap-1">Ver estoque <ArrowRight size={12} /></button>
         </section>
         <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Alertas fiscais</p>
-            <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">{pendingNfe.length + rejectedNfe.length}</span>
+            <span className="text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">{pendingNfe.length + rejectedNfe.length}</span>
           </div>
           <div className="p-4 space-y-3">
-            <p className="text-[10px] font-semibold text-amber-700 uppercase">Pendentes de emissão</p>
-            {pendingNfe.length === 0 && <p className="text-xs text-slate-400">Nada pendente.</p>}
+            <p className="text-[11px] font-semibold text-amber-700 uppercase">Pendentes de emissão</p>
+            {pendingNfe.length === 0 && <p className="text-xs text-slate-500">Nada pendente.</p>}
             {pendingNfe.map((o) => (
               <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between gap-2">
                 <span className="truncate font-medium text-slate-700">{o.reference} · {custName(o.customerId)}</span>
@@ -166,8 +166,8 @@ const Dashboard: React.FC<DashboardProps> = ({
               </button>
             ))}
             <div className="pt-2 border-t border-slate-100">
-              <p className="text-[10px] font-semibold text-rose-700 uppercase mb-1">Rejeitadas</p>
-              {rejectedNfe.length === 0 && <p className="text-xs text-slate-400">Nenhuma rejeição.</p>}
+              <p className="text-[11px] font-semibold text-rose-700 uppercase mb-1">Rejeitadas</p>
+              {rejectedNfe.length === 0 && <p className="text-xs text-slate-500">Nenhuma rejeição.</p>}
               {rejectedNfe.map((o) => (
                 <button key={o.id} type="button" onClick={() => onNavigate?.('fiscal')} className="w-full text-left py-1.5 text-xs flex justify-between">
                   <span className="font-medium text-slate-700">{o.reference}</span>
@@ -175,7 +175,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               ))}
             </div>
-            <button type="button" onClick={() => onNavigate?.('fiscal')} className="text-[11px] font-semibold text-blue-700 inline-flex items-center gap-1">Abrir notas <ArrowRight size={12} /></button>
+            <button type="button" onClick={() => onNavigate?.('fiscal')} className="text-xs font-semibold text-blue-700 inline-flex items-center gap-1">Abrir notas <ArrowRight size={12} /></button>
           </div>
         </section>
       </div>
@@ -184,9 +184,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Liquidez dos últimos 7 dias</p>
-              <p className="text-xs text-slate-400">Entradas recebidas x saídas efetivamente pagas.</p>
+              <p className="text-xs text-slate-500">Entradas recebidas x saídas efetivamente pagas.</p>
             </div>
-            <button type="button" onClick={() => onNavigate?.('cashflow')} className="text-[11px] font-semibold text-blue-700">Abrir fluxo</button>
+            <button type="button" onClick={() => onNavigate?.('cashflow')} className="text-xs font-semibold text-blue-700">Abrir fluxo</button>
           </div>
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={strategic.chart} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
@@ -206,10 +206,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             <p className="text-xs text-slate-500">Indicadores para decidir compra, venda e cobrança.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><p className="text-[10px] text-slate-400">Faturado</p><p className="text-lg font-semibold text-emerald-400">{brl(strategic.soldValue)}</p></div>
-            <div><p className="text-[10px] text-slate-400">A receber</p><p className="text-lg font-semibold text-amber-300">{brl(strategic.openReceivable)}</p></div>
-            <div><p className="text-[10px] text-slate-400">Volume vendido</p><p className="text-lg font-semibold">{tons(strategic.soldTons)}</p></div>
-            <div><p className="text-[10px] text-slate-400">Ticket médio</p><p className="text-lg font-semibold">{brl(strategic.averageTicket)}</p></div>
+            <div><p className="text-xs text-slate-400">Faturado</p><p className="text-lg font-semibold text-emerald-400">{brl(strategic.soldValue)}</p></div>
+            <div><p className="text-xs text-slate-400">A receber</p><p className="text-lg font-semibold text-amber-300">{brl(strategic.openReceivable)}</p></div>
+            <div><p className="text-xs text-slate-400">Volume vendido</p><p className="text-lg font-semibold">{tons(strategic.soldTons)}</p></div>
+            <div><p className="text-xs text-slate-400">Ticket médio</p><p className="text-lg font-semibold">{brl(strategic.averageTicket)}</p></div>
           </div>
           <button type="button" onClick={() => onNavigate?.('orders')} className="w-full text-left text-xs font-semibold text-blue-200 border-t border-white/10 pt-3">Conferir vendas e recebimentos <ArrowRight size={12} className="inline" /></button>
         </div>
@@ -217,10 +217,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-2"><Wallet size={13} /> Caixa do dia</p>
-          <button type="button" onClick={() => onNavigate?.('daily')} className="text-[11px] font-semibold text-blue-700">Ver fluxo</button>
+          <button type="button" onClick={() => onNavigate?.('daily')} className="text-xs font-semibold text-blue-700">Ver fluxo</button>
         </div>
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-400 uppercase text-[10px]">
+          <thead className="bg-slate-50 text-slate-500 uppercase text-[11px]">
             <tr>
               <th className="text-left font-semibold px-4 py-2">Descrição</th>
               <th className="text-right font-semibold px-4 py-2">Entradas</th>

@@ -255,12 +255,12 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       subtitle={
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
+            <span className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
               {STATUS_LABEL[status] || status}
             </span>
             <span>NF-e Nº <b>{current.nfeNumero || config.proxNumeroNFe || '—'}</b> · Série <b>{current.nfeSerie || config.serieNFe || '—'}</b></span>
           </div>
-          <p className="font-mono text-[10px] truncate">
+          <p className="font-mono text-xs truncate">
             {isDraft
               ? 'Prévia interna · SEM VALOR FISCAL · sem chave de acesso'
               : (current.nfeChave || 'Chave ainda não retornada pela SEFAZ')}

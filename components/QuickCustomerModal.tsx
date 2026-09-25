@@ -230,7 +230,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
           
           {/* Tipo de Pessoa */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Tipo de Perfil do Cliente
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -279,7 +279,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Nome Completo / Razão Social *
               </label>
               <input
@@ -293,7 +293,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 CPF / CNPJ *
               </label>
               <input
@@ -311,10 +311,10 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Inscrição Estadual (IE)
                 </label>
-                <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer font-bold">
+                <label className="text-xs text-slate-500 flex items-center gap-1 cursor-pointer font-bold">
                   <input
                     type="checkbox"
                     checked={isentoIE}
@@ -335,7 +335,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block flex items-center gap-1">
                 <Phone size={12} className="text-slate-400" /> Telefone / WhatsApp
               </label>
               <input
@@ -348,7 +348,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block flex items-center gap-1">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block flex items-center gap-1">
                 <Mail size={12} className="text-slate-400" /> E-mail
               </label>
               <input
@@ -368,7 +368,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                 <MapPin size={16} className="text-purple-600" />
                 Endereço & Localização (ViaCEP Automático)
               </span>
-              <span className="text-[10px] bg-white text-purple-700 px-2 py-0.5 rounded-full border border-purple-200 font-bold flex items-center gap-1">
+              <span className="text-xs bg-white text-purple-700 px-2 py-0.5 rounded-full border border-purple-200 font-bold flex items-center gap-1">
                 <Sparkles size={11} /> Auto-preenchimento
               </span>
             </div>
@@ -376,7 +376,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             {/* CEP Field */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1 sm:col-span-1">
-                <label className="text-[10px] font-black text-purple-900 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-purple-900 uppercase tracking-widest block">
                   CEP (Digite os 8 números)
                 </label>
                 <div className="relative">
@@ -415,7 +415,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
                   </div>
                 )}
                 {!isLoadingCep && cepStatus === 'idle' && (
-                  <p className="text-[11px] text-slate-500 font-medium leading-tight">
+                  <p className="text-xs text-slate-500 font-medium leading-tight">
                     Digite o CEP para buscar rua, bairro, cidade e estado automaticamente.
                   </p>
                 )}
@@ -425,7 +425,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
             {/* Campos de Logradouro, Número, Bairro, Cidade, Estado */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="sm:col-span-3 space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Logradouro / Rua / Estrada</label>
+                <label className="text-xs font-bold text-slate-600 block">Logradouro / Rua / Estrada</label>
                 <input
                   type="text"
                   value={street}
@@ -436,7 +436,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Número *</label>
+                <label className="text-xs font-bold text-slate-600 block">Número *</label>
                 <input
                   ref={numberInputRef}
                   type="text"
@@ -450,7 +450,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Bairro / Comunidade</label>
+                <label className="text-xs font-bold text-slate-600 block">Bairro / Comunidade</label>
                 <input
                   type="text"
                   value={neighborhood}
@@ -461,7 +461,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Cidade</label>
+                <label className="text-xs font-bold text-slate-600 block">Cidade</label>
                 <input
                   type="text"
                   value={city}
@@ -472,7 +472,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Estado (UF)</label>
+                <label className="text-xs font-bold text-slate-600 block">Estado (UF)</label>
                 <input
                   type="text"
                   maxLength={2}
@@ -484,7 +484,7 @@ export const QuickCustomerModal: React.FC<QuickCustomerModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-600 block">Código IBGE</label>
+                <label className="text-xs font-bold text-slate-600 block">Código IBGE</label>
                 <input
                   type="text"
                   inputMode="numeric"

@@ -167,7 +167,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
         <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
           <button
             onClick={() => setActiveTab('OVERVIEW')}
-            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'OVERVIEW'
                 ? 'bg-slate-900 text-white'
                 : 'text-slate-500 hover:text-slate-900 bg-slate-100'
@@ -179,7 +179,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('ORDERS')}
-            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'ORDERS'
                 ? 'bg-slate-900 text-white'
                 : 'text-slate-500 hover:text-slate-900 bg-slate-100'
@@ -191,7 +191,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('DEBTS')}
-            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'DEBTS'
                 ? 'bg-rose-600 text-white'
                 : 'text-slate-500 hover:text-rose-700 bg-slate-100'
@@ -203,7 +203,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('RECEIPTS')}
-            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'RECEIPTS'
                 ? 'bg-emerald-700 text-white'
                 : 'text-slate-500 hover:text-emerald-700 bg-slate-100'
@@ -215,7 +215,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('WITHDRAWALS')}
-            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1.5 ${
+            className={`shrink-0 px-3 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 ${
               activeTab === 'WITHDRAWALS'
                 ? 'bg-blue-700 text-white'
                 : 'text-slate-500 hover:text-blue-700 bg-slate-100'
@@ -235,19 +235,19 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               {(customer.street || customer.zipCode || customer.ibgeCode) && (
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Logradouro</span>
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Logradouro</span>
                     <p className="font-bold text-slate-800">{customer.street || '—'}{customer.number ? `, ${customer.number}` : ''}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">CEP</span>
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">CEP</span>
                     <p className="font-mono font-bold text-slate-800">{customer.zipCode || '—'}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Cidade / UF</span>
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Cidade / UF</span>
                     <p className="font-bold text-slate-800">{customer.city || '—'} - {customer.state || '—'}</p>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Código IBGE</span>
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Código IBGE</span>
                     <p className="font-mono font-black text-slate-800">{customer.ibgeCode || 'não informado'}</p>
                   </div>
                 </div>
@@ -256,22 +256,22 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               {/* 4 Cards de Indicadores Consolidados */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                  <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
                     <ShoppingCart size={13} className="text-purple-600" /> Total Faturado
                   </span>
                   <p className="text-xl font-black text-slate-900">{formatBRL(customerData.totalPurchased)}</p>
-                  <p className="text-[10px] font-bold text-slate-500">{customerData.finalizedOrders.length} pedido(s) confirmados</p>
+                  <p className="text-xs font-bold text-slate-500">{customerData.finalizedOrders.length} pedido(s) confirmados</p>
                 </div>
 
                 <div className="bg-emerald-50/60 p-5 rounded-2xl border border-emerald-100 space-y-1">
-                  <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
+                  <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
                     <CheckCircle2 size={13} className="text-emerald-600" /> Total Pago / Quitado
                   </span>
                   <p className="text-xl font-black text-emerald-700">{formatBRL(customerData.totalPaid)}</p>
                   <div className="w-full bg-emerald-200/60 h-1.5 rounded-full overflow-hidden mt-1">
                     <div className="bg-emerald-600 h-full rounded-full transition-all" style={{ width: `${customerData.paymentPercentage}%` }}></div>
                   </div>
-                  <p className="text-[10px] font-bold text-emerald-800">{customerData.paymentPercentage.toFixed(1)}% do valor liquidado</p>
+                  <p className="text-xs font-bold text-emerald-800">{customerData.paymentPercentage.toFixed(1)}% do valor liquidado</p>
                 </div>
 
                 <div className={`p-5 rounded-2xl border space-y-1 ${
@@ -279,14 +279,14 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                     ? 'bg-rose-50/60 border-rose-200 text-rose-900' 
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}>
-                  <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+                  <span className="text-[11px] font-black uppercase tracking-widest flex items-center gap-1">
                     <AlertTriangle size={13} className={customerData.totalDebt > 0 ? 'text-rose-600' : 'text-slate-400'} /> 
                     Débito em Aberto
                   </span>
                   <p className={`text-xl font-black ${customerData.totalDebt > 0 ? 'text-rose-700' : 'text-slate-900'}`}>
                     {formatBRL(customerData.totalDebt)}
                   </p>
-                  <p className="text-[10px] font-bold">
+                  <p className="text-xs font-bold">
                     {customerData.ordersWithDebt.length > 0 
                       ? `${customerData.ordersWithDebt.length} pedido(s) com pendência` 
                       : 'Nenhuma pendência financeira'}
@@ -294,14 +294,14 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                 </div>
 
                 <div className="bg-blue-50/60 p-5 rounded-2xl border border-blue-100 space-y-1">
-                  <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1">
+                  <span className="text-[11px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1">
                     <Scale size={13} className="text-blue-600" /> Saldo em Toneladas (TON)
                   </span>
                   <p className="text-xl font-black text-blue-900">{customerData.pendingTonBalance.toFixed(2)} TON</p>
                   <div className="w-full bg-blue-200/60 h-1.5 rounded-full overflow-hidden mt-1">
                     <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${customerData.withdrawalPercentage}%` }}></div>
                   </div>
-                  <p className="text-[10px] font-bold text-blue-800">
+                  <p className="text-xs font-bold text-blue-800">
                     {customerData.totalTonWithdrawn.toFixed(1)} / {customerData.totalTonPurchased.toFixed(1)} TON retiradas
                   </p>
                 </div>
@@ -333,7 +333,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               {/* Últimos Pedidos Recentes do Cliente */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Últimos Pedidos de Venda</h4>
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Últimos Pedidos de Venda</h4>
                   <button 
                     onClick={() => setActiveTab('ORDERS')} 
                     className="text-xs font-black text-purple-600 hover:underline flex items-center gap-1"
@@ -343,7 +343,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                 </div>
 
                 {customerData.customerOrders.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-400 text-xs font-bold">
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs font-bold">
                     Nenhum pedido de venda registrado para este cliente até o momento.
                   </div>
                 ) : (
@@ -359,7 +359,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-black text-sm text-slate-900">{order.reference}</span>
-                                <span className="text-[10px] font-bold text-slate-400">• Emissão: {order.date}</span>
+                                <span className="text-xs font-bold text-slate-500">• Emissão: {order.date}</span>
                               </div>
                               <p className="text-xs text-slate-500 font-medium">
                                 {(order.items || []).filter(Boolean).map(i => `${i?.productName || 'Item'} (${i?.quantity || 0}T)`).join(', ')}
@@ -370,22 +370,22 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                           <div className="flex items-center gap-4">
                             <div className="text-right">
                               <p className="text-xs font-black text-slate-900">{formatBRL(order.total)}</p>
-                              <p className="text-[10px] font-bold text-slate-400">Pago: {formatBRL(totalPaid)}</p>
+                              <p className="text-xs font-bold text-slate-500">Pago: {formatBRL(totalPaid)}</p>
                             </div>
                             {order.status === OrderStatus.BUDGET ? (
-                              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-300">
+                              <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-300">
                                 Orçamento
                               </span>
                             ) : paymentStatus === 'PAGO' ? (
-                              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
                                 <CheckCircle2 size={11} /> Quitado
                               </span>
                             ) : paymentStatus === 'PARCIAL' ? (
-                              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
                                 <Clock size={11} /> Parcial (Débito: {formatBRL(remainingDebt)})
                               </span>
                             ) : (
-                              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
                                 <AlertTriangle size={11} /> Pendente ({formatBRL(remainingDebt)})
                               </span>
                             )}
@@ -404,13 +404,13 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           {activeTab === 'ORDERS' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
                   Lista Completa de Pedidos ({customerData.customerOrders.length})
                 </h4>
               </div>
 
               {customerData.customerOrders.length === 0 ? (
-                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-400 text-sm font-bold">
+                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-500 text-sm font-bold">
                   Nenhum pedido encontrado para este cliente.
                 </div>
               ) : (
@@ -438,9 +438,9 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-black text-sm text-slate-900">{order.reference}</span>
-                                <span className="text-[10px] font-bold text-slate-400">• Data: {order.date}</span>
+                                <span className="text-xs font-bold text-slate-500">• Data: {order.date}</span>
                                 {order.sellerName && (
-                                  <span className="text-[10px] font-bold text-slate-400">• Vendedor: {order.sellerName}</span>
+                                  <span className="text-xs font-bold text-slate-500">• Vendedor: {order.sellerName}</span>
                                 )}
                               </div>
                             </div>
@@ -448,25 +448,25 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
 
                           <div className="flex items-center gap-2 flex-wrap">
                             {order.status === OrderStatus.BUDGET ? (
-                              <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-300">
+                              <span className="text-[11px] font-black uppercase px-3 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-300">
                                 Orçamento
                               </span>
                             ) : paymentStatus === 'PAGO' ? (
-                              <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-3 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">
                                 <CheckCircle2 size={12} /> Quitado (100%)
                               </span>
                             ) : paymentStatus === 'PARCIAL' ? (
-                              <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
                                 <Clock size={12} /> Parcial (Débito: {formatBRL(remainingDebt)})
                               </span>
                             ) : (
-                              <span className="text-[10px] font-black uppercase px-3 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
+                              <span className="text-[11px] font-black uppercase px-3 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-300 flex items-center gap-1">
                                 <AlertTriangle size={12} /> Débito: {formatBRL(remainingDebt)}
                               </span>
                             )}
 
                             {order.nfeStatus === 'autorizada' && (
-                              <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
                                 NF-e {order.nfeNumero || 'Emitida'}
                               </span>
                             )}
@@ -476,7 +476,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                         {/* Itens do Pedido */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-xl">
                           <div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Itens Adquiridos</span>
+                            <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">Itens Adquiridos</span>
                             <ul className="space-y-1">
                               {(order.items || []).filter(Boolean).map((it, idx) => (
                                 <li key={idx} className="font-bold text-slate-700 flex justify-between">
@@ -492,17 +492,17 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                               <span>Valor Total:</span>
                               <span>{formatBRL(order.total)}</span>
                             </div>
-                            <div className="flex justify-between text-emerald-700 font-bold text-[11px]">
+                            <div className="flex justify-between text-emerald-700 font-bold text-xs">
                               <span>Total Liquidado:</span>
                               <span>{formatBRL(totalPaid)} ({financialProgress.toFixed(0)}%)</span>
                             </div>
                             {remainingDebt > 0 && (
-                              <div className="flex justify-between text-rose-700 font-black text-[11px]">
+                              <div className="flex justify-between text-rose-700 font-black text-xs">
                                 <span>Saldo Devedor:</span>
                                 <span>{formatBRL(remainingDebt)}</span>
                               </div>
                             )}
-                            <div className="flex justify-between text-blue-700 font-bold text-[11px] pt-1">
+                            <div className="flex justify-between text-blue-700 font-bold text-xs pt-1">
                               <span>Expedição / Carga:</span>
                               <span>{totalWithdrawn.toFixed(1)} de {totalQty.toFixed(1)} TON</span>
                             </div>
@@ -521,14 +521,14 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
                     Pedidos com Débitos Pendentes ({customerData.ordersWithDebt.length})
                   </h4>
                   <p className="text-xs text-slate-500 font-medium">Controle de títulos e valores ainda não liquidados</p>
                 </div>
                 {customerData.totalDebt > 0 && (
                   <div className="px-4 py-2 bg-rose-50 border border-rose-200 rounded-xl text-right">
-                    <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">Dívida Consolidada</span>
+                    <span className="text-[11px] font-black text-rose-600 uppercase tracking-wider block">Dívida Consolidada</span>
                     <span className="text-base font-black text-rose-700">{formatBRL(customerData.totalDebt)}</span>
                   </div>
                 )}
@@ -550,21 +550,21 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-black text-base text-slate-900">{order.reference}</span>
-                              <span className="text-xs text-slate-400 font-bold">• Data: {order.date}</span>
+                              <span className="text-xs text-slate-500 font-bold">• Data: {order.date}</span>
                             </div>
                             <p className="text-xs text-slate-600 font-medium mt-0.5">
                               {(order.items || []).filter(Boolean).map(i => `${i?.productName || 'Item'} (${i?.quantity || 0}T)`).join(', ')}
                             </p>
                           </div>
                           <div className="text-right">
-                            <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest block">Débito Restante</span>
+                            <span className="text-[11px] font-black text-rose-600 uppercase tracking-widest block">Débito Restante</span>
                             <span className="text-lg font-black text-rose-700">{formatBRL(remainingDebt)}</span>
                           </div>
                         </div>
 
                         {/* Barra de Progresso de Quitação */}
                         <div className="space-y-1 bg-slate-50 p-3 rounded-xl">
-                          <div className="flex justify-between text-[11px] font-black text-slate-700">
+                          <div className="flex justify-between text-xs font-black text-slate-700">
                             <span>Valor Total do Pedido: {formatBRL(order.total)}</span>
                             <span className="text-emerald-700">Total Abatido / Pago: {formatBRL(totalPaid)} ({financialProgress.toFixed(0)}%)</span>
                           </div>
@@ -584,13 +584,13 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           {activeTab === 'RECEIPTS' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
                   Comprovantes e Recibos Emitidos ({customerData.receipts.length})
                 </h4>
               </div>
 
               {customerData.receipts.length === 0 ? (
-                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-400 text-sm font-bold">
+                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-500 text-sm font-bold">
                   Nenhum recibo de pagamento emitido para este cliente.
                 </div>
               ) : (
@@ -605,11 +605,11 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                           <div className="flex items-center gap-2">
                             <span className="font-black text-sm text-slate-900">{receipt.id}</span>
                             {receipt.orderReference && (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                              <span className="text-xs font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
                                 Pedido: {receipt.orderReference}
                               </span>
                             )}
-                            <span className="text-xs text-slate-400 font-bold">• Data: {receipt.date}</span>
+                            <span className="text-xs text-slate-500 font-bold">• Data: {receipt.date}</span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium">
                             {receipt.description || 'Recebimento de Venda'} • Forma: <strong className="font-bold text-slate-800">{receipt.paymentMethod || 'PIX / Dinheiro'}</strong>
@@ -621,7 +621,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                         <div className="text-right">
                           <span className="text-base font-black text-emerald-700">{formatBRL(receipt.amount)}</span>
                           {receipt.remainingDebt !== undefined && receipt.remainingDebt > 0 && (
-                            <p className="text-[10px] font-bold text-slate-400">Saldo Restante: {formatBRL(receipt.remainingDebt)}</p>
+                            <p className="text-xs font-bold text-slate-500">Saldo Restante: {formatBRL(receipt.remainingDebt)}</p>
                           )}
                         </div>
                         <button
@@ -643,7 +643,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
           {activeTab === 'WITHDRAWALS' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
                   Romaneios e Viagens de Caminhão ({customerData.withdrawals.length})
                 </h4>
                 <div className="text-xs font-black text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
@@ -652,7 +652,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
               </div>
 
               {customerData.withdrawals.length === 0 ? (
-                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-400 text-sm font-bold">
+                <div className="p-12 text-center bg-slate-50 rounded-3xl border border-slate-200 text-slate-500 text-sm font-bold">
                   Nenhuma retirada de carga registrada para este cliente.
                 </div>
               ) : (
@@ -666,15 +666,15 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-black text-sm text-slate-900 font-mono">Placa: {w.plateNumber}</span>
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                            <span className="text-xs font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
                               Ticket: {w.weighTicketNumber || 'S/N'}
                             </span>
                             {w.orderReference && (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                              <span className="text-xs font-black px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
                                 Pedido: {w.orderReference}
                               </span>
                             )}
-                            <span className="text-xs text-slate-400 font-bold">• Data: {w.date}</span>
+                            <span className="text-xs text-slate-500 font-bold">• Data: {w.date}</span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium">
                             Motorista: <strong className="font-bold text-slate-800">{w.driverName}</strong> (Doc: {w.driverCpf || 'N/I'}) • Tipo: {w.truckModel || 'Truck'}
@@ -685,7 +685,7 @@ export const CustomerDetailsModal: React.FC<CustomerDetailsModalProps> = ({
                       <div className="text-right">
                         <span className="text-base font-black text-blue-700">{w.quantityWithdrawn.toFixed(2)} TON</span>
                         {w.remainingBalanceQuantity !== undefined && (
-                          <p className="text-[10px] font-bold text-slate-400">Saldo Pedido: {w.remainingBalanceQuantity.toFixed(2)} TON</p>
+                          <p className="text-xs font-bold text-slate-500">Saldo Pedido: {w.remainingBalanceQuantity.toFixed(2)} TON</p>
                         )}
                       </div>
                     </div>

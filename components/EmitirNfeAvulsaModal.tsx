@@ -610,7 +610,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       footer={(
         <div className="flex items-center gap-2 flex-wrap">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total</p>
             <p className="text-base font-black text-slate-900 leading-none">{formatBRL(total)}</p>
           </div>
           {isPreview ? (
@@ -704,13 +704,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           )}
           {isPreview && (
             <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950">
-              <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
                 <Eye size={14} /> Prévia em PDF do rascunho — revise antes de transmitir
               </p>
               <p className="text-xs font-medium mt-1">
                 Destinatário: <b>{activeCustomer.name}</b> · {items.length} item(ns) · Total {formatBRL(total)}
               </p>
-              <p className="text-[11px] text-emerald-800 mt-1">
+              <p className="text-xs text-emerald-800 mt-1">
                 Este PDF é uma prévia interna (RASCUNHO / SEM VALOR FISCAL). O DANFE oficial só existe depois da autorização da SEFAZ.
               </p>
             </div>
@@ -726,7 +726,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               <AlertCircle className="text-rose-600 mt-0.5 shrink-0" size={20} />
             )}
             <div className="text-xs space-y-1">
-              <p className="font-black uppercase tracking-wider text-[10px]">
+              <p className="font-black uppercase tracking-wider text-[11px]">
                 {validation.valid ? 'Validação Cadastral Pronta para Envio SEFAZ' : 'Pendências Cadastrais Detectadas'}
               </p>
               {validation.valid ? (
@@ -764,7 +764,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsNewCustomer(false)}
-                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${
+                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-xs sm:text-xs font-bold transition-all ${
                     !isNewCustomer ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -776,7 +776,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     setIsNewCustomer(true);
                     setSelectedCustomerId('');
                   }}
-                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${
+                  className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-xs sm:text-xs font-bold transition-all ${
                     isNewCustomer ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -800,7 +800,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1">
                   {filteredCustomers.length === 0 ? (
-                    <p className="col-span-full text-center text-xs text-slate-400 font-medium py-6">
+                    <p className="col-span-full text-center text-xs text-slate-500 font-medium py-6">
                       Nenhum cliente encontrado para essa busca.
                     </p>
                   ) : filteredCustomers.map((c, idx) => (
@@ -815,8 +815,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                       }`}
                     >
                       <p className="font-bold text-slate-800 text-xs truncate">{c.name || 'Sem nome'}</p>
-                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">{c.document || 'Sem documento'}</p>
-                      <p className="text-[9px] text-slate-400 truncate">{c.city || '—'} - {c.state || '—'}</p>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">{c.document || 'Sem documento'}</p>
+                      <p className="text-xs text-slate-500 truncate">{c.city || '—'} - {c.state || '—'}</p>
                     </button>
                   ))}
                 </div>
@@ -824,7 +824,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Nome / Razão Social *</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Nome / Razão Social *</label>
                   <input 
                     type="text" 
                     value={destName} 
@@ -834,7 +834,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">CNPJ ou CPF (Apenas dígitos) *</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">CNPJ ou CPF (Apenas dígitos) *</label>
                   <input 
                     type="text" 
                     value={destDoc} 
@@ -845,8 +845,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Inscrição Estadual (IE)</label>
-                    <label className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer">
+                    <label className="text-[11px] font-black uppercase text-slate-500">Inscrição Estadual (IE)</label>
+                    <label className="flex items-center gap-1 text-xs text-slate-500 cursor-pointer">
                       <input 
                         type="checkbox" 
                         checked={destIsentoIe} 
@@ -867,7 +867,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Logradouro / Endereço</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Logradouro / Endereço</label>
                   <input 
                     type="text" 
                     value={destStreet} 
@@ -877,7 +877,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Número e Bairro</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Número e Bairro</label>
                   <div className="flex gap-2">
                     <input 
                       type="text" 
@@ -896,7 +896,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Município, UF e CEP</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Município, UF e CEP</label>
                   <div className="flex gap-2">
                     <input 
                       type="text" 
@@ -924,7 +924,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   <span className="text-xs font-black text-purple-900 uppercase flex items-center gap-1.5">
                     <ShoppingBag size={15} className="text-purple-700" /> Vincular esta NF-e a um Pedido de Venda deste Cliente?
                   </span>
-                  <span className="text-[10px] text-purple-600 font-bold">
+                  <span className="text-xs text-purple-600 font-bold">
                     Abate o saldo sem duplicar venda no financeiro
                   </span>
                 </div>
@@ -975,7 +975,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   })}
                 </select>
                 {selectedOrderId && (
-                  <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                  <p className="text-xs text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
                     <CheckCircle2 size={13} /> Esta nota fiscal abaterá a quantidade diretamente do pedido selecionado acima. Não gerará pedido duplicado e não lançará receita no caixa.
                   </p>
                 )}
@@ -1002,11 +1002,11 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               {items.map((it, idx) => (
                 <div key={it.id} className="p-3 sm:p-4 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-3">
                   <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                    <span className="text-[11px] font-black uppercase text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
                       Item #{idx + 1}
                     </span>
                     {it.cClassTrib && (
-                      <span className="text-[9px] font-black uppercase text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="text-[11px] font-black uppercase text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
                         Reforma Trib. (RTC): {it.cClassTrib === 'AGRO_60' ? 'Insumo Agro -60%' : 'Insumo Agro 0%'}
                       </span>
                     )}
@@ -1014,7 +1014,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(idx)}
-                        className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                        className="text-slate-500 hover:text-rose-600 p-1 transition-colors"
                         title="Remover Item"
                       >
                         <Trash2 size={16} />
@@ -1025,7 +1025,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     {/* Produto Selecionável ou Nome */}
                     <div className="col-span-2 md:col-span-2 space-y-1">
-                      <label className="text-[9px] font-black uppercase text-slate-400">Produto do Catálogo</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">Produto do Catálogo</label>
                       <select
                         value={it.productId}
                         onChange={e => handleUpdateItem(idx, 'productId', e.target.value)}
@@ -1038,7 +1038,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase text-slate-400">Quantidade</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">Quantidade</label>
                       <input 
                         type="number" 
                         step="0.1" 
@@ -1049,7 +1049,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase text-slate-400">Valor Unitário (R$)</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">Valor Unitário (R$)</label>
                       <input 
                         type="number" 
                         step="0.01" 
@@ -1061,7 +1061,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
                     {/* CFOP Editável */}
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase text-purple-700">CFOP *</label>
+                      <label className="text-[11px] font-black uppercase text-purple-700">CFOP *</label>
                       <input 
                         type="text" 
                         value={it.cfop} 
@@ -1073,7 +1073,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
                     {/* CST Editável */}
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase text-blue-700">CST / CSOSN *</label>
+                      <label className="text-[11px] font-black uppercase text-blue-700">CST / CSOSN *</label>
                       <input 
                         type="text" 
                         value={it.cst} 
@@ -1085,7 +1085,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs pt-1 border-t border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-mono">NCM: {it.ncm}</span>
+                    <span className="text-xs text-slate-500 font-mono">NCM: {it.ncm}</span>
                     <span className="font-black text-slate-800">Total do Item: {formatBRL(it.total)}</span>
                   </div>
                 </div>
@@ -1102,7 +1102,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </span>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400">Natureza da Operação</label>
+                <label className="text-[11px] font-black uppercase text-slate-500">Natureza da Operação</label>
                 <input 
                   type="text" 
                   value={naturezaOperacao} 
@@ -1112,7 +1112,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400">Forma de Pagamento</label>
+                <label className="text-[11px] font-black uppercase text-slate-500">Forma de Pagamento</label>
                 <select 
                   value={paymentMethod} 
                   onChange={e => setPaymentMethod(e.target.value as any)} 
@@ -1129,7 +1129,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               {/* Dados do Veículo / Transporte da Carga */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-slate-200/60">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Placa Veículo</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Placa Veículo</label>
                   <input 
                     type="text" 
                     value={placaCaminhao} 
@@ -1139,7 +1139,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Motorista</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Motorista</label>
                   <input 
                     type="text" 
                     value={nomeMotorista} 
@@ -1149,7 +1149,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Ticket Balança</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500">Ticket Balança</label>
                   <input 
                     type="text" 
                     value={ticketBalanca} 
@@ -1159,7 +1159,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-purple-700">Nº Pedido Externo</label>
+                  <label className="text-[11px] font-black uppercase text-purple-700">Nº Pedido Externo</label>
                   <input 
                     type="text" 
                     value={pedidoExterno} 
@@ -1178,7 +1178,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                       <span className="text-xs font-black text-slate-900 block">
                         Lançar no Contas a Receber (Pendente)?
                       </span>
-                      <p className="text-[10px] text-slate-600">
+                      <p className="text-xs text-slate-600">
                         {generateFinance 
                           ? 'Cria lançamento no Contas a Receber como PENDENTE. O valor só entrará no saldo do caixa/banco após a confirmação do recebimento no Financeiro.' 
                           : 'Desativado: Não cria título no financeiro (ideal quando o faturamento for controlado à parte).'}
@@ -1214,7 +1214,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                 <Info size={16} className="text-purple-600" /> 4. Informações Complementares (infCpl)
               </span>
 
-              <p className="text-[10px] text-slate-500">
+              <p className="text-xs text-slate-500">
                 Só este texto vai para os Dados Adicionais da NF-e. As cláusulas cadastradas no produto entram automaticamente; edite ou apague à vontade.
               </p>
 
@@ -1244,7 +1244,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           {/* Totais do Documento */}
           <div className="p-4 sm:p-5 bg-slate-900 text-white rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-0.5 w-full text-left">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+              <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">
                 Resumo da Nota Fiscal Avulsa
               </span>
               <p className="text-xs text-slate-400">
@@ -1252,7 +1252,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </p>
             </div>
             <div className="text-right w-full sm:w-auto">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Valor Total NF-e:</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Valor Total NF-e:</span>
               <p className="text-2xl font-black text-emerald-400">{formatBRL(total)}</p>
             </div>
           </div>

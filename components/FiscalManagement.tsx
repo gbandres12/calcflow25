@@ -286,7 +286,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               Notas Fiscais Emitidas (NF-e 55)
             </h1>
           </div>
-          <p className="text-xs sm:text-sm font-bold text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">
             Histórico de notas, DANFE e fila de faturamento.
           </p>
         </div>
@@ -323,22 +323,22 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total NF-e Autorizadas</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Total NF-e Autorizadas</span>
           <p className="text-2xl font-black text-slate-800">{totalNfeAutorizadas} Notas</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Faturamento Fiscal</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Faturamento Fiscal</span>
           <p className="text-2xl font-black text-purple-700">{formatBRL(totalValorFaturado)}</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fila de Emissão</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Fila de Emissão</span>
           <p className="text-2xl font-black text-amber-600">{pendingInDateRange.length} Vendas</p>
-          <p className="text-xs text-slate-400">{formatBRL(totalValorPendente)}</p>
+          <p className="text-xs text-slate-500">{formatBRL(totalValorPendente)}</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1 cursor-pointer hover:border-amber-300 transition-colors" onClick={() => setActiveTab('rascunhos')}>
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rascunhos</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Rascunhos</span>
           <p className="text-2xl font-black text-amber-700">{draftsInDateRange.length} Notas</p>
-          <p className="text-xs text-slate-400">Salvas para revisar e emitir</p>
+          <p className="text-xs text-slate-500">Salvas para revisar e emitir</p>
         </div>
       </div>
 
@@ -402,7 +402,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600"
               >
                 <X size={13} />
               </button>
@@ -412,7 +412,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               type="button"
               onClick={syncAuthorizedFromSefaz}
               disabled={syncingAll}
-              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-[10px] font-black disabled:opacity-50 inline-flex items-center gap-1"
+              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black disabled:opacity-50 inline-flex items-center gap-1"
               title="Consulta a SEFAZ e atualiza notas que ainda aparecem como autorizadas"
             >
               <RefreshCw size={12} className={syncingAll ? 'animate-spin' : ''} />
@@ -439,7 +439,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
                   <tr>
                     <th className="px-4 py-3">Nº</th>
                     <th className="px-4 py-3">Destinatário</th>
@@ -457,12 +457,12 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                           <div className="flex items-center gap-1.5">
                             <span>{row.nfe.nfeNumero ? `Nº ${row.nfe.nfeNumero}` : '—'}</span>
                             {(row.nfe.tipo === 'avulsa' || row.order.isAvulsa) && (
-                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black rounded-full uppercase">
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[11px] font-black rounded-full uppercase">
                                 Avulsa
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] font-bold text-slate-400">{row.order.reference}</p>
+                          <p className="text-xs font-bold text-slate-500">{row.order.reference}</p>
                         </td>
                         <td className="px-4 py-3">{customer?.name || 'Cliente Geral'}</td>
                         <td className={`px-4 py-3 ${row.nfe.nfeStatus === 'cancelada' ? 'font-black text-rose-700' : ''}`}>{nfeStatusLabel(row.nfe.nfeStatus)}</td>
@@ -472,7 +472,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                             <button
                               onClick={() => syncFromSefaz(row.order, row.nfe.id)}
                               disabled={syncingId === row.nfe.id || syncingAll}
-                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black disabled:opacity-50"
+                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black disabled:opacity-50"
                             >
                               {syncingId === row.nfe.id ? '…' : 'SEFAZ'}
                             </button>
@@ -481,13 +481,13 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                                 setSelectedDanfeLinkedNfeId(row.nfe.id);
                                 setSelectedDanfeOrder(row.order);
                               }}
-                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black inline-flex items-center gap-1"
+                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-black inline-flex items-center gap-1"
                             >
                               <Eye size={12} /> DANFE
                             </button>
                             <button
                               onClick={() => openDuplicate(row.order, row.nfe.id)}
-                              className="px-3 py-1.5 bg-white border border-purple-200 text-purple-800 rounded-xl text-[10px] font-black inline-flex items-center gap-1"
+                              className="px-3 py-1.5 bg-white border border-purple-200 text-purple-800 rounded-xl text-xs font-black inline-flex items-center gap-1"
                               title="Emitir uma nota nova com os mesmos dados"
                             >
                               <Copy size={12} /> Duplicar
@@ -533,7 +533,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                     <div>
                       <p className="font-black text-slate-900 text-sm">Pedido {order.reference}</p>
                       <p className="text-xs font-bold text-slate-700">Cliente: {customer?.name || 'Não identificado'}</p>
-                      <p className="text-[11px] text-rose-700 font-bold">{validation.valid ? '' : validation.errors[0]}</p>
+                      <p className="text-xs text-rose-700 font-bold">{validation.valid ? '' : validation.errors[0]}</p>
                     </div>
                     <div className="text-right space-y-2">
                       <p className="text-base font-black">{formatBRL(order.total)}</p>
@@ -553,7 +553,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-[11px]">
+                  <div className="flex flex-wrap gap-2 text-xs">
                     {(order.items || []).map((it, idx) => (
                       <span key={idx} className="bg-white px-2.5 py-1 rounded-lg border font-bold">
                         {it.productName}: {it.quantity} {it.unit || 'Ton'}
@@ -595,12 +595,12 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-black text-slate-900 text-sm">Pedido {row.order.reference}</p>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[9px] font-black rounded-full uppercase border border-amber-200">
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[11px] font-black rounded-full uppercase border border-amber-200">
                           Rascunho · {row.nfe.tipo}
                         </span>
                       </div>
                       <p className="text-xs font-bold text-slate-700">Cliente: {customer?.name || 'Não identificado'}</p>
-                      <p className="text-[11px] text-slate-500 font-medium mt-1">
+                      <p className="text-xs text-slate-500 font-medium mt-1">
                         {row.nfe.nfeNaturezaOperacao || 'Natureza não informada'} · {row.nfe.items?.length || 0} item(ns)
                       </p>
                     </div>

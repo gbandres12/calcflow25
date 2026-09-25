@@ -20,7 +20,7 @@ export const SalesOrderObservations: React.FC<Props> = ({ order }) => {
         Observações
       </h2>
       <div
-        className={`text-[10px] whitespace-pre-wrap ${content ? '' : 'h-6'}`}
+        className={`text-xs whitespace-pre-wrap ${content ? '' : 'h-6'}`}
         style={{ color: SO.text }}
       >
         {content || ''}

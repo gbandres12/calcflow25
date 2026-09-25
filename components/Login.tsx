@@ -195,8 +195,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                       <p className="text-xs font-black text-slate-100 truncate group-hover:text-purple-300 transition-colors">
                         {u.name.split(' (')[0]}
                       </p>
-                      <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">{u.role}</p>
-                      <p className="text-[10px] text-slate-500 font-mono truncate">{u.email}</p>
+                      <p className="text-[11px] text-purple-400 font-bold uppercase tracking-wider">{u.role}</p>
+                      <p className="text-xs text-slate-500 font-mono truncate">{u.email}</p>
                     </div>
                   </button>
                 );
@@ -248,7 +248,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-black text-slate-800 tracking-tight">Acesso ao Sistema</h2>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
                     Supabase Auth
                   </span>
                 </div>
@@ -257,7 +257,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo</label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -272,7 +272,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -288,7 +288,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                     <button
                       type="button"
                       onClick={() => { setMode('forgot'); setError(''); setForgotSuccess(''); setForgotEmail(email); }}
-                      className="text-[11px] font-bold text-purple-600 hover:text-purple-800 transition"
+                      className="text-xs font-bold text-purple-600 hover:text-purple-800 transition"
                     >
                       Esqueci minha senha
                     </button>
@@ -325,7 +325,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                     <CheckCircle2 size={20} className="shrink-0 text-emerald-600 mt-0.5" />
                     <div>
                       <p className="text-xs font-bold">{forgotSuccess}</p>
-                      <p className="text-[11px] text-emerald-700 mt-1">
+                      <p className="text-xs text-emerald-700 mt-1">
                         Verifique sua caixa de entrada e também a pasta de spam.
                       </p>
                     </div>
@@ -341,7 +341,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
               ) : (
                 <form onSubmit={handleResetPassword} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Cadastrado</label>
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Cadastrado</label>
                     <div className="relative">
                       <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                       <input 
@@ -390,7 +390,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
 
               <form onSubmit={handleRegister} className="space-y-3.5 max-h-[58vh] overflow-y-auto pr-1 custom-scrollbar">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Gestor / Diretor *</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Gestor / Diretor *</label>
                   <div className="relative">
                     <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -405,7 +405,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Usina / Mineração *</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Usina / Mineração *</label>
                   <div className="relative">
                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -421,7 +421,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ da Usina</label>
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ da Usina</label>
                     <input 
                       type="text" 
                       value={registerCnpj}
@@ -431,7 +431,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp / Telefone</label>
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp / Telefone</label>
                     <input 
                       type="text" 
                       value={registerPhone}
@@ -443,7 +443,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo *</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Corporativo *</label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -458,7 +458,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Criar Senha de Acesso *</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Criar Senha de Acesso *</label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
@@ -491,14 +491,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
           )}
 
           <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
               © 2026 CalcárioFlow ERP • Moagem Mineral
             </p>
             {showDemoAccess && (
             <button
               type="button"
               onClick={() => setShowDbModal(true)}
-              className="text-[11px] text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-purple-50 transition"
+              className="text-xs text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-purple-50 transition"
             >
               <Database size={13} className="text-emerald-500" />
               Status Supabase Cloud

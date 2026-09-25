@@ -57,9 +57,9 @@ const MillingProcess: React.FC<MillingProcessProps> = ({ onMilling, availableBri
                   className="w-full bg-slate-50 border-2 border-slate-100 focus:border-amber-500 outline-none p-6 rounded-2xl text-2xl font-bold transition-all pr-20"
                   placeholder="0.0"
                 />
-                <span className="absolute right-6 top-1/2 -translate-y-1/2 font-bold text-slate-400">TONS</span>
+                <span className="absolute right-6 top-1/2 -translate-y-1/2 font-bold text-slate-500">TONS</span>
               </div>
-              <p className="text-xs text-slate-400">Disponível em estoque: <span className="font-bold text-slate-600">{availableBritado.toFixed(1)} T</span></p>
+              <p className="text-xs text-slate-500">Disponível em estoque: <span className="font-bold text-slate-600">{availableBritado.toFixed(1)} T</span></p>
             </div>
 
             <div className="shrink-0 flex items-center justify-center bg-amber-500 w-12 h-12 rounded-full shadow-lg text-slate-900">
@@ -79,9 +79,9 @@ const MillingProcess: React.FC<MillingProcessProps> = ({ onMilling, availableBri
                   className="w-full bg-slate-50 border-2 border-slate-100 focus:border-emerald-500 outline-none p-6 rounded-2xl text-2xl font-bold transition-all pr-20"
                   placeholder="0.0"
                 />
-                <span className="absolute right-6 top-1/2 -translate-y-1/2 font-bold text-slate-400">TONS</span>
+                <span className="absolute right-6 top-1/2 -translate-y-1/2 font-bold text-slate-500">TONS</span>
               </div>
-              <p className="text-xs text-slate-400">Rendimento estimado: <span className="font-bold text-emerald-600">95%</span></p>
+              <p className="text-xs text-slate-500">Rendimento estimado: <span className="font-bold text-emerald-600">95%</span></p>
             </div>
           </div>
 
@@ -115,9 +115,9 @@ const MillingProcess: React.FC<MillingProcessProps> = ({ onMilling, availableBri
             <div key={i} className="bg-white p-4 rounded-xl flex items-center justify-between shadow-sm border border-slate-100">
               <div>
                 <p className="text-sm font-bold text-slate-800">{h.date}</p>
-                <p className="text-xs text-slate-400">{h.in}T Britado → {h.out}T Moído</p>
+                <p className="text-xs text-slate-500">{h.in}T Britado → {h.out}T Moído</p>
               </div>
-              <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-1 rounded-full uppercase">
+              <span className="bg-rose-50 text-rose-600 text-[11px] font-bold px-2 py-1 rounded-full uppercase">
                 Perda: {h.loss}
               </span>
             </div>

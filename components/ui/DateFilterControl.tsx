@@ -91,7 +91,7 @@ export const DateFilterControl: React.FC<DateFilterControlProps> = ({
       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
         <div className="flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl">
           <Calendar size={13} className={iconColor} />
-          <span className="text-[11px] text-slate-400 font-bold uppercase">De</span>
+          <span className="text-[11px] text-slate-500 font-bold uppercase">De</span>
           <input
             type="date"
             value={startDate}
@@ -100,7 +100,7 @@ export const DateFilterControl: React.FC<DateFilterControlProps> = ({
           />
         </div>
         <div className="flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl">
-          <span className="text-[11px] text-slate-400 font-bold uppercase">Até</span>
+          <span className="text-[11px] text-slate-500 font-bold uppercase">Até</span>
           <input
             type="date"
             value={endDate}
@@ -114,7 +114,7 @@ export const DateFilterControl: React.FC<DateFilterControlProps> = ({
             type="button"
             onClick={onReset}
             title="Limpar filtro de período"
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
           >
             <X size={14} />
           </button>

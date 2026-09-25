@@ -228,7 +228,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-black text-slate-800 tracking-tight">Equipe & Gestão de Pessoas</h2>
-            <span className="bg-slate-200 text-slate-700 text-[10px] font-black uppercase px-2.5 py-1 rounded-full">
+            <span className="bg-slate-200 text-slate-700 text-[11px] font-black uppercase px-2.5 py-1 rounded-full">
               {users.length} Integrantes
             </span>
           </div>
@@ -265,7 +265,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <Scale size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Operadores de Balança</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Operadores de Balança</span>
             <p className="text-xl font-black text-slate-800">
               {users.filter(u => u.role === UserRole.OPERATOR).length}
             </p>
@@ -277,7 +277,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <Factory size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Supervisores Operacionais</span>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Supervisores Operacionais</span>
             <p className="text-xl font-black text-amber-800">
               {users.filter(u => u.role === UserRole.OPERATIONAL_SUPERVISOR).length}
             </p>
@@ -289,7 +289,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <Briefcase size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gerentes / Comercial</span>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Gerentes / Comercial</span>
             <p className="text-xl font-black text-slate-800">
               {users.filter(u => u.role === UserRole.MANAGER).length}
             </p>
@@ -301,7 +301,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <Shield size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Administradores</span>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Administradores</span>
             <p className="text-xl font-black text-slate-800">
               {users.filter(u => u.role === UserRole.ADMIN).length}
             </p>
@@ -328,7 +328,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                 <th className="px-6 py-3.5">Colaborador / Função</th>
                 <th className="px-4 py-3.5">Nível de Acesso</th>
                 <th className="px-4 py-3.5">Permissões por Módulo</th>
@@ -340,7 +340,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-slate-400 text-xs font-medium">Nenhum colaborador encontrado.</td>
+                  <td colSpan={6} className="py-16 text-center text-slate-500 text-xs font-medium">Nenhum colaborador encontrado.</td>
                 </tr>
               ) : (
                 filteredUsers.map(user => {
@@ -355,7 +355,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <div>
                             <p className="text-sm font-bold text-slate-900 leading-tight">{user.name}</p>
                             <p className="text-xs text-slate-500 font-medium">{user.jobTitle || 'Equipe de Operações'}</p>
-                            <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-0.5">
+                            <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
                                <span className="flex items-center gap-1"><Mail size={11} /> {user.email}</span>
                                {user.phone && <span className="flex items-center gap-1"><Phone size={11} /> {user.phone}</span>}
                             </div>
@@ -363,42 +363,42 @@ const UserManagement: React.FC<UserManagementProps> = ({
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase border flex items-center gap-1 w-fit ${getRoleBadge(user.role)}`}>
+                        <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase border flex items-center gap-1 w-fit ${getRoleBadge(user.role)}`}>
                           {user.role === UserRole.OPERATOR ? <Scale size={11} /> : user.role === UserRole.MANAGER ? <Briefcase size={11} /> : <Shield size={11} />}
                           {user.role}
                         </span>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-1 max-w-[220px]">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            perms.financial ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 line-through'
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                            perms.financial ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-500 border-slate-200 opacity-60 line-through'
                           }`} title={perms.financial ? "Financeiro Liberado" : "Financeiro Restrito"}>
                             💰 Financeiro
                           </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            perms.users ? 'bg-purple-50 text-purple-800 border-purple-300' : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 line-through'
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                            perms.users ? 'bg-purple-50 text-purple-800 border-purple-300' : 'bg-slate-100 text-slate-500 border-slate-200 opacity-60 line-through'
                           }`} title={perms.users ? "Usuários Liberado" : "Usuários Restrito"}>
                             👥 Usuários
                           </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            perms.inventory ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 line-through'
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                            perms.inventory ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-500 border-slate-200 opacity-60 line-through'
                           }`} title={perms.inventory ? "Estoque Liberado" : "Estoque Restrito"}>
                             📦 Estoque
                           </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            perms.orders ? 'bg-blue-50 text-blue-800 border-blue-300' : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 line-through'
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                            perms.orders ? 'bg-blue-50 text-blue-800 border-blue-300' : 'bg-slate-100 text-slate-500 border-slate-200 opacity-60 line-through'
                           }`} title={perms.orders ? "Carregamentos Liberado" : "Carregamentos Restrito"}>
                             🚚 Carregamentos
                           </span>
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`flex items-center gap-1 text-[11px] font-bold ${user.status === 'Ativo' ? 'text-emerald-700' : 'text-slate-400'}`}>
+                        <span className={`flex items-center gap-1 text-xs font-bold ${user.status === 'Ativo' ? 'text-emerald-700' : 'text-slate-500'}`}>
                           {user.status === 'Ativo' ? <CheckCircle2 size={13}/> : <XCircle size={13}/>}
                           {user.status}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-xs text-slate-400">
+                      <td className="px-4 py-4 text-xs text-slate-500">
                         {user.lastAccess ? new Date(user.lastAccess).toLocaleDateString('pt-BR') : 'Hoje'}
                       </td>
                       <td className="px-6 py-4">
@@ -432,7 +432,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                 setUserToDelete(user);
                                 setIsDeleteModalOpen(true);
                               }}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-slate-200" 
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-slate-200" 
                               title="Excluir usuário"
                             >
                               <Trash2 size={14} />
@@ -460,7 +460,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">Configure perfis operacionais vs. administrativos e controle de acesso</p>
                 </div>
-                <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
+                <button onClick={handleClose} className="p-1 text-slate-500 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
              </div>
 
              <form onSubmit={handleSubmit} className="space-y-5">
@@ -550,7 +550,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                      placeholder="operador.balanca@usina.com.br" 
                    />
                    {editingUser && (
-                     <p className="text-[10px] text-slate-400">O e-mail de acesso é a credencial de login e não pode ser alterado diretamente.</p>
+                     <p className="text-xs text-slate-500">O e-mail de acesso é a credencial de login e não pode ser alterado diretamente.</p>
                    )}
                 </div>
 
@@ -567,7 +567,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       className="w-full p-2.5 bg-white border border-slate-300 rounded-lg outline-none focus:border-slate-800 font-medium text-sm"
                       placeholder="Mínimo 6 caracteres"
                     />
-                    <p className="text-[10px] text-slate-500">Essa senha só aparece no WhatsApp e na cópia se o convite for enviado nesta sessão. Depois, o colaborador usa “Esqueci minha senha”.</p>
+                    <p className="text-xs text-slate-500">Essa senha só aparece no WhatsApp e na cópia se o convite for enviado nesta sessão. Depois, o colaborador usa “Esqueci minha senha”.</p>
                   </div>
                 )}
 
@@ -578,7 +578,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <KeyRound size={15} className="text-amber-600" />
                       <span className="text-xs font-black text-amber-900 uppercase tracking-wide">Redefinir Senha do Usuário</span>
                     </div>
-                    <p className="text-[11px] text-amber-800 font-medium">
+                    <p className="text-xs text-amber-800 font-medium">
                       Como administrador, você pode definir uma nova senha diretamente — sem necessidade de e-mail de recuperação.
                       Deixe em branco para não alterar a senha atual.
                     </p>
@@ -594,17 +594,17 @@ const UserManagement: React.FC<UserManagementProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(v => !v)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
                         tabIndex={-1}
                       >
                         {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
                     {newPassword.length > 0 && newPassword.length < 6 && (
-                      <p className="text-[11px] text-rose-600 font-bold">A senha deve ter pelo menos 6 caracteres.</p>
+                      <p className="text-xs text-rose-600 font-bold">A senha deve ter pelo menos 6 caracteres.</p>
                     )}
                     {newPassword.trim().length >= 6 && (
-                      <p className="text-[11px] text-emerald-700 font-bold">✓ Nova senha será aplicada ao salvar.</p>
+                      <p className="text-xs text-emerald-700 font-bold">✓ Nova senha será aplicada ao salvar.</p>
                     )}
                   </div>
                 )}
@@ -665,7 +665,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                          <option value="Inativo">Inativo / Bloqueado</option>
                       </select>
                       {editingUser?.id === currentUser?.id && (
-                        <p className="text-[10px] text-slate-400">Você não pode inativar a sua própria conta ativa em uso.</p>
+                        <p className="text-xs text-slate-500">Você não pode inativar a sua própria conta ativa em uso.</p>
                       )}
                    </div>
                 </div>
@@ -679,35 +679,35 @@ const UserManagement: React.FC<UserManagementProps> = ({
                         Painel de Permissões de Acesso por Módulo
                       </h4>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
                       Personalizar Acessos
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-xs text-slate-500 font-medium">
                     Marque os checkboxes para liberar ou restringir os módulos específicos do sistema para este colaborador:
                   </p>
 
                   {/* Atalhos Rápidos */}
-                  <div className="flex flex-wrap gap-2 text-[11px] pb-1">
+                  <div className="flex flex-wrap gap-2 text-xs pb-1">
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, permissions: { financial: true, users: true, inventory: true, orders: true } }))}
-                      className="px-2.5 py-1.5 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-all flex items-center gap-1 text-[10px]"
+                      className="px-2.5 py-1.5 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-all flex items-center gap-1 text-xs"
                     >
                       🛡️ Perfil Administrativo (Geral)
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, permissions: { financial: false, users: true, inventory: true, orders: true } }))}
-                      className="px-2.5 py-1.5 bg-amber-100 text-amber-900 font-bold rounded-lg hover:bg-amber-200 border border-amber-300 transition-all flex items-center gap-1 text-[10px]"
+                      className="px-2.5 py-1.5 bg-amber-100 text-amber-900 font-bold rounded-lg hover:bg-amber-200 border border-amber-300 transition-all flex items-center gap-1 text-xs"
                     >
                       👷 Perfil Operacional (Supervisor)
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, permissions: { financial: false, users: false, inventory: true, orders: true } }))}
-                      className="px-2.5 py-1.5 bg-emerald-100 text-emerald-900 font-bold rounded-lg hover:bg-emerald-200 border border-emerald-300 transition-all flex items-center gap-1 text-[10px]"
+                      className="px-2.5 py-1.5 bg-emerald-100 text-emerald-900 font-bold rounded-lg hover:bg-emerald-200 border border-emerald-300 transition-all flex items-center gap-1 text-xs"
                     >
                       ⚖️ Perfil Operacional (Balança)
                     </button>
@@ -719,7 +719,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <label className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
                       formData.permissions.financial 
                         ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-xs' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}>
                       <input 
                         type="checkbox"
@@ -735,7 +735,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <DollarSign size={14} className={formData.permissions.financial ? "text-emerald-600" : "text-slate-400"} />
                           Financeiro
                         </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        <p className="text-xs text-slate-500 font-medium mt-0.5 leading-snug">
                           Caixa diário, extrato, DRE, contas bancárias e emissão fiscal (NF-e).
                         </p>
                       </div>
@@ -745,7 +745,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <label className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
                       formData.permissions.users 
                         ? 'bg-purple-50/90 border-purple-300 text-purple-950 shadow-xs' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}>
                       <input 
                         type="checkbox"
@@ -761,7 +761,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <Users size={14} className={formData.permissions.users ? "text-purple-600" : "text-slate-400"} />
                           Usuários
                         </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        <p className="text-xs text-slate-500 font-medium mt-0.5 leading-snug">
                           Gestão de equipe, cadastro de funcionários e controle de permissões.
                         </p>
                       </div>
@@ -771,7 +771,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <label className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
                       formData.permissions.inventory 
                         ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-xs' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}>
                       <input 
                         type="checkbox"
@@ -787,7 +787,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <Package size={14} className={formData.permissions.inventory ? "text-amber-600" : "text-slate-400"} />
                           Estoque
                         </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        <p className="text-xs text-slate-500 font-medium mt-0.5 leading-snug">
                           Estoque mineral, sacaria moída, britagem e ordens de produção.
                         </p>
                       </div>
@@ -797,7 +797,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <label className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 select-none ${
                       formData.permissions.orders 
                         ? 'bg-blue-50/90 border-blue-300 text-blue-950 shadow-xs' 
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                     }`}>
                       <input 
                         type="checkbox"
@@ -813,7 +813,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                           <Truck size={14} className={formData.permissions.orders ? "text-blue-600" : "text-slate-400"} />
                           Carregamentos
                         </div>
-                        <p className="text-[10px] text-slate-500 font-medium mt-0.5 leading-snug">
+                        <p className="text-xs text-slate-500 font-medium mt-0.5 leading-snug">
                           Vendas, pesagem na balança rodoviária, pátio e romaneios de carga.
                         </p>
                       </div>
@@ -825,7 +825,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
                       <ShieldCheck size={14} className="text-emerald-600" /> Convite de acesso
                    </div>
-                   <p className="text-[11px] text-slate-500">
+                   <p className="text-xs text-slate-500">
                      Após salvar, copie as credenciais ou envie o convite no WhatsApp do colaborador.
                    </p>
                 </div>

@@ -162,7 +162,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
   };
 
   const inputCls = 'w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500 placeholder:text-slate-300 placeholder:font-medium';
-  const labelCls = 'text-[10px] font-black uppercase text-slate-400 tracking-wide';
+  const labelCls = 'text-[11px] font-black uppercase text-slate-400 tracking-wide';
 
   return (
     <div className={`space-y-3 min-w-0 ${compact ? 'p-0 bg-transparent border-0' : 'p-3.5 sm:p-5 bg-slate-50 rounded-2xl sm:rounded-3xl border border-slate-100'}`}>
@@ -171,7 +171,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         <span className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
           <Truck size={16} className="text-purple-600" /> Frete & Transporte
         </span>
-        <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full ${
+        <span className={`text-[11px] font-black uppercase px-2.5 py-1 rounded-full ${
           mod === 9 ? 'bg-slate-200 text-slate-600'
           : mod === 0 ? 'bg-emerald-100 text-emerald-800'
           : mod === 1 ? 'bg-amber-100 text-amber-800'
@@ -203,10 +203,10 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
                   : 'bg-white border-slate-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50/50'
               }`}
             >
-              <p className={`text-[11px] font-black leading-tight ${active ? 'text-white' : 'text-slate-800'}`}>
+              <p className={`text-xs font-black leading-tight ${active ? 'text-white' : 'text-slate-800'}`}>
                 {m.value === 9 ? 'Sem frete' : m.value === 0 ? 'CIF' : m.value === 1 ? 'FOB' : m.sigla}
               </p>
-              <p className={`text-[9px] leading-tight mt-0.5 ${active ? 'text-purple-100' : 'text-slate-400'}`}>
+              <p className={`text-xs leading-tight mt-0.5 ${active ? 'text-purple-100' : 'text-slate-500'}`}>
                 {m.value === 9 ? 'Sem transporte (9)'
                   : m.value === 0 ? 'Remetente paga (0)'
                   : m.value === 1 ? 'Destinatário paga (1)'
@@ -219,7 +219,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         })}
       </div>
 
-      <p className="text-[10px] text-slate-500 flex items-start gap-1.5 bg-white border border-slate-200/70 rounded-xl px-3 py-2">
+      <p className="text-xs text-slate-500 flex items-start gap-1.5 bg-white border border-slate-200/70 rounded-xl px-3 py-2">
         <Info size={13} className="shrink-0 mt-0.5 text-purple-500" />
         <span>
           {mod === 9 && 'Sem ocorrência de transporte: nenhum valor de frete entra na NF-e.'}
@@ -240,7 +240,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-wide text-emerald-800">
+              <label className="text-[11px] font-black uppercase tracking-wide text-emerald-800">
                 Transportador cadastrado
               </label>
               <div className="relative">
@@ -266,7 +266,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
                 ))}
               </select>
               {transportadoresAtivos.length === 0 && transportadorSearch && (
-                <p className="text-[10px] font-semibold text-slate-500">Nenhum cadastro encontrado.</p>
+                <p className="text-xs font-semibold text-slate-500">Nenhum cadastro encontrado.</p>
               )}
             </div>
             {onAddTransportador && (
@@ -276,7 +276,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
                   setShowQuickAdd(!showQuickAdd);
                   setQuickError('');
                 }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-[10px] font-black uppercase text-emerald-800 hover:bg-emerald-100 sm:w-auto"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-[11px] font-black uppercase text-emerald-800 hover:bg-emerald-100 sm:w-auto"
               >
                 {showQuickAdd ? <X size={14} /> : <Plus size={14} />}
                 {showQuickAdd ? 'Fechar cadastro' : 'Cadastrar agora'}
@@ -285,7 +285,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           </div>
 
           {value.transportadorId && (
-            <p className="rounded-xl bg-white px-3 py-2 text-[10px] font-bold text-emerald-800">
+            <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-800">
               Cadastro selecionado: {value.transportadora?.nome}
               {value.veiculo?.placa ? ` · Placa ${value.veiculo.placa}` : ''}
             </p>
@@ -295,9 +295,9 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
             <div className="space-y-3 rounded-2xl border border-emerald-200 bg-white p-3 animate-in fade-in duration-150">
               <div>
                 <p className="text-xs font-black text-slate-800">Cadastro rápido do transportador</p>
-                <p className="text-[10px] text-slate-500">O cadastro ficará salvo para as próximas notas.</p>
+                <p className="text-xs text-slate-500">O cadastro ficará salvo para as próximas notas.</p>
               </div>
-              {quickError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] font-bold text-rose-700">{quickError}</p>}
+              {quickError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{quickError}</p>}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <input value={quick.nome} onChange={e => setQuick({ ...quick, nome: e.target.value })} placeholder="Nome / Razão social *" className={inputCls} />
                 <input value={quick.documento} onChange={e => setQuick({ ...quick, documento: e.target.value })} inputMode="numeric" placeholder="CPF / CNPJ" className={inputCls} />
@@ -309,7 +309,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
                   <input value={quick.uf} onChange={e => setQuick({ ...quick, uf: e.target.value.toUpperCase() })} maxLength={2} placeholder="UF" className={`${inputCls} w-16 text-center`} />
                 </div>
               </div>
-              <button type="button" onClick={saveQuickTransportador} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-[10px] font-black uppercase text-white hover:bg-emerald-800">
+              <button type="button" onClick={saveQuickTransportador} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-[11px] font-black uppercase text-white hover:bg-emerald-800">
                 <Save size={14} /> Salvar e usar nesta NF-e
               </button>
             </div>
@@ -336,7 +336,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           {isFobMotorista && (
             <div className="space-y-1 sm:col-span-1">
               <label className={labelCls}>Valor do frete na NF-e</label>
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] font-semibold text-amber-900">
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-900">
                 FOB: permanece <b>R$ 0,00</b> — declare só o motorista (CPF) e a placa abaixo.
               </p>
             </div>
@@ -372,7 +372,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           <button
             type="button"
             onClick={() => setShowTransportadora(!showTransportadora)}
-            className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[10px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
+            className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[11px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
           >
             <span>
               Transportadora{' '}
@@ -468,7 +468,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         <button
           type="button"
           onClick={() => setShowTransportadora(true)}
-          className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline underline-offset-2"
+          className="text-xs font-bold text-purple-700 hover:text-purple-900 underline underline-offset-2"
         >
           + Informar transportadora (opcional)
         </button>
@@ -480,7 +480,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
           <button
             type="button"
             onClick={() => setShowVolumes(!showVolumes)}
-            className="flex items-center justify-between w-full text-left text-[10px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
+            className="flex items-center justify-between w-full text-left text-[11px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
           >
             <span>Veículo & volumes (pesos)</span>
             {showVolumes ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -490,7 +490,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
               type="button"
               onClick={suggestPeso}
               title="Preencher peso com base na quantidade total dos itens (1 TON = 1000 kg)"
-              className="w-full sm:w-auto sm:ml-2 shrink-0 text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg px-2 py-2 sm:py-1"
+              className="w-full sm:w-auto sm:ml-2 shrink-0 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg px-2 py-2 sm:py-1"
             >
               Estimar peso
             </button>
@@ -584,7 +584,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         )}
 
         {!showVolumes && (
-          <p className="text-[10px] text-slate-400">
+          <p className="text-xs text-slate-500">
             {valor > 0 || value.veiculo?.placa || value.volumes?.pesoBruto
               ? `Frete R$ ${valor.toFixed(2)} · ${value.volumes?.pesoBruto ? `${value.volumes.pesoBruto} kg bruto` : 'sem peso informado'}${value.veiculo?.placa ? ` · Placa ${value.veiculo.placa}` : ''}`
               : 'Opcional: placa do caminhão, quantidade de volumes e pesos líquido/bruto (saem no DANFE).'}
@@ -593,7 +593,7 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
       </div>
 
       {!compact && comCobranca && valor <= 0 && (
-        <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
           Modalidade com frete selecionada, mas valor zerado — a nota sairá sem <b>vFrete</b>. Informe o valor se o frete for cobrado na nota.
         </p>
       )}

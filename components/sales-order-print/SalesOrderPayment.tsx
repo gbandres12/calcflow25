@@ -36,7 +36,7 @@ export const SalesOrderPayment: React.FC<Props> = ({ order }) => {
       <h2 className="text-[12px] font-bold mb-2" style={{ color: SO.navy }}>
         Forma / condições de pagamento
       </h2>
-      <table className="w-full border-collapse text-[10px]" style={{ color: SO.text }}>
+      <table className="w-full border-collapse text-xs" style={{ color: SO.text }}>
         <thead>
           <tr style={{ background: SO.navy, color: '#fff' }}>
             <th className="font-semibold text-left py-1.5 px-2">Descrição</th>

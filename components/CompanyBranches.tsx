@@ -199,9 +199,9 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
             <div>
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 {branch.name || (branch.isBranch ? 'Filial sem nome' : (currentUser.companyName || 'Matriz'))}
-                {!branch.isBranch && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Matriz</span>}
+                {!branch.isBranch && <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Matriz</span>}
               </h3>
-              <p className="text-xs text-slate-400">{branch.id}</p>
+              <p className="text-xs text-slate-500">{branch.id}</p>
             </div>
             <button
               type="button"
@@ -218,17 +218,17 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
                 <div className="flex items-center gap-2 text-sm">
                   <UsersIcon size={14} className="text-slate-400" />
                   <span className="font-semibold text-slate-700">{member.name || member.email || member.userId}</span>
-                  <span className="text-xs text-slate-400">{member.role}</span>
+                  <span className="text-xs text-slate-500">{member.role}</span>
                 </div>
                 {member.userId !== currentUser.id && (
-                  <button type="button" onClick={() => handleRevoke(branch.id, member.userId)} className="text-slate-400 hover:text-rose-600" title="Remover acesso">
+                  <button type="button" onClick={() => handleRevoke(branch.id, member.userId)} className="text-slate-500 hover:text-rose-600" title="Remover acesso">
                     <Trash2 size={14} />
                   </button>
                 )}
               </div>
             ))}
             {branch.members.length === 0 && (
-              <p className="text-xs text-slate-400 italic">Ninguém tem acesso aqui ainda.</p>
+              <p className="text-xs text-slate-500 italic">Ninguém tem acesso aqui ainda.</p>
             )}
           </div>
 
@@ -245,7 +245,7 @@ export const CompanyBranches: React.FC<Props> = ({ activeCompanyId, currentUser,
         </div>
       ))}
 
-      <div className="flex items-start gap-2 text-xs text-slate-400 px-1">
+      <div className="flex items-start gap-2 text-xs text-slate-500 px-1">
         <ShieldCheck size={14} className="mt-0.5 shrink-0" />
         <p>O que marcar aqui vale de verdade no banco de dados — quem não tiver "Ver" marcado num módulo não recebe esses dados nem contornando o app.</p>
       </div>

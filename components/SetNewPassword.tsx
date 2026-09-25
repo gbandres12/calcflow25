@@ -86,7 +86,7 @@ export const SetNewPassword: React.FC<Props> = ({ mode, onDone, onCancel }) => {
           <button
             type="button"
             onClick={() => setShow((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
             aria-label={show ? 'Esconder senha' : 'Mostrar senha'}
           >
             {show ? <EyeOff size={16} /> : <Eye size={16} />}

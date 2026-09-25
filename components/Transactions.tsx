@@ -275,7 +275,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Módulo Financeiro & Lançamentos</h2>
-            <span className="bg-purple-100 text-purple-800 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">
+            <span className="bg-purple-100 text-purple-800 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full">
               Gestão Integral
             </span>
           </div>
@@ -337,7 +337,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <ArrowUpRight size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">📥 Total de Entradas</p>
+            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">📥 Total de Entradas</p>
             <p className="text-xl font-black text-emerald-600">{formatBRL(totalInflows)}</p>
           </div>
         </div>
@@ -347,7 +347,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <ArrowDownLeft size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">📤 Total de Saídas</p>
+            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">📤 Total de Saídas</p>
             <p className="text-xl font-black text-rose-600">{formatBRL(totalOutflows)}</p>
           </div>
         </div>
@@ -357,7 +357,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <DollarSign size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">💰 Saldo Líquido</p>
+            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">💰 Saldo Líquido</p>
             <p className={`text-xl font-black ${netBalance >= 0 ? 'text-purple-700' : 'text-rose-600'}`}>
               {formatBRL(netBalance)}
             </p>
@@ -369,7 +369,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <Clock size={22} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">🟡 A Receber / Pendente</p>
+            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">🟡 A Receber / Pendente</p>
             <p className="text-xl font-black text-amber-600">{formatBRL(totalPendingInflows)}</p>
           </div>
         </div>
@@ -439,14 +439,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
           
           {/* Atalhos Rápidos de Data */}
           <div className="xl:col-span-4 flex flex-col gap-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
               <Calendar size={12} className="text-purple-600" /> Período de Conciliação
             </label>
             <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200/80">
               <button
                 type="button"
                 onClick={() => applyDatePreset('TODAY')}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${
                   activeDatePreset === 'TODAY' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
@@ -455,7 +455,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
               <button
                 type="button"
                 onClick={() => applyDatePreset('7DAYS')}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${
                   activeDatePreset === '7DAYS' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
@@ -464,7 +464,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
               <button
                 type="button"
                 onClick={() => applyDatePreset('THIS_MONTH')}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${
                   activeDatePreset === 'THIS_MONTH' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
@@ -473,7 +473,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
               <button
                 type="button"
                 onClick={() => applyDatePreset('ALL')}
-                className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${
                   activeDatePreset === 'ALL' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white'
                 }`}
               >
@@ -484,7 +484,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
           {/* Seletores Manuais de Data Início / Fim */}
           <div className="xl:col-span-3 flex flex-col gap-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
               <CalendarRange size={12} /> Intervalo Personalizado
             </label>
             <div className="flex items-center gap-2">
@@ -494,7 +494,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                 onChange={e => handleCustomDateChange('start', e.target.value)}
                 className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-xs text-slate-700"
               />
-              <span className="text-xs font-bold text-slate-400">a</span>
+              <span className="text-xs font-bold text-slate-500">a</span>
               <input
                 type="date"
                 value={endDate}
@@ -506,7 +506,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
           {/* Filtro por Cliente */}
           <div className="xl:col-span-3 flex flex-col gap-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
               <User size={12} className="text-emerald-600" /> Filtrar Contato
             </label>
             <select
@@ -523,7 +523,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
           {/* Filtro de Conta Bancária */}
           <div className="xl:col-span-2 flex flex-col gap-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
               <Landmark size={12} /> Conta / Caixa
             </label>
             <select
@@ -547,7 +547,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/70 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+              <tr className="bg-slate-50/70 text-slate-500 text-[11px] font-black uppercase tracking-widest">
                 <th className="px-6 py-4">Data</th>
                 <th className="px-6 py-4">Descrição / Contato</th>
                 <th className="px-4 py-4">Categoria / C. Custo</th>
@@ -560,7 +560,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
             <tbody className="divide-y divide-slate-50">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-16 text-slate-400 text-sm font-medium italic">
+                  <td colSpan={7} className="text-center py-16 text-slate-500 text-sm font-medium italic">
                     Nenhum lançamento financeiro encontrado com os filtros aplicados.
                   </td>
                 </tr>
@@ -576,34 +576,34 @@ export const Transactions: React.FC<TransactionsProps> = ({
                       <td className="px-6 py-4 text-xs font-bold text-slate-500 whitespace-nowrap">
                         {formatDateBR(t.date)}
                         {t.dueDate && t.dueDate !== t.date && (
-                          <span className="block text-[10px] text-slate-400">Venc: {formatDateBR(t.dueDate)}</span>
+                          <span className="block text-xs text-slate-500">Venc: {formatDateBR(t.dueDate)}</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-black text-slate-800">{t.description}</p>
                           {t.paymentMethod && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                            <span className="text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
                               {t.paymentMethod}
                             </span>
                           )}
                         </div>
                         {contact && (
-                          <p className="text-[11px] font-bold text-purple-700 pt-0.5 flex items-center gap-1">
+                          <p className="text-xs font-bold text-purple-700 pt-0.5 flex items-center gap-1">
                             <User size={11} /> {contact}
                           </p>
                         )}
                         {t.discount && t.discount > 0 ? (
-                          <span className="text-[10px] text-amber-600 font-bold block">
+                          <span className="text-xs text-amber-600 font-bold block">
                             🏷️ Desconto: {formatBRL(t.discount)} (Bruto: {formatBRL(t.originalAmount)})
                           </span>
                         ) : null}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight bg-slate-100 px-2 py-1 rounded-lg inline-block mb-0.5">
+                        <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight bg-slate-100 px-2 py-1 rounded-lg inline-block mb-0.5">
                           {t.category}
                         </span>
-                        <p className="text-[10px] font-bold text-slate-400">
+                        <p className="text-xs font-bold text-slate-500">
                           {costCenters.find(cc => cc.id === t.costCenterId)?.name || t.costCenter || 'Geral'}
                         </p>
                       </td>
@@ -613,13 +613,13 @@ export const Transactions: React.FC<TransactionsProps> = ({
                       <td className={`px-6 py-4 text-right font-black text-sm whitespace-nowrap ${isSale ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {isSale ? '+ ' : '- '} {formatBRL(t.amount)}
                         {t.paidAmount > 0 && t.paidAmount !== t.amount && (
-                          <span className="block text-[10px] text-slate-400 font-normal">
+                          <span className="block text-xs text-slate-500 font-normal">
                             Pago: {formatBRL(t.paidAmount)}
                           </span>
                         )}
                       </td>
                       <td className="px-4 py-4 text-center whitespace-nowrap">
-                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase border ${
+                        <span className={`text-[11px] font-black px-2.5 py-1 rounded-full uppercase border ${
                           t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO 
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                             : t.status === TransactionStatus.PARCIAL 
@@ -641,7 +641,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                           {isPendingOrPartial && (
                             <button
                               onClick={() => handleOpenReceivePay(t)}
-                              className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm flex items-center gap-1 ${
+                              className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase transition-all shadow-sm flex items-center gap-1 ${
                                 isSale 
                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
                                   : 'bg-rose-600 hover:bg-rose-700 text-white'
@@ -655,7 +655,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                           {isSale && (
                             <button
                               onClick={() => handleOpenReceiptForTx(t)}
-                              className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                              className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
                               title="Visualizar / Imprimir Recibo Oficial"
                             >
                               <Receipt size={16} />
@@ -668,7 +668,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
                               setFormModalType(t.type);
                               setIsFormModalOpen(true);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                             title="Editar Lançamento Completo"
                           >
                             <Pencil size={16} />
@@ -676,7 +676,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
 
                           <button
                             onClick={() => handleRequestDelete(t)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
                             title="Excluir (Protegido por Senha)"
                           >
                             <Trash2 size={16} />

@@ -6,12 +6,12 @@ export const SalesOrderSignatures: React.FC = () => (
     <div className="text-center">
       <div className="h-12" />
       <div className="border-t pt-1.5 mx-4" style={{ borderColor: SO.navy }} />
-      <p className="text-[9px] font-medium" style={{ color: SO.muted }}>Assinatura do comprador</p>
+      <p className="text-xs font-medium" style={{ color: SO.muted }}>Assinatura do comprador</p>
     </div>
     <div className="text-center">
       <div className="h-12" />
       <div className="border-t pt-1.5 mx-4" style={{ borderColor: SO.navy }} />
-      <p className="text-[9px] font-medium" style={{ color: SO.muted }}>Assinatura do recebedor</p>
+      <p className="text-xs font-medium" style={{ color: SO.muted }}>Assinatura do recebedor</p>
     </div>
   </section>
 );

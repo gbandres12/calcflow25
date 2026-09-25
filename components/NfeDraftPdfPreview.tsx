@@ -96,7 +96,7 @@ export const NfeDraftPdfPreview: React.FC<NfeDraftPdfPreviewProps> = ({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+        <p className="text-[11px] font-black uppercase tracking-wider text-amber-800">
           Prévia PDF · rascunho sem valor fiscal
         </p>
         <div className="flex gap-2">
@@ -104,7 +104,7 @@ export const NfeDraftPdfPreview: React.FC<NfeDraftPdfPreviewProps> = ({
             type="button"
             onClick={handlePrint}
             disabled={!url}
-            className="min-h-9 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold inline-flex items-center gap-1.5 disabled:opacity-40"
+            className="min-h-9 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-40"
           >
             <Printer size={13} /> Imprimir
           </button>
@@ -112,7 +112,7 @@ export const NfeDraftPdfPreview: React.FC<NfeDraftPdfPreviewProps> = ({
             type="button"
             onClick={handleDownload}
             disabled={!url}
-            className="min-h-9 px-3 py-1.5 bg-amber-600 text-white rounded-xl text-[11px] font-bold inline-flex items-center gap-1.5 disabled:opacity-40"
+            className="min-h-9 px-3 py-1.5 bg-amber-600 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-40"
           >
             <Download size={13} /> Baixar PDF
           </button>

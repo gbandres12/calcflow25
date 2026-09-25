@@ -144,7 +144,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
   };
 
   const fieldClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100';
-  const labelClass = 'mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500';
+  const labelClass = 'mb-1 block text-[11px] font-black uppercase tracking-wider text-slate-500';
   const summaryCards: Array<{
     label: string;
     value: number;
@@ -160,7 +160,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
     <div className="space-y-5 pb-24 lg:pb-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Logística e transporte</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Logística e transporte</p>
           <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Transportadores</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Cadastre caminhoneiros internos, transportadoras e motoristas de entrega para reutilizar nas notas fiscais.
@@ -180,7 +180,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
           <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4">
             <Icon size={17} className="mb-2 text-emerald-700" />
             <p className="text-xl font-black text-slate-900">{value}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
           </div>
         ))}
       </div>
@@ -209,7 +209,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
         </div>
 
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center py-14 text-center text-slate-400">
+          <div className="flex flex-col items-center py-14 text-center text-slate-500">
             <Truck size={42} strokeWidth={1.5} />
             <p className="mt-3 text-sm font-black text-slate-600">Nenhum transportador encontrado</p>
             <p className="mt-1 text-xs">Cadastre o primeiro transportador ou ajuste a busca.</p>
@@ -222,9 +222,9 @@ const Transportadores: React.FC<TransportadoresProps> = ({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate text-sm font-black text-slate-900">{item.nome}</h3>
-                      {!item.ativo && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[8px] font-black uppercase text-slate-600">Inativo</span>}
+                      {!item.ativo && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-black uppercase text-slate-600">Inativo</span>}
                     </div>
-                    <p className="mt-0.5 text-[10px] font-mono text-slate-500">{item.documento || 'CPF/CNPJ não informado'}</p>
+                    <p className="mt-0.5 text-xs font-mono text-slate-500">{item.documento || 'CPF/CNPJ não informado'}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <button type="button" onClick={() => openEdit(item)} aria-label={`Editar ${item.nome}`} className="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"><Pencil size={14} /></button>
@@ -233,8 +233,8 @@ const Transportadores: React.FC<TransportadoresProps> = ({
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black uppercase text-emerald-800">{tipoLabel[item.tipoServico]}</span>
-                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase text-blue-800">{contratacaoLabel[item.contratacao]}</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black uppercase text-emerald-800">{tipoLabel[item.tipoServico]}</span>
+                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-black uppercase text-blue-800">{contratacaoLabel[item.contratacao]}</span>
                 </div>
 
                 <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-xs text-slate-600">
@@ -264,7 +264,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
               {error && <p className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-700"><CircleAlert size={15} /> {error}</p>}
 
               <section>
-                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Identificação</p>
+                <p className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Identificação</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div><label className={labelClass}>Nome / Razão social *</label><input className={fieldClass} value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} required /></div>
                   <div><label className={labelClass}>CPF / CNPJ</label><input className={fieldClass} inputMode="numeric" value={form.documento} onChange={e => setForm({ ...form, documento: e.target.value })} placeholder="Somente dígitos" /></div>
@@ -276,7 +276,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
               </section>
 
               <section>
-                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Documentos e veículo</p>
+                <p className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Documentos e veículo</p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <div><label className={labelClass}>RNTRC / ANTT</label><input className={fieldClass} value={form.rntrc} onChange={e => setForm({ ...form, rntrc: e.target.value })} /></div>
                   <div><label className={labelClass}>Inscrição estadual</label><input className={fieldClass} value={form.ie} onChange={e => setForm({ ...form, ie: e.target.value })} /></div>
@@ -290,7 +290,7 @@ const Transportadores: React.FC<TransportadoresProps> = ({
               </section>
 
               <section>
-                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">Endereço e situação</p>
+                <p className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-700">Endereço e situação</p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="sm:col-span-3"><label className={labelClass}>Endereço</label><input className={fieldClass} value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} /></div>
                   <div className="sm:col-span-2"><label className={labelClass}>Cidade</label><input className={fieldClass} value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })} /></div>

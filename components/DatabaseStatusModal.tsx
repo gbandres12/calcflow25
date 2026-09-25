@@ -118,7 +118,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition"
           >
             <X size={20} />
           </button>
@@ -176,7 +176,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
                   <Database size={14} className="text-purple-400" />
                   Persistência Real no Banco (Supabase)
                 </h3>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-xs text-slate-400">
                   Verificação em tempo real de gravação, leitura e contagem de registros salvos na nuvem
                 </p>
               </div>
@@ -209,58 +209,58 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
             {/* Metrics Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold uppercase">
                   <ArrowUpRight size={12} className="text-cyan-400" />
                   Clientes
                 </div>
                 <div className="text-lg font-black text-white">
                   {persistenceResult ? persistenceResult.counts.customers : '...'}
                 </div>
-                <div className="text-[9px] text-slate-500">gravados em app_records</div>
+                <div className="text-xs text-slate-500">gravados em app_records</div>
               </div>
 
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold uppercase">
                   <DollarSign size={12} className="text-purple-400" />
                   Vendas / Pedidos
                 </div>
                 <div className="text-lg font-black text-white">
                   {persistenceResult ? persistenceResult.counts.salesOrders : '...'}
                 </div>
-                <div className="text-[9px] text-slate-500">gravados em app_records</div>
+                <div className="text-xs text-slate-500">gravados em app_records</div>
               </div>
 
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold uppercase">
                   <FileCheck size={12} className="text-emerald-400" />
                   Notas Fiscais
                 </div>
                 <div className="text-lg font-black text-emerald-400">
                   {persistenceResult ? persistenceResult.counts.nfeOrders : '...'}
                 </div>
-                <div className="text-[9px] text-slate-500">com chave / autorizadas</div>
+                <div className="text-xs text-slate-500">com chave / autorizadas</div>
               </div>
 
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold uppercase">
                   <Receipt size={12} className="text-blue-400" />
                   Transações Fin.
                 </div>
                 <div className="text-lg font-black text-blue-400">
                   {persistenceResult ? persistenceResult.counts.transactions : '...'}
                 </div>
-                <div className="text-[9px] text-slate-500">lançamentos de caixa</div>
+                <div className="text-xs text-slate-500">lançamentos de caixa</div>
               </div>
 
               <div className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-bold uppercase">
                   <Database size={12} className="text-amber-400" />
                   Total na Nuvem
                 </div>
                 <div className="text-lg font-black text-amber-400">
                   {persistenceResult ? persistenceResult.counts.total : '...'}
                 </div>
-                <div className="text-[9px] text-slate-500">documentos totais</div>
+                <div className="text-xs text-slate-500">documentos totais</div>
               </div>
             </div>
           </div>
@@ -268,7 +268,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
           {isAdmin && (
             <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
               <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Pastas internas da CBA</h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-slate-400">
                 Vocês têm uma empresa só. Se aparecer mais de uma pasta de produção, una na pasta atual da Alana. Não apague a pasta antiga até conferir as notas.
               </p>
               {tenantMessage && <p className="text-xs text-amber-300">{tenantMessage}</p>}
@@ -337,7 +337,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
 
           {/* Configuration details */}
           <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Variáveis Detectadas no Ambiente
             </h3>
             <div className="space-y-2 text-xs">
@@ -364,7 +364,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
                 </span>
               </div>
             </div>
-            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/30 text-[11px] text-purple-200 leading-relaxed">
+            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-800/30 text-xs text-purple-200 leading-relaxed">
               💡 <strong>Dica de Autenticação:</strong> No painel do Supabase, em <em>Authentication &gt; Providers &gt; Email</em>, você pode desmarcar a opção <em>"Confirm email"</em> se quiser que os novos operadores acessem imediatamente sem precisar clicar em links de ativação por e-mail.
             </div>
           </div>
@@ -390,7 +390,7 @@ export const DatabaseStatusModal: React.FC<DatabaseStatusModalProps> = ({ isOpen
               </button>
             </div>
 
-            <pre className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] font-mono text-purple-200/90 overflow-x-auto max-h-44 scrollbar-thin">
+            <pre className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-mono text-purple-200/90 overflow-x-auto max-h-44 scrollbar-thin">
               {SUPABASE_SQL_SCHEMA}
             </pre>
           </div>

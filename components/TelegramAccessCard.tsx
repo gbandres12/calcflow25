@@ -147,7 +147,7 @@ export const TelegramAccessCard: React.FC = () => {
         </div>
         <button
           onClick={loadLinks}
-          className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
           title="Atualizar lista"
         >
           <RefreshCw size={16} />
@@ -162,7 +162,7 @@ export const TelegramAccessCard: React.FC = () => {
 
       {pairing ? (
         <div className="mb-6 p-5 bg-slate-900 text-white rounded-[1.5rem]">
-          <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-2">
+          <p className="text-[11px] uppercase tracking-widest font-black text-slate-400 mb-2">
             Mande esta mensagem para o bot
           </p>
           <div className="flex items-center gap-3 flex-wrap">
@@ -186,7 +186,7 @@ export const TelegramAccessCard: React.FC = () => {
               </a>
             )}
           </div>
-          <p className="mt-3 text-[11px] text-slate-400 font-medium">
+          <p className="mt-3 text-xs text-slate-500 font-medium">
             O código vale por 10 minutos e só pode ser usado uma vez.
             {pairing.botUsername ? ` Bot: @${pairing.botUsername}.` : ' Defina TELEGRAM_BOT_USERNAME para mostrar o link direto.'}
           </p>
@@ -203,7 +203,7 @@ export const TelegramAccessCard: React.FC = () => {
       )}
 
       <div>
-        <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-3">Chats conectados</p>
+        <p className="text-[11px] uppercase tracking-widest font-black text-slate-400 mb-3">Chats conectados</p>
         {loading ? (
           <p className="text-xs text-slate-400 font-medium">Carregando...</p>
         ) : links.length === 0 ? (
@@ -217,14 +217,14 @@ export const TelegramAccessCard: React.FC = () => {
               >
                 <div>
                   <p className="text-sm font-bold text-slate-800">{link.displayName || 'Usuário'}</p>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-xs text-slate-500 font-medium">
                     {link.role} · chat {link.chatId}
                     {link.lastSeenAt ? ` · visto em ${new Date(link.lastSeenAt).toLocaleDateString('pt-BR')}` : ''}
                   </p>
                 </div>
                 <button
                   onClick={() => revoke(link.chatId)}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                  className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                   title="Revogar acesso"
                 >
                   <Trash2 size={16} />
@@ -238,8 +238,8 @@ export const TelegramAccessCard: React.FC = () => {
       <div className="mt-6 pt-6 border-t border-slate-100">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Conferência</p>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-[11px] uppercase tracking-widest font-black text-slate-500">Conferência</p>
+            <p className="text-xs text-slate-500 font-medium">
               Compara, por pedido, a soma dos recibos com a soma das baixas no financeiro.
             </p>
           </div>

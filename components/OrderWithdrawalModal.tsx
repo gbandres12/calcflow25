@@ -268,10 +268,10 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     <CheckCircle size={18} />
                   </div>
                   <div>
-                    <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">NF-e Vinculada ao Carregamento</span>
+                    <span className="text-[11px] font-black uppercase text-emerald-800 tracking-wider">NF-e Vinculada ao Carregamento</span>
                     <p className="text-sm font-black text-slate-900">Nota Fiscal Nº {savedWithdrawal.nfeNumero}</p>
                     {savedWithdrawal.nfeChave && (
-                      <p className="text-[9px] font-mono text-slate-500 truncate max-w-xs md:max-w-md">Chave: {savedWithdrawal.nfeChave}</p>
+                      <p className="text-xs font-mono text-slate-500 truncate max-w-xs md:max-w-md">Chave: {savedWithdrawal.nfeChave}</p>
                     )}
                   </div>
                 </div>
@@ -290,32 +290,32 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
 
             <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Destinatário / Fazenda</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Destinatário / Fazenda</span>
                 <p className="font-black text-slate-800 uppercase">{customer?.name}</p>
                 <p className="text-slate-500">Doc: {customer?.document}</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido de Venda</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Pedido de Venda</span>
                 <p className="font-black text-purple-700">REF: {order.reference}</p>
                 <p className="text-slate-500">Produto: {savedWithdrawal.productName}</p>
               </div>
             </div>
 
             <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
-              <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
+              <span className="text-[11px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
                 <Scale size={14} /> Dados do Veículo e Pesagem
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-slate-800">
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Placa / Veículo</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">Placa / Veículo</span>
                   <p className="font-black text-base">{savedWithdrawal.plateNumber} {savedWithdrawal.truckModel && `(${savedWithdrawal.truckModel})`}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Motorista</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">Motorista</span>
                   <p className="font-black text-base">{savedWithdrawal.driverName || 'Não Informado'}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Quant. da nota</span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">Quant. da nota</span>
                   <p className="font-black text-xl text-emerald-700">{formatTons(savedWithdrawal.quantityWithdrawn)} t</p>
                   {savedWithdrawal.netWeight != null && (
                     <p className="text-xs font-bold text-slate-500">Peso líquido: {formatTons(savedWithdrawal.netWeight)} t</p>
@@ -323,7 +323,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 </div>
                 {savedWithdrawal.transporterName && (
                   <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase">Transportador</span>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase">Transportador</span>
                     <p className="font-black text-base">{savedWithdrawal.transporterName}</p>
                   </div>
                 )}
@@ -333,15 +333,15 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
             {/* Controle de Saldo de Retirada */}
             <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total do Pedido</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total do Pedido</span>
                 <p className="text-sm font-bold text-slate-700">{formatTons(savedWithdrawal.totalOrderQuantity)} t</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Já Retirado</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total Já Retirado</span>
                 <p className="text-sm font-bold text-emerald-600">{formatTons(savedWithdrawal.totalWithdrawnSoFar)} t</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Restante a Retirar</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Restante a Retirar</span>
                 <p className="text-sm font-black text-rose-600">{formatTons(savedWithdrawal.remainingBalanceQuantity)} t</p>
               </div>
             </div>
@@ -351,12 +351,12 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
               <div className="text-center space-y-1">
                 <div className="border-t border-slate-400 pt-2 mx-4" />
                 <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{savedWithdrawal.driverName || 'Motorista'}</p>
-                <p className="text-[9px] text-slate-400 font-bold uppercase">Assinatura do Motorista / Transportador</p>
+                <p className="text-[11px] text-slate-500 font-bold uppercase">Assinatura do Motorista / Transportador</p>
               </div>
               <div className="text-center space-y-1">
                 <div className="border-t border-slate-400 pt-2 mx-4" />
                 <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{savedWithdrawal.loadedBy || 'Expedição'}</p>
-                <p className="text-[9px] text-slate-400 font-bold uppercase">Operador de Balança / Expedição</p>
+                <p className="text-[11px] text-slate-500 font-bold uppercase">Operador de Balança / Expedição</p>
               </div>
             </div>
 
@@ -398,15 +398,15 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
             {/* Resumo de Saldos */}
             <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Comprado</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total Comprado</span>
                 <p className="text-base font-black text-slate-800">{formatTons(totalOrderQty)} t</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Já Retirado</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Já Retirado</span>
                 <p className="text-base font-black text-emerald-600">{formatTons(alreadyWithdrawn)} t</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Disponível p/ Retirada</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Disponível p/ Retirada</span>
                 <p className="text-base font-black text-purple-600">{formatTons(remainingToWithdraw)} t</p>
               </div>
             </div>
@@ -414,7 +414,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantidade da nota (t)</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Quantidade da nota (t)</label>
                   <input
                     required
                     type="text"
@@ -424,13 +424,13 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                     className="w-full p-3.5 bg-emerald-50/50 border border-emerald-200 text-emerald-900 rounded-2xl outline-none font-black text-lg focus:border-emerald-500"
                     placeholder="Ex: 46,23"
                   />
-                  <span className="text-[10px] text-slate-400 font-bold">
+                  <span className="text-xs text-slate-500 font-bold">
                     Saldo do pedido depois desta carga: <strong className="text-slate-700">{formatTons(newBalance)} t</strong>
                   </span>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Peso líquido da balança (t)</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Peso líquido da balança (t)</label>
                   <input
                     required
                     type="text"
@@ -445,7 +445,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Transportador</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Transportador</label>
                   <input
                     type="text"
                     list="withdrawal-transporters"
@@ -460,7 +460,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nº Ticket / Romaneio</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nº Ticket / Romaneio</label>
                   <input
                     required
                     type="text"
@@ -473,7 +473,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Placa do Caminhão</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Placa do Caminhão</label>
                   <input
                     required
                     type="text"
@@ -493,7 +493,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Modelo / Tipo Veículo</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Modelo / Tipo Veículo</label>
                   <input
                     type="text"
                     value={truckModel}
@@ -506,7 +506,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome do Motorista</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome do Motorista</label>
                   <input
                     required
                     type="text"
@@ -518,7 +518,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CPF do Motorista (Opcional)</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CPF do Motorista (Opcional)</label>
                   <input
                     type="text"
                     value={driverCpf}
@@ -530,7 +530,7 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações da Expedição</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Observações da Expedição</label>
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}

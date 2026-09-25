@@ -15,11 +15,11 @@ const Field: React.FC<{
   value: string;
 }> = ({ icon, label, value }) => (
   <div className="min-w-0">
-    <p className="flex items-center gap-1 text-[8px] font-medium" style={{ color: SO.muted }}>
+    <p className="flex items-center gap-1 text-xs font-medium" style={{ color: SO.muted }}>
       {icon}
       {label}
     </p>
-    <p className="text-[11px] font-semibold truncate" style={{ color: SO.text }}>{value}</p>
+    <p className="text-xs font-semibold truncate" style={{ color: SO.text }}>{value}</p>
   </div>
 );
 

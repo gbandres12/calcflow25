@@ -88,11 +88,11 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           {/* Destaque do Valor */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Recebido</span>
+              <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Valor Recebido</span>
             <p className="text-2xl sm:text-3xl font-black text-emerald-600">{formatBRL(receipt.amount)}</p>
             </div>
             <div className="text-right">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</span>
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Forma de Pagamento</span>
               <p className="text-base font-black text-slate-800">{receipt.paymentMethod || 'Dinheiro / PIX'}</p>
               {receipt.accountName && (
                 <p className="text-xs text-slate-500 font-medium">Conta: {receipt.accountName}</p>
@@ -121,15 +121,15 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
           {(receipt.totalOrderAmount !== undefined || receipt.remainingDebt !== undefined) && (
             <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl text-center">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total da Venda</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total da Venda</span>
                 <p className="text-sm font-bold text-slate-700">{formatBRL(receipt.totalOrderAmount)}</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Abatido/Pago</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total Abatido/Pago</span>
                 <p className="text-sm font-bold text-emerald-600">{formatBRL(receipt.totalPaidSoFar)}</p>
               </div>
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Devedor Restante</span>
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Devedor Restante</span>
                 <p className="text-sm font-black text-rose-600">{formatBRL(receipt.remainingDebt)}</p>
               </div>
             </div>
@@ -140,18 +140,18 @@ Recebido por: ${receipt.receivedBy || 'Financeiro'}`;
             <div className="text-center space-y-2">
               <div className="border-t border-slate-400 pt-2 mx-4" />
               <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{receipt.customerName}</p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Assinatura do Pagador</p>
+              <p className="text-[11px] text-slate-500 font-bold uppercase">Assinatura do Pagador</p>
             </div>
             <div className="text-center space-y-2">
               <div className="border-t border-slate-400 pt-2 mx-4" />
               <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{company.name}</p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">
+              <p className="text-[11px] text-slate-500 font-bold uppercase">
                 Recebido por: {receipt.receivedBy || 'Setor Financeiro'}
               </p>
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-100 flex justify-between items-center text-[9px] text-slate-400 uppercase tracking-widest">
+          <div className="pt-6 border-t border-slate-100 flex justify-between items-center text-[11px] text-slate-500 uppercase tracking-widest">
             <span>Sistema CalcárioFlow ERP • Comprovante emitido eletronicamente</span>
             <span>{new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>

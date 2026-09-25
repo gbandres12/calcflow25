@@ -54,7 +54,7 @@ _CBA Mineração_`;
         <div className="no-print text-white p-4 px-6 flex items-center justify-between shrink-0 print:hidden" style={{ background: SO.navy }}>
           <div>
             <h3 className="font-bold text-sm tracking-tight text-white">Pedido de Venda</h3>
-            <p className="text-[11px] text-slate-300">Layout A4 para impressão e PDF · {order.reference}</p>
+            <p className="text-xs text-slate-300">Layout A4 para impressão e PDF · {order.reference}</p>
           </div>
           <div className="flex items-center gap-2">
             <button

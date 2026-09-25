@@ -148,7 +148,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black tracking-tight">Dados da Empresa Emitente</h2>
-                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                <span className="text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-200 border border-purple-400/30">
                   NF-e Modelo 55
                 </span>
               </div>
@@ -194,7 +194,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Razão Social Completa (xNome) *
                 </label>
                 <input
@@ -208,7 +208,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Nome Fantasia (xFant)
                 </label>
                 <input
@@ -221,7 +221,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Regime Tributário (CRT) *
                 </label>
                 <select
@@ -236,7 +236,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   CNPJ do Emitente *
                 </label>
                 <input
@@ -250,7 +250,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Inscrição Estadual (IE) *
                 </label>
                 <input
@@ -264,7 +264,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Inscrição Municipal (IM)
                 </label>
                 <input
@@ -277,7 +277,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   CNAE Principal
                 </label>
                 <input
@@ -300,14 +300,14 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
                   2. Endereço do Estabelecimento Emitente (enderEmit)
                 </h3>
               </div>
-              <span className="text-[10px] text-slate-400">Busca automática via CEP</span>
+              <span className="text-xs text-slate-500">Busca automática via CEP</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
               {/* CEP com busca */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center justify-between">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center justify-between">
                   <span>CEP *</span>
                   {isLoadingCep && <span className="text-purple-600 flex items-center gap-1"><RefreshCw size={10} className="animate-spin" /> Buscando...</span>}
                 </label>
@@ -324,14 +324,14 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
                     type="button"
                     onClick={() => handleCepLookup(formData.cepEmitente || '')}
                     disabled={isLoadingCep}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-purple-600 rounded-lg hover:bg-slate-100 transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-500 hover:text-purple-600 rounded-lg hover:bg-slate-100 transition-colors"
                     title="Buscar dados pelo CEP"
                   >
                     <Search size={14} />
                   </button>
                 </div>
                 {cepMessage && (
-                  <p className={`text-[10px] font-medium ${cepStatus === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <p className={`text-xs font-medium ${cepStatus === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {cepMessage}
                   </p>
                 )}
@@ -339,7 +339,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Logradouro */}
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Logradouro (Rua, Rodovia, Fazenda, etc.) *
                 </label>
                 <input
@@ -354,7 +354,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Número */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Número
                 </label>
                 <input
@@ -368,7 +368,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Complemento */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Complemento
                 </label>
                 <input
@@ -382,7 +382,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Bairro */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Bairro *
                 </label>
                 <input
@@ -397,7 +397,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Cidade */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Cidade / Município *
                 </label>
                 <input
@@ -412,7 +412,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* UF */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   UF (Estado) *
                 </label>
                 <input
@@ -428,9 +428,9 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
 
               {/* Código IBGE */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center justify-between">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center justify-between">
                   <span>Código IBGE (cMun) *</span>
-                  <span className="text-[9px] text-slate-400">7 dígitos</span>
+                  <span className="text-xs text-slate-500">7 dígitos</span>
                 </label>
                 <input
                   type="text"
@@ -458,7 +458,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Telefone de Contato da Empresa
                 </label>
                 <input
@@ -471,7 +471,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   E-mail Fiscal (Recebimento de cópias)
                 </label>
                 <input
@@ -484,7 +484,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Série da NF-e
                 </label>
                 <input
@@ -496,7 +496,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Próximo Número NF-e
                 </label>
                 <input
@@ -508,7 +508,7 @@ export const CompanyFiscalSettingsModal: React.FC<CompanyFiscalSettingsModalProp
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
                   Ambiente SEFAZ
                 </label>
                 <select

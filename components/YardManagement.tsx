@@ -167,7 +167,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-black text-slate-800 tracking-tight">Pátio, Balança & Suprimentos</h2>
-            <span className="bg-slate-900 text-white text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
+            <span className="bg-slate-900 text-white text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full">
               Operacional
             </span>
           </div>
@@ -215,7 +215,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <Truck size={20} />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pesagens Realizadas</span>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pesagens Realizadas</span>
                 <p className="text-xl font-black text-slate-800">{allWithdrawals.length} Cargas</p>
               </div>
             </div>
@@ -225,7 +225,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <Scale size={20} />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Volume Total Expedido</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Volume Total Expedido</span>
                 <p className="text-xl font-black text-slate-800">
                   {formatTons(sumTons(allWithdrawals.map((item) => item.withdrawal.quantityWithdrawn || 0)))} t
                 </p>
@@ -237,7 +237,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <FileText size={20} />
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pedidos com Saldo</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Pedidos com Saldo</span>
                 <p className="text-xl font-black text-slate-800">{ordersWithAvailableBalance.length} Pedidos</p>
               </div>
             </div>
@@ -255,7 +255,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
             </div>
 
             {ordersWithAvailableBalance.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium">
+              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium">
                 Nenhum pedido de venda com saldo pendente de retirada no momento.
               </div>
             ) : (
@@ -268,10 +268,10 @@ const YardManagement: React.FC<YardManagementProps> = ({
                     <div key={order.id} className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200 transition-all flex flex-col justify-between gap-3">
                       <div>
                         <div className="flex justify-between items-start gap-2">
-                          <span className="text-[10px] font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                          <span className="text-xs font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                             {order.reference}
                           </span>
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                             Saldo: {formatTons(balance)} t
                           </span>
                         </div>
@@ -280,7 +280,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 text-xs">
-                        <span className="text-slate-400 text-[11px]">Total: {totalQty} Ton</span>
+                        <span className="text-slate-500 text-xs">Total: {totalQty} Ton</span>
                         <button
                           onClick={() => setSelectedOrderForWeigh(order)}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-1 text-xs active:scale-95"
@@ -318,7 +318,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
+                  <tr className="bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="px-4 py-3">Ticket / Data</th>
                     <th className="px-4 py-3">Cliente / Fazenda</th>
                     <th className="px-4 py-3">Veículo / Placa</th>
@@ -330,7 +330,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredWithdrawals.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400 text-xs font-medium">
+                      <td colSpan={6} className="py-12 text-center text-slate-500 text-xs font-medium">
                         Nenhum registro de pesagem encontrado.
                       </td>
                     </tr>
@@ -342,24 +342,24 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             {item.withdrawal.weighTicketNumber || item.withdrawal.id}
                           </span>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-slate-400">{item.withdrawal.date}</span>
+                            <span className="text-xs text-slate-500">{item.withdrawal.date}</span>
                             {item.withdrawal.nfeNumero ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
                                 NF-e {item.withdrawal.nfeNumero}
                               </span>
                             ) : (
-                              <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">Sem NF-e</span>
+                              <span className="text-xs text-slate-500 bg-slate-100 px-1 rounded">Sem NF-e</span>
                             )}
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-bold text-xs text-slate-900">{item.customer?.name || 'Cliente'}</p>
-                          <span className="text-[10px] text-purple-600 font-mono">Ref: {item.order.reference}</span>
+                          <span className="text-xs text-purple-600 font-mono">Ref: {item.order.reference}</span>
                         </td>
                         <td className="px-4 py-3 text-xs font-bold text-slate-800 uppercase">
                           {item.withdrawal.plateNumber}
                           {item.withdrawal.truckModel && (
-                            <span className="block text-[10px] font-normal text-slate-400 lowercase">{item.withdrawal.truckModel}</span>
+                            <span className="block text-xs font-normal text-slate-500 lowercase">{item.withdrawal.truckModel}</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
@@ -370,7 +370,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             {formatTons(item.withdrawal.quantityWithdrawn)} t
                           </span>
                           {item.withdrawal.netWeight != null && (
-                            <span className="block text-[10px] text-slate-500 mt-1">{formatTons(item.withdrawal.netWeight)} t líq.</span>
+                            <span className="block text-xs text-slate-500 mt-1">{formatTons(item.withdrawal.netWeight)} t líq.</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -438,7 +438,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                     <th className="px-6 py-3.5">Item / Descrição</th>
                     <th className="px-4 py-3.5">Categoria</th>
                     <th className="px-4 py-3.5 text-right">Estoque Atual</th>
@@ -450,17 +450,17 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredStoreItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center text-slate-400 text-xs font-medium">Nenhum item em estoque no almoxarifado.</td>
+                      <td colSpan={6} className="py-16 text-center text-slate-500 text-xs font-medium">Nenhum item em estoque no almoxarifado.</td>
                     </tr>
                   ) : (
                     filteredStoreItems.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-6 py-4">
                           <p className="text-sm font-bold text-slate-900">{item.name}</p>
-                          <span className="text-[10px] text-slate-400">Mínimo sugerido: {item.minStock} {item.unit}</span>
+                          <span className="text-xs text-slate-500">Mínimo sugerido: {item.minStock} {item.unit}</span>
                         </td>
                         <td className="px-4 py-4">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200">
                             {item.category}
                           </span>
                         </td>
@@ -470,11 +470,11 @@ const YardManagement: React.FC<YardManagementProps> = ({
                         <td className="px-4 py-4 text-xs font-bold text-slate-500">{item.unit}</td>
                         <td className="px-4 py-4 text-center">
                           {item.quantity <= item.minStock ? (
-                            <span className="bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border border-rose-200 inline-flex items-center gap-1">
+                            <span className="bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase border border-rose-200 inline-flex items-center gap-1">
                               <AlertTriangle size={11}/> Repor
                             </span>
                           ) : (
-                            <span className="bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border border-emerald-200">
+                            <span className="bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase border border-emerald-200">
                               Normal
                             </span>
                           )}
@@ -526,7 +526,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-slate-900 text-sm leading-tight">{mnt.description}</h4>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${mnt.type === 'Preventiva' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded uppercase ${mnt.type === 'Preventiva' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                           {mnt.type}
                         </span>
                       </div>
@@ -537,13 +537,13 @@ const YardManagement: React.FC<YardManagementProps> = ({
                   </div>
                   <div className="text-right sm:self-auto self-end">
                     <p className="text-sm font-black text-slate-900">R$ {mnt.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase">Lançado em Custos</span>
+                    <span className="text-[11px] font-bold text-emerald-700 uppercase">Lançado em Custos</span>
                   </div>
                 </div>
               );
             })}
             {maintenances.length === 0 && (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium">
+              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium">
                 Nenhuma ordem de manutenção registrada no período.
               </div>
             )}
@@ -562,7 +562,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">Controle de peças de reposição, EPIs e ferramentas</p>
                 </div>
-                <button onClick={() => setIsStoreModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
+                <button onClick={() => setIsStoreModalOpen(false)} className="p-1 text-slate-500 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
              </div>
 
              <form onSubmit={handleAddStore} className="space-y-4">
@@ -661,7 +661,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">Lançar Ordem de Manutenção</h3>
                   <p className="text-xs text-slate-500 font-medium">Registro de serviços e custos em maquinários</p>
                 </div>
-                <button onClick={() => setIsMaintModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
+                <button onClick={() => setIsMaintModalOpen(false)} className="p-1 text-slate-500 hover:text-slate-700 rounded-lg transition-colors"><X size={18}/></button>
               </div>
 
               <form onSubmit={handleAddMaint} className="space-y-4">
@@ -778,32 +778,32 @@ const YardManagement: React.FC<YardManagementProps> = ({
                 <h3 className="font-bold text-slate-900 text-base">{defaultCompany.name}</h3>
                 <p className="text-xs text-slate-500">Ticket de Pesagem: <strong className="font-mono text-slate-900">{viewingWithdrawal.withdrawal.weighTicketNumber}</strong></p>
               </div>
-              <button onClick={() => setViewingWithdrawal(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"><X size={18}/></button>
+              <button onClick={() => setViewingWithdrawal(null)} className="p-1 text-slate-500 hover:text-slate-700 rounded-lg"><X size={18}/></button>
             </div>
 
             <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Data</span>
+                  <span className="text-[11px] text-slate-500 font-bold uppercase">Data</span>
                   <p className="font-bold text-slate-800">{viewingWithdrawal.withdrawal.date}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Ref. Pedido</span>
+                  <span className="text-[11px] text-slate-500 font-bold uppercase">Ref. Pedido</span>
                   <p className="font-bold text-purple-700">{viewingWithdrawal.order.reference}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Veículo / Placa</span>
+                  <span className="text-[11px] text-slate-500 font-bold uppercase">Veículo / Placa</span>
                   <p className="font-black text-slate-800">{viewingWithdrawal.withdrawal.plateNumber}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Motorista</span>
+                  <span className="text-[11px] text-slate-500 font-bold uppercase">Motorista</span>
                   <p className="font-bold text-slate-800">{viewingWithdrawal.withdrawal.driverName || 'N/I'}</p>
                 </div>
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Quantidade da nota</span>
+                <span className="text-[11px] text-slate-500 font-bold uppercase">Quantidade da nota</span>
                 <p className="text-lg font-black text-emerald-700">{formatTons(viewingWithdrawal.withdrawal.quantityWithdrawn)} t</p>
                 {viewingWithdrawal.withdrawal.netWeight != null && (
                   <p className="text-xs font-bold text-slate-500">Peso líquido: {formatTons(viewingWithdrawal.withdrawal.netWeight)} t</p>
@@ -813,10 +813,10 @@ const YardManagement: React.FC<YardManagementProps> = ({
               {viewingWithdrawal.withdrawal.nfeNumero && (
                 <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between gap-2 mt-2">
                   <div>
-                    <span className="text-[9px] font-black text-purple-700 uppercase">NF-e da Carga</span>
+                    <span className="text-[11px] font-black text-purple-700 uppercase">NF-e da Carga</span>
                     <p className="font-black text-sm text-purple-950">Nº {viewingWithdrawal.withdrawal.nfeNumero}</p>
                     {viewingWithdrawal.withdrawal.nfeChave && (
-                      <p className="text-[9px] font-mono text-purple-600 truncate max-w-xs">{viewingWithdrawal.withdrawal.nfeChave}</p>
+                      <p className="text-xs font-mono text-purple-600 truncate max-w-xs">{viewingWithdrawal.withdrawal.nfeChave}</p>
                     )}
                   </div>
                   {viewingWithdrawal.withdrawal.nfeDanfeUrl && (

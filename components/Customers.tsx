@@ -315,18 +315,18 @@ const Customers: React.FC<CustomersProps> = ({
          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="p-4 bg-purple-50 text-purple-600 rounded-2xl"><UserCheck size={24}/></div>
             <div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total de Clientes</p>
+               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Total de Clientes</p>
                <p className="text-2xl font-black text-slate-800">{safeCustomerList.length}</p>
-               <p className="text-[10px] font-bold text-slate-400">Produtores & Revendas</p>
+               <p className="text-xs font-bold text-slate-500">Produtores & Revendas</p>
             </div>
          </div>
 
          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl"><ShoppingCart size={24}/></div>
             <div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturamento da Carteira</p>
+               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Faturamento da Carteira</p>
                <p className="text-2xl font-black text-slate-800">{formatBRL(walletStats.totalPurchased)}</p>
-               <p className="text-[10px] font-bold text-emerald-600 font-black">{walletStats.settledCustomersCount} cliente(s) quites</p>
+               <p className="text-xs font-bold text-emerald-600 font-black">{walletStats.settledCustomersCount} cliente(s) quites</p>
             </div>
          </div>
 
@@ -339,11 +339,11 @@ const Customers: React.FC<CustomersProps> = ({
               <AlertTriangle size={24}/>
             </div>
             <div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Débito a Receber</p>
+               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Débito a Receber</p>
                <p className={`text-2xl font-black ${walletStats.totalDebt > 0 ? 'text-rose-700' : 'text-slate-800'}`}>
                  {formatBRL(walletStats.totalDebt)}
                </p>
-               <p className="text-[10px] font-bold text-rose-600 font-black">
+               <p className="text-xs font-bold text-rose-600 font-black">
                  {walletStats.customersWithDebtCount} cliente(s) com débitos
                </p>
             </div>
@@ -352,11 +352,11 @@ const Customers: React.FC<CustomersProps> = ({
          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CheckCircle2 size={24}/></div>
             <div>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Taxa de Adimplência</p>
+               <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Taxa de Adimplência</p>
                <p className="text-2xl font-black text-slate-800">
                  {safeCustomerList.length > 0 ? Math.round(((safeCustomerList.length - walletStats.customersWithDebtCount) / safeCustomerList.length) * 100) : 100}%
                </p>
-               <p className="text-[10px] font-bold text-blue-600 font-black">Adimplência da base</p>
+               <p className="text-xs font-bold text-blue-600 font-black">Adimplência da base</p>
             </div>
          </div>
       </div>
@@ -406,7 +406,7 @@ const Customers: React.FC<CustomersProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+              <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-black uppercase tracking-widest">
                 <th className="px-8 py-4">Cliente / Contato</th>
                 <th className="px-6 py-4">Documento</th>
                 <th className="px-6 py-4 text-right">Volume Comprado</th>
@@ -439,12 +439,12 @@ const Customers: React.FC<CustomersProps> = ({
                         <div className="font-black text-slate-800 text-sm mb-1 uppercase tracking-tight group-hover:text-purple-700 transition-colors flex items-center gap-2">
                           {c.name || 'Cliente Sem Razão Social'}
                           {stats.orderCount > 0 && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-purple-100 text-purple-700">
                               {stats.orderCount} pedido(s)
                             </span>
                           )}
                         </div>
-                        <div className="flex gap-4 text-[10px] font-bold text-slate-400 uppercase">
+                        <div className="flex gap-4 text-[11px] font-bold text-slate-500 uppercase">
                           {c.email && (
                             <span className="flex items-center gap-1"><Mail size={12} className="text-purple-400" /> {c.email}</span>
                           )}
@@ -452,7 +452,7 @@ const Customers: React.FC<CustomersProps> = ({
                             <span className="flex items-center gap-1"><Phone size={12} className="text-purple-400" /> {c.phone}</span>
                           )}
                           {c.city && (
-                            <span className="text-slate-400 font-medium">{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>
+                            <span className="text-slate-500 font-medium">{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>
                           )}
                         </div>
                       </td>
@@ -462,15 +462,15 @@ const Customers: React.FC<CustomersProps> = ({
                       </td>
                       <td className="px-6 py-5 text-center">
                         {stats.totalDebt > 0.01 ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-300">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-300">
                             <AlertTriangle size={12} /> Débito: {formatBRL(stats.totalDebt)}
                           </span>
                         ) : stats.totalPurchased > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-300">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-300">
                             <CheckCircle2 size={12} /> Quitado (100%)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-black uppercase bg-slate-100 text-slate-500 border border-slate-200">
                             Sem Compras
                           </span>
                         )}
@@ -578,14 +578,14 @@ const Customers: React.FC<CustomersProps> = ({
                   <p className="text-sm font-black text-slate-700">
                     {isImporting ? 'Lendo arquivo...' : 'Selecione o arquivo CSV'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">Colunas esperadas: Nome, Documento, Email, Telefone</p>
+                  <p className="text-xs text-slate-500 mt-1">Colunas esperadas: Nome, Documento, Email, Telefone</p>
                </div>
             </div>
 
             <div className="flex gap-4">
                <button 
                   onClick={() => setIsImportModalOpen(false)}
-                  className="w-full py-4 text-xs font-black uppercase text-slate-400 hover:bg-slate-50 rounded-2xl border border-slate-200 transition-all"
+                  className="w-full py-4 text-xs font-black uppercase text-slate-500 hover:bg-slate-50 rounded-2xl border border-slate-200 transition-all"
                >
                   Cancelar
                </button>
@@ -593,7 +593,7 @@ const Customers: React.FC<CustomersProps> = ({
 
             <div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3">
                <AlertCircle size={16} className="text-blue-500" />
-               <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
                  Dica: Use ponto e vírgula (;) ou vírgula (,) como separador.
                </p>
             </div>
