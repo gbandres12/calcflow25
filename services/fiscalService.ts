@@ -509,8 +509,10 @@ export const fiscalService = {
     }
 
     const docClean = onlyDigits(customer.document);
-    if (!docClean || (docClean.length !== 11 && docClean.length !== 14)) {
+    if (!docClean) {
       errors.push('CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário é obrigatório para emissão de NF-e.');
+    } else if (docClean.length !== 11 && docClean.length !== 14) {
+      errors.push(`Documento do destinatário "${customer.document}" tem ${docClean.length} dígitos — CPF precisa de 11 e CNPJ de 14. Corrija no cadastro do cliente.`);
     }
 
     if (!customer.name || customer.name.trim().length < 2) {

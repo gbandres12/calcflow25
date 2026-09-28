@@ -1313,6 +1313,9 @@ const App: React.FC = () => {
                 {persistError
                   ? `O banco não confirmou a última gravação (${pendingSyncCount} item(ns) na fila). Não limpe o histórico nem os dados deste site neste aparelho — as notas podem estar só aqui até o reenvio.`
                   : `${pendingSyncCount} registro(s) aguardando confirmação no Supabase. Não limpe o navegador até tocar em Reenviar agora.`}
+                {persistError && (
+                  <span className="block mt-1 text-xs font-mono opacity-80 break-all">{persistError}</span>
+                )}
               </p>
               <button
                 type="button"
