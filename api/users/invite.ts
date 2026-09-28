@@ -1,6 +1,7 @@
 import { requireCompanyAccess, requireCompanyAdmin } from '../_lib/companyAdmin.js';
 import { planCompanyUserHeal, type AuthUserInfo } from '../../services/companyUsers.js';
 import { isAuthUserId } from '../../services/tenantMerge.js';
+import { buildFullAccessPermissions } from '../../services/companyPermissions.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -84,6 +85,12 @@ async function listCompanyUsers(req: any, res: any) {
       if (error) throw new Error(error.message);
     }
 
+    // Conserta também vínculos antigos que ficaram sem permissão nenhuma.
+    for (const profile of plan.users) {
+      if (!isAuthUserId(String(profile.id || ''))) continue;
+      await fillEmptyPermissions(context.admin, context.companyId, String(profile.id));
+    }
+
     for (const profile of plan.users) {
       if (!isAuthUserId(String(profile.id || ''))) continue;
       const existing = await context.admin.auth.admin.getUserById(profile.id);
@@ -140,6 +147,29 @@ async function upsertProfile(admin: any, companyId: string, profile: any) {
   if (error) throw new Error(error.message);
 }
 
+// Vínculo novo nasce com permissions = '{}' (default da coluna), e a RLS de
+// app_records (011/013) nega tudo sem read/write por módulo: o usuário entrava
+// mas nada gravava ("new row violates row-level security policy"). Preenche
+// acesso completo quando está vazio — mesmo backfill da migration 010 — e
+// preserva o que já foi delegado.
+async function fillEmptyPermissions(admin: any, companyId: string, userId: string) {
+  const { data, error } = await admin
+    .from('company_memberships')
+    .select('permissions')
+    .eq('company_id', companyId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const current = data?.permissions;
+  if (current && typeof current === 'object' && Object.keys(current).length > 0) return;
+  const { error: updateError } = await admin
+    .from('company_memberships')
+    .update({ permissions: buildFullAccessPermissions() })
+    .eq('company_id', companyId)
+    .eq('user_id', userId);
+  if (updateError) throw new Error(updateError.message);
+}
+
 async function ensureMembership(admin: any, companyId: string, userId: string, role: string) {
   const { error } = await admin.from('company_memberships').upsert({
     company_id: companyId,
@@ -147,6 +177,7 @@ async function ensureMembership(admin: any, companyId: string, userId: string, r
     role
   }, { onConflict: 'company_id,user_id' });
   if (error) throw new Error(error.message);
+  await fillEmptyPermissions(admin, companyId, userId);
 }
 
 export default async function handler(req: any, res: any) {
