@@ -247,7 +247,13 @@ export default async function handler(req: any, res: any) {
         authUpdate.password = password;
       }
 
-      await context.admin.auth.admin.updateUserById(existingAuth.id, authUpdate);
+      // E-mail sem confirmação (cadastro antigo pela tela de login) ou bloqueado
+      // impediria o colaborador de entrar — libera aqui.
+      if (!existingAuth.email_confirmed_at) authUpdate.email_confirm = true;
+      if (existingAuth.banned_until) authUpdate.ban_duration = 'none';
+
+      const { error: updateError } = await context.admin.auth.admin.updateUserById(existingAuth.id, authUpdate);
+      if (updateError) throw new Error(`Não foi possível atualizar o login: ${updateError.message}`);
     } catch (error: any) {
       return res.status(500).json({ error: error?.message || 'Não foi possível atualizar o acesso existente.' });
     }

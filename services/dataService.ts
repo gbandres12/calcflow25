@@ -906,10 +906,14 @@ export const userService = {
           if (authError.message.includes('Email not confirmed')) {
             throw new Error('E-mail ainda não confirmado no Supabase. Verifique sua caixa de entrada ou desative "Confirm email" no painel do Supabase Auth.');
           }
-          throw new Error(authError.message);
+          // Outra recusa do Supabase (bloqueio, limite de tentativas…) aparece como veio:
+          // o fallback abaixo trocava o motivo real por "Usuário não encontrado".
+          const authFailure = new Error(`Não foi possível entrar: ${authError.message}`);
+          (authFailure as any).fromSupabase = true;
+          throw authFailure;
         }
       } catch (err: any) {
-        if (err.message && (err.message.includes('E-mail') || err.message.includes('incorretos') || err.message.includes('confirmado'))) {
+        if (err?.fromSupabase || (err.message && (err.message.includes('E-mail') || err.message.includes('incorretos') || err.message.includes('confirmado')))) {
           throw err;
         }
         console.warn('[Supabase Auth] Tentando fallback para verificação de tabela:', err);
