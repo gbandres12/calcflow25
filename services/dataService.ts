@@ -398,12 +398,37 @@ const parsePendingStorageKey = (fullKey: string): { tableName: string; companyId
   return { tableName, companyId };
 };
 
+// Empresas em que o usuário logado tem vínculo. Fila de outra empresa no
+// cache do aparelho (login anterior, demo) é sempre recusada pela RLS — não
+// entra no reenvio nem na contagem do aviso. null = ainda não consultado.
+let memberCompanyIds: Set<string> | null = null;
+
+const loadMemberCompanyIds = async (): Promise<Set<string> | null> => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return null;
+    const { data, error } = await supabase
+      .from('company_memberships')
+      .select('company_id')
+      .eq('user_id', auth.user.id);
+    if (error || !Array.isArray(data)) return null;
+    memberCompanyIds = new Set(data.map((row: any) => String(row.company_id)));
+    return memberCompanyIds;
+  } catch {
+    return null;
+  }
+};
+
 const countAllBrowserPending = (): number => {
   if (typeof localStorage === 'undefined') return 0;
   let total = 0;
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i) || '';
     if (!key.startsWith('calcarioflow_') || !key.includes('__pending_')) continue;
+    const parsed = parsePendingStorageKey(key);
+    if (parsed && memberCompanyIds && !memberCompanyIds.has(parsed.companyId)) continue;
     try {
       const value = JSON.parse(localStorage.getItem(key) || '[]');
       total += Array.isArray(value) ? value.length : 0;
@@ -505,33 +530,47 @@ export const db = {
 
   async flushPending(companyId?: string) {
     const compKey = resolveCompanyKey(companyId);
+    let lastError: unknown = null;
     for (const tableName of ALL_TABLES) {
       const storageKey = getStorageKey(tableName, compKey);
       const pendingUpserts = getPendingUpserts(storageKey);
       const pendingDeletes = getPendingDeleteIds(storageKey);
-      if (pendingUpserts.length) {
-        await persistPendingUpserts(tableName, compKey, pendingUpserts);
-        confirmPendingUpserts(storageKey, pendingUpserts);
-      }
-      if (pendingDeletes.length) {
-        await persistPendingDeletes(tableName, compKey, pendingDeletes);
-        pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
+      try {
+        if (pendingUpserts.length) {
+          await persistPendingUpserts(tableName, compKey, pendingUpserts);
+          confirmPendingUpserts(storageKey, pendingUpserts);
+        }
+        if (pendingDeletes.length) {
+          await persistPendingDeletes(tableName, compKey, pendingDeletes);
+          pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
+        }
+      } catch (err) {
+        lastError = err;
       }
     }
+    if (lastError) throw lastError;
   },
 
   async flushAllPending() {
     if (typeof localStorage === 'undefined') return;
-    const seen = new Set<string>();
+    const members = await loadMemberCompanyIds();
+    const companies = new Set<string>();
     for (let i = 0; i < localStorage.length; i += 1) {
-      const fullKey = localStorage.key(i) || '';
-      const parsed = parsePendingStorageKey(fullKey);
+      const parsed = parsePendingStorageKey(localStorage.key(i) || '');
       if (!parsed) continue;
-      const stamp = `${parsed.tableName}::${parsed.companyId}`;
-      if (seen.has(stamp)) continue;
-      seen.add(stamp);
-      await this.flushPending(parsed.companyId);
+      if (members && !members.has(parsed.companyId)) continue;
+      companies.add(parsed.companyId);
     }
+    // Uma empresa com falha não trava o reenvio das outras.
+    let lastError: unknown = null;
+    for (const companyId of companies) {
+      try {
+        await this.flushPending(companyId);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (lastError) throw lastError;
   },
 
   async getTable(tableName: string, companyId?: string): Promise<any[]> {
