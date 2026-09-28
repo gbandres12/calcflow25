@@ -22,6 +22,7 @@ import {
   hasSeedMeta,
   mapSupabaseRows,
   mergeRecordsById,
+  recordUpdatedAtMs,
   remainingPendingAfterConfirm,
   remainingPendingDeletes,
   reconcileVisibleRecords,
@@ -350,6 +351,26 @@ const writeSeedMeta = async (tableName: string, companyId: string) => {
   }
 };
 
+// Pendências cuja versão no banco é mais nova (outro usuário salvou depois).
+// Reenviar essas cópias velhas desfazia o trabalho dos outros.
+const findStalePending = async (tableName: string, companyId: string, pending: any[]): Promise<any[]> => {
+  const supabase = getSupabase();
+  if (!supabase || pending.length === 0) return [];
+  const ids = pending.map((row) => String(row.id));
+  const { data, error } = await supabase
+    .from('app_records')
+    .select('id, data, updated_at')
+    .eq('table_name', tableName)
+    .eq('company_id', companyId)
+    .in('id', ids);
+  if (error || !Array.isArray(data)) return [];
+  const remoteById = new Map(mapSupabaseRows(data).map((row: any) => [String(row.id), row]));
+  return pending.filter((row) => {
+    const remote = remoteById.get(String(row.id));
+    return Boolean(remote) && recordUpdatedAtMs(remote) > recordUpdatedAtMs(row);
+  });
+};
+
 const snapshotPending = (storageKey: string) => ({
   upserts: getPendingUpserts(storageKey),
   deletes: getPendingDeleteIds(storageKey)
@@ -533,9 +554,18 @@ export const db = {
     let lastError: unknown = null;
     for (const tableName of ALL_TABLES) {
       const storageKey = getStorageKey(tableName, compKey);
-      const pendingUpserts = getPendingUpserts(storageKey);
+      let pendingUpserts = getPendingUpserts(storageKey);
       const pendingDeletes = getPendingDeleteIds(storageKey);
       try {
+        if (pendingUpserts.length) {
+          const stale = await findStalePending(tableName, compKey, pendingUpserts);
+          if (stale.length) {
+            console.warn(`[Supabase] ${stale.length} pendência(s) de '${tableName}' descartada(s): o banco tem versão mais nova.`);
+            confirmPendingUpserts(storageKey, stale);
+            const staleIds = new Set(stale.map((row) => String(row.id)));
+            pendingUpserts = pendingUpserts.filter((row) => !staleIds.has(String(row.id)));
+          }
+        }
         if (pendingUpserts.length) {
           await persistPendingUpserts(tableName, compKey, pendingUpserts);
           confirmPendingUpserts(storageKey, pendingUpserts);
@@ -578,6 +608,7 @@ export const db = {
     const storageKey = getStorageKey(tableName, compKey);
     const demo = isDemoCompany(compKey);
     const pendingAtReadStart = snapshotPending(storageKey);
+    const readStartedAt = Date.now();
 
     const supabase = getSupabase();
     if (supabase) {
@@ -624,8 +655,33 @@ export const db = {
           const records = mapSupabaseRows(data);
           const initialized = hasSeedMeta(records) || data.length > 0;
           const cleanRecords = stripSeedDocs(records);
+          const remoteById = new Map(cleanRecords.map((row: any) => [String(row.id), row]));
+          // Registro que está no cache mas não no banco foi excluído por outro
+          // usuário — some daqui também. Antes ele era regravado, e exclusão
+          // feita em um aparelho "ressuscitava" pelo cache de outro. Só fica
+          // o que foi salvo neste aparelho durante esta leitura (a gravação
+          // pode ter confirmado depois do fetch sair).
+          const RECENT_WRITE_MS = 2 * 60 * 1000;
+          const cacheStillValid = (rows: any[]) => stripSeedDocs(rows).filter((row: any) =>
+            remoteById.has(String(row.id)) || recordUpdatedAtMs(row) >= readStartedAt - RECENT_WRITE_MS
+          );
+          // Pendência mais velha que a versão do banco: outro usuário salvou
+          // depois. O banco vence — reenviar a cópia velha desfazia o trabalho
+          // dele (ex.: abatimento sumindo).
+          const isStalePending = (row: any) => {
+            const remote = remoteById.get(String(row.id));
+            return Boolean(remote) && recordUpdatedAtMs(remote) > recordUpdatedAtMs(row);
+          };
+          const stale = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey)).filter(isStalePending);
+          if (stale.length) {
+            console.warn(`[Supabase] ${stale.length} pendência(s) de '${tableName}' descartada(s): o banco tem versão mais nova.`);
+            confirmPendingUpserts(storageKey, stale);
+            const staleIds = new Set(stale.map((row: any) => String(row.id)));
+            pendingAtReadStart.upserts = pendingAtReadStart.upserts.filter((row: any) => !staleIds.has(String(row.id)));
+          }
           const latestVisible = () => {
-            const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
+            const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey))
+              .filter((row: any) => !isStalePending(row));
             const pendingDeletes = Array.from(new Set([
               ...pendingAtReadStart.deletes,
               ...getPendingDeleteIds(storageKey)
@@ -637,7 +693,7 @@ export const db = {
                 cleanRecords,
                 pendingUpserts,
                 pendingDeletes,
-                stripSeedDocs(storage.get(storageKey) || [])
+                cacheStillValid(storage.get(storageKey) || [])
               )
             };
           };
@@ -653,16 +709,6 @@ export const db = {
             storage.set(storageKey, safeRecords);
             if (!hasSeedMeta(records)) writeSeedMeta(tableName, compKey);
             retryUnconfirmed(tableName, compKey, storageKey, cleanRecords, visible.pendingUpserts, visible.pendingDeletes);
-            const remoteIds = new Set(cleanRecords.map((row) => String(row.id)));
-            const pendingIds = new Set(visible.pendingUpserts.map((row) => String(row.id)));
-            const missingRemote = safeRecords.filter((row) =>
-              row?.id && !remoteIds.has(String(row.id)) && !pendingIds.has(String(row.id))
-            );
-            if (hasAuthUser && missingRemote.length) {
-              this.upsert(tableName, compKey, missingRemote).catch((e) =>
-                console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
-              );
-            }
             return safeRecords;
           }
 
