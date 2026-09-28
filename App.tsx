@@ -583,12 +583,39 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
+    // Valor recebido que veio de recibo de pedido só muda pelo pedido: mexer
+    // aqui deixava o caixa diferente do saldo devedor do cliente.
+    const original = transactions.find(t => t.id === updatedTx.id);
+    const fromReceipt = Boolean(original?.orderId) && (
+      Boolean(original?.receiptId) || (original?.payments || []).some(p => p.receiptId)
+    );
+    if (original && fromReceipt) {
+      const receiptSum = (tx: Transaction) => (tx.payments || [])
+        .filter(p => p.receiptId)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const changedMoney =
+        Math.abs(Number(original.paidAmount || 0) - Number(updatedTx.paidAmount || 0)) > 0.01 ||
+        Math.abs(receiptSum(original) - receiptSum(updatedTx)) > 0.01 ||
+        (Boolean(original.receiptId) && original.status === TransactionStatus.CONFIRMADO &&
+          Math.abs(Number(original.amount || 0) - Number(updatedTx.amount || 0)) > 0.01);
+      if (changedMoney) {
+        const ref = orders.find(o => o.id === original.orderId)?.reference || 'do pedido';
+        toast.push(`Este valor veio de um recibo do ${ref}. Corrija em Vendas → pedido → Histórico → Corrigir recibo, para o pedido e o caixa mudarem juntos.`, 'danger');
+        return;
+      }
+    }
     const tagged = { ...updatedTx, companyId: updatedTx.companyId || activeCompanyId };
     setTransactions(prev => prev.map(t => t.id === tagged.id ? tagged : t));
     persistCloud('transactions', tagged);
   };
 
   const handleDeleteTransaction = (id: string) => {
+    const original = transactions.find(t => t.id === id);
+    if (original?.orderId && (original.receiptId || (original.payments || []).some(p => p.receiptId))) {
+      const ref = orders.find(o => o.id === original.orderId)?.reference || 'do pedido';
+      toast.push(`Este lançamento tem recibo do ${ref}. Exclua o recibo pelo pedido (Vendas → Histórico) para o saldo do cliente voltar certo.`, 'danger');
+      return;
+    }
     setTransactions(prev => prev.filter(t => t.id !== id));
     persistDelete('transactions', id);
   };
@@ -943,7 +970,9 @@ const App: React.FC = () => {
           payments: [
             ...(transaction.payments || []),
             {
-              id: newId('pmt'),
+              // id fixo por recibo+lançamento: se o updater rodar de novo, a
+              // gravação repete o mesmo registro em vez de criar outro.
+              id: `pmt-${receipt.id}-${transaction.id}`,
               transactionId: transaction.id,
               amount: appliedAmount,
               paymentDate: receipt.date,
@@ -961,7 +990,7 @@ const App: React.FC = () => {
       if (remainingReceipt <= 0.01) return updatedTransactions;
 
       const tx: Transaction = {
-        id: newId('tx'),
+        id: `tx-rcpt-${receipt.id}`,
         accountId: accId,
         costCenterId: 'cc4',
         date: receipt.date,
@@ -978,7 +1007,7 @@ const App: React.FC = () => {
         notes: receipt.notes,
         companyId: activeCompanyId,
         payments: [{
-          id: newId('pmt'),
+          id: `pmt-${receipt.id}`,
           transactionId: '',
           amount: remainingReceipt,
           paymentDate: receipt.date,
@@ -996,6 +1025,135 @@ const App: React.FC = () => {
 
   const handlePaymentReceived = (receipt: PaymentReceipt, updatedOrder: SaleOrder) => {
     applyReceiptToFinance(receipt, updatedOrder);
+  };
+
+  // Tira do financeiro tudo que um recibo lançou: a parcela dele dentro do
+  // lançamento da venda (volta o saldo em aberto) ou o lançamento avulso que
+  // ele criou (é apagado). Função pura: quem chama grava uma vez só —
+  // gravar de dentro do setState duplicava lançamento quando o React
+  // reexecuta o updater.
+  const stripReceiptFinance = (list: Transaction[], receipt: PaymentReceipt, orderId: string) => {
+    const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
+    const belongs = (tx: Transaction, p: { receiptId?: string; notes?: string; amount: number }) =>
+      p.receiptId === receipt.id ||
+      (!p.receiptId && tx.orderId === orderId && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01);
+    const next: Transaction[] = [];
+    const deleted: string[] = [];
+    const changed: Transaction[] = [];
+    list.forEach(tx => {
+      const payments = tx.payments || [];
+      const removed = payments.filter(p => belongs(tx, p));
+      if (removed.length === 0 && tx.receiptId !== receipt.id) { next.push(tx); return; }
+      const kept = payments.filter(p => !belongs(tx, p));
+      const removedAmount = removed.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      // Avulso criado só por este recibo (nasce CONFIRMADO em applyReceiptToFinance):
+      // some junto. O lançamento da venda quitado pelo recibo só perde a parcela.
+      if (tx.receiptId === receipt.id && kept.length === 0 && tx.status === TransactionStatus.CONFIRMADO) {
+        deleted.push(tx.id);
+        return;
+      }
+      const paidAmount = Math.max(0, Number(tx.paidAmount || 0) - removedAmount);
+      const amount = Number(tx.amount || 0);
+      const updated: Transaction = {
+        ...tx,
+        payments: kept,
+        paidAmount,
+        status: amount > 0 && paidAmount >= amount - 0.01
+          ? TransactionStatus.PAGO
+          : paidAmount > 0.01 ? TransactionStatus.PARCIAL : TransactionStatus.PENDENTE,
+        receiptId: tx.receiptId === receipt.id ? kept[kept.length - 1]?.receiptId : tx.receiptId,
+        paymentDate: tx.receiptId === receipt.id ? kept[kept.length - 1]?.paymentDate : tx.paymentDate
+      };
+      changed.push(updated);
+      next.push(updated);
+    });
+    return { next, deleted, changed };
+  };
+
+  // Lança um recibo no caixa (mesma regra de applyReceiptToFinance), sem efeito colateral.
+  const placeReceiptFinance = (list: Transaction[], receipt: PaymentReceipt, orderId: string) => {
+    const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
+    const changed: Transaction[] = [];
+    let remaining = Number(receipt.amount || 0);
+    const next = list.map(tx => {
+      if (tx.orderId !== orderId || tx.type !== TransactionType.SALE || remaining <= 0.01) return tx;
+      if (tx.status === TransactionStatus.CONFIRMADO && tx.receiptId) return tx; // avulso de outro recibo
+      const outstanding = Math.max(0, Number(tx.amount || 0) - Number(tx.paidAmount || 0));
+      if (outstanding <= 0.01) return tx;
+      const applied = Math.min(outstanding, remaining);
+      remaining -= applied;
+      const paidAmount = Number(tx.paidAmount || 0) + applied;
+      const updated: Transaction = {
+        ...tx,
+        paidAmount,
+        status: paidAmount >= Number(tx.amount || 0) - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
+        receiptId: receipt.id,
+        paymentDate: receipt.date,
+        paymentMethod: receipt.paymentMethod || tx.paymentMethod,
+        payments: [...(tx.payments || []), {
+          id: newId('pmt'), transactionId: tx.id, amount: applied, paymentDate: receipt.date,
+          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+        }]
+      };
+      changed.push(updated);
+      return updated;
+    });
+    if (remaining > 0.01) {
+      const id = newId('tx');
+      const tx: Transaction = {
+        id, accountId: accId, costCenterId: 'cc4', date: receipt.date,
+        type: TransactionType.SALE, status: TransactionStatus.CONFIRMADO,
+        description: `${receipt.description} - ${receipt.customerName}`,
+        category: 'Venda Calcário Moído Granel',
+        amount: remaining, paidAmount: remaining,
+        customerId: receipt.customerId, orderId, receiptId: receipt.id,
+        paymentMethod: receipt.paymentMethod, notes: receipt.notes, companyId: activeCompanyId,
+        payments: [{
+          id: newId('pmt'), transactionId: id, amount: remaining, paymentDate: receipt.date,
+          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+        }]
+      };
+      changed.push(tx);
+      return { next: [tx, ...next], changed };
+    }
+    return { next, changed };
+  };
+
+  // Corrige (next = recibo novo) ou exclui (next = null) um recibo do pedido.
+  // Pedido e caixa mudam juntos: tira o lançamento antigo e lança o novo,
+  // calculando tudo uma vez e gravando cada lançamento uma única vez.
+  const handleReviseReceipt = (order: SaleOrder, receiptId: string, next: PaymentReceipt | null) => {
+    const current = (order.receipts || []).find(r => r.id === receiptId);
+    if (!current) return;
+    const receipts = next
+      ? (order.receipts || []).map(r => (r.id === receiptId ? { ...next, id: receiptId } : r))
+      : (order.receipts || []).filter(r => r.id !== receiptId);
+    let paidSoFar = 0;
+    const total = Number(order.total || 0);
+    const recalculated = receipts.map(r => {
+      paidSoFar += Number(r.amount || 0);
+      return { ...r, totalOrderAmount: total, totalPaidSoFar: paidSoFar, remainingDebt: Math.max(0, total - paidSoFar) };
+    });
+    const updatedOrder: SaleOrder = { ...order, receipts: recalculated };
+
+    const stripped = stripReceiptFinance(transactions, current, order.id);
+    let finalList = stripped.next;
+    const toSave = new Map<string, Transaction>(stripped.changed.map(t => [t.id, t]));
+    const revised = recalculated.find(r => r.id === receiptId);
+    if (revised && !order.withoutFinance) {
+      const placed = placeReceiptFinance(finalList, revised, order.id);
+      finalList = placed.next;
+      placed.changed.forEach(t => toSave.set(t.id, t));
+    }
+
+    setTransactions(finalList);
+    stripped.deleted.forEach(id => persistDelete('transactions', id));
+    toSave.forEach(tx => persistCloud('transactions', tx));
+    setOrders(prev => prev.map(o => (o.id === order.id ? updatedOrder : o)));
+    persistCloud('sales_orders', { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId });
+    toast.push(next ? 'Recibo corrigido. O caixa foi ajustado junto.' : 'Recibo excluído. O valor voltou para o saldo devedor.', 'success');
   };
 
   const handleDeleteOrder = (orderId: string) => {
@@ -1369,6 +1527,7 @@ const App: React.FC = () => {
                 }}
                 onPostFinance={handlePostOrderFinance}
                 onPaymentReceived={handlePaymentReceived}
+                onReviseReceipt={handleReviseReceipt}
                 mode={currentView === 'quotes' ? 'quotes' : 'orders'}
               />
             </ErrorBoundary>

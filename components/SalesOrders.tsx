@@ -54,6 +54,7 @@ import {
 } from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
 import { useToast } from './ui/Toast';
+import { useConfirm } from './ui/ConfirmDialog';
 import OrderTimeline from './OrderTimeline';
 import { formatTons } from '../services/domain/loadings';
 
@@ -75,6 +76,8 @@ interface SalesOrdersProps {
   /** Pedido nasceu sem lançamento financeiro — usuário clicou pra lançar agora. */
   onPostFinance?: (order: SaleOrder) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
+  /** Corrige (next) ou exclui (null) um recibo, ajustando pedido e caixa juntos. */
+  onReviseReceipt?: (order: SaleOrder, receiptId: string, next: PaymentReceipt | null) => void;
   mode?: 'orders' | 'quotes';
 }
 
@@ -129,9 +132,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onFinalizeOrder,
   onPostFinance,
   onPaymentReceived,
+  onReviseReceipt,
   mode = 'orders'
 }) => {
   const toast = useToast();
+  const confirmDialog = useConfirm();
+  const [editingReceiptId, setEditingReceiptId] = useState<string | null>(null);
+  const [receiptDraft, setReceiptDraft] = useState<{ amount: string; date: string; paymentMethod: string; accountId: string; notes: string }>({ amount: '', date: '', paymentMethod: '', accountId: '', notes: '' });
   // Dados legados podem conter registros parciais ou nulos. Normalizar aqui evita
   // que um único cadastro inválido derrube toda a tela de vendas.
   const customers = useMemo<Customer[]>(() => {
@@ -259,6 +266,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [orderForWithdrawal, setOrderForWithdrawal] = useState<SaleOrder | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<PaymentReceipt | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<SaleOrder | null>(null);
+  // O modal guarda uma cópia do pedido; sem isto, corrigir um recibo não
+  // aparecia até fechar e abrir de novo.
+  useEffect(() => {
+    if (!selectedOrderDetails) return;
+    const fresh = orders.find(o => o.id === selectedOrderDetails.id);
+    if (fresh && fresh !== selectedOrderDetails) setSelectedOrderDetails(fresh);
+  }, [orders]);
 
   // NF-e Modals
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
@@ -2467,7 +2481,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               ) : (
                 <div className="space-y-2">
                   {selectedOrderDetails.receipts?.map(r => (
-                    <div key={r.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                    <div key={r.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:flex-wrap sm:justify-between sm:items-center gap-2">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-800">{r.id}</span>
@@ -2479,7 +2493,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           {r.date} • {r.paymentMethod} • Recebido por: {r.receivedBy || 'Financeiro'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-emerald-600 text-base">{formatBRL(r.amount)}</span>
                         <button
                           onClick={() => {
@@ -2489,7 +2503,102 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         >
                           <Printer size={12} /> Ver Recibo
                         </button>
+                        {onReviseReceipt && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReceiptId(r.id);
+                                setReceiptDraft({
+                                  amount: (Number(r.amount) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                                  date: r.date || '',
+                                  paymentMethod: r.paymentMethod || 'PIX',
+                                  accountId: r.accountId || accounts[0]?.id || '',
+                                  notes: r.notes || ''
+                                });
+                              }}
+                              className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1"
+                            >
+                              <Pencil size={12} /> Corrigir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const ok = await confirmDialog({
+                                  title: 'Excluir recibo?',
+                                  description: `O recibo de ${formatBRL(r.amount)} sai do pedido e do caixa, e o valor volta para o saldo devedor do cliente.`,
+                                  confirmLabel: 'Excluir recibo',
+                                  danger: true
+                                });
+                                if (ok) onReviseReceipt(selectedOrderDetails, r.id, null);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                              title="Excluir recibo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
+                      {editingReceiptId === r.id && (() => {
+                        const raw = String(receiptDraft.amount).trim();
+                        // "50.000,00" / "50000,5" → vírgula é centavo; "50.000" → milhar; "50.5" → decimal.
+                        const amount = raw.includes(',')
+                          ? Number(raw.replace(/\./g, '').replace(',', '.'))
+                          : /^\d{1,3}(\.\d{3})+$/.test(raw) ? Number(raw.replace(/\./g, '')) : Number(raw);
+                        const othersPaid = (selectedOrderDetails.receipts || []).filter(x => x.id !== r.id).reduce((sum, x) => sum + Number(x.amount || 0), 0);
+                        const maxAllowed = Math.max(0, Number(selectedOrderDetails.total || 0) - othersPaid);
+                        const invalid = !Number.isFinite(amount) || amount <= 0 ? 'Informe um valor maior que zero.'
+                          : amount > maxAllowed + 0.01 ? `Passa do saldo do pedido. Máximo: ${formatBRL(maxAllowed)}.`
+                          : !receiptDraft.date ? 'Informe a data.' : '';
+                        return (
+                          <div className="w-full sm:basis-full mt-2 p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Valor (R$)
+                                <input inputMode="decimal" value={receiptDraft.amount} onChange={e => setReceiptDraft(d => ({ ...d, amount: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm font-mono text-slate-800" placeholder="50000,00" />
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Data
+                                <input type="date" value={receiptDraft.date} onChange={e => setReceiptDraft(d => ({ ...d, date: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800" />
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Forma
+                                <select value={receiptDraft.paymentMethod} onChange={e => setReceiptDraft(d => ({ ...d, paymentMethod: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800">
+                                  {Array.from(new Set(['PIX', 'Dinheiro', 'Boleto', 'Transferência', 'Cartão', 'Cheque', receiptDraft.paymentMethod].filter(Boolean))).map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Caixa
+                                <select value={receiptDraft.accountId} onChange={e => setReceiptDraft(d => ({ ...d, accountId: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800">
+                                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </label>
+                            </div>
+                            <p className="text-xs text-slate-500">Use vírgula para centavos. Ex.: 50 mil = <span className="font-mono">50000</span> ou <span className="font-mono">50.000,00</span>.</p>
+                            {invalid && receiptDraft.amount !== '' && <p className="text-xs font-bold text-rose-600">{invalid}</p>}
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setEditingReceiptId(null)} className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-lg hover:bg-slate-100">Cancelar</button>
+                              <button
+                                type="button"
+                                disabled={Boolean(invalid)}
+                                onClick={() => {
+                                  const account = accounts.find(a => a.id === receiptDraft.accountId);
+                                  onReviseReceipt?.(selectedOrderDetails, r.id, {
+                                    ...r,
+                                    amount: Math.round(amount * 100) / 100,
+                                    date: receiptDraft.date,
+                                    paymentMethod: receiptDraft.paymentMethod,
+                                    accountId: receiptDraft.accountId || r.accountId,
+                                    accountName: account?.name || r.accountName,
+                                    notes: receiptDraft.notes || r.notes
+                                  });
+                                  setEditingReceiptId(null);
+                                }}
+                                className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 rounded-lg"
+                              >
+                                Salvar correção
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
