@@ -1037,7 +1037,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             )}
           </div>
         ) : (
-          filteredOrders.slice().reverse().map(order => {
+          filteredOrders.slice().sort((a, b) => {
+            // Mais recente primeiro pela numeração (PED-2026-0041 > PED-2026-0007);
+            // a ordem de gravação no banco não segue a sequência.
+            const seq = (ref?: string) => {
+              const m = String(ref || '').match(/(\d{4})\D+(\d+)\s*$/);
+              return m ? Number(m[1]) * 1e6 + Number(m[2]) : -1;
+            };
+            const diff = seq(b.reference) - seq(a.reference);
+            if (diff !== 0) return diff;
+            return String(b.date || '').localeCompare(String(a.date || ''));
+          }).map(order => {
             const customer = customers.find(c => c.id === order.customerId);
             const totalQty = order.items.reduce((s, it) => s + (it.quantity || 0), 0);
             
