@@ -1,19 +1,19 @@
 import { findSalesOrder, getAdminSupabase, patchSalesOrder } from '../_lib/supabaseAdmin.js';
 import { applyNfeStatusPatch } from '../../services/saleNfe.js';
 import { mapRemoteNfeStatus } from '../../services/nfeRemoteStatus.js';
+import { hasValidWebhookSecret } from '../_lib/webhookAuth.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 20 };
 
 function webhookAuthorized(req: any): boolean {
   const expected = (process.env.NOTAAS_WEBHOOK_SECRET || '').trim();
-  if (!expected) return true;
   const header =
     req.headers['x-webhook-secret'] ||
     req.headers['x-notaas-secret'] ||
     req.headers['authorization'] ||
     '';
-  const token = String(header).replace(/^Bearer\s+/i, '').trim();
-  return token === expected;
+  const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : header;
+  return hasValidWebhookSecret(expected, token);
 }
 
 export default async function handler(req: any, res: any) {
