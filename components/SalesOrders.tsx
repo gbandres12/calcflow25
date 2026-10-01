@@ -326,6 +326,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [productSheetBody, setProductSheetBody] = useState(DEFAULT_PRODUCT_SHEET.body);
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
+  // '' = não definido · '0' = CIF (empresa paga) · '1' = FOB (cliente paga)
+  const [freteTipo, setFreteTipo] = useState<'' | '0' | '1'>('');
   const [isBudget, setIsBudget] = useState(isQuotesView);
   // Desmarcado por padrão: carregamento/venda avulsa não entra sozinho no
   // financeiro. Quem quiser lançar de cara marca aqui; senão, lança depois
@@ -467,6 +469,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setProductSheetBody(sanitizeSalesOrderSheetBody(editingOrder.productSheetBody));
       setDiscount(String(Number(editingOrder.discount) || 0));
       setShipping(String(Number(editingOrder.shipping) || 0));
+      setFreteTipo(editingOrder.frete?.modalidade === 0 ? '0' : editingOrder.frete?.modalidade === 1 ? '1' : '');
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
       setPostFinanceNow(!editingOrder.withoutFinance);
       setNotes(String(editingOrder.notes || ''));
@@ -581,6 +584,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       subtotal: itemsSubtotal,
       discount: parseFloat(discount) || 0,
       shipping: parseFloat(shipping) || 0,
+      frete: freteTipo !== ''
+        ? { ...(editingOrder?.frete || {}), modalidade: Number(freteTipo) as 0 | 1 }
+        : (editingOrder?.frete && [0, 1].includes(Number(editingOrder.frete.modalidade))
+            ? { ...editingOrder.frete, modalidade: undefined }
+            : editingOrder?.frete),
       total: itemsSubtotal - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0),
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
       // Orçamento não tem esse conceito ainda — só passa a valer quando for
@@ -1375,7 +1383,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   )}
                   {order.shipping > 0 && (
                     <span className="px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700">
-                      Frete: +{formatBRL(order.shipping)}
+                      Frete{order.frete?.modalidade === 0 ? ' CIF' : order.frete?.modalidade === 1 ? ' FOB' : ''}: +{formatBRL(order.shipping)}
                     </span>
                   )}
                 </div>
@@ -2041,6 +2049,18 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm" 
                           placeholder="0.00" 
                         />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-bold text-slate-600 block mb-1">Tipo de Frete</label>
+                        <select
+                          value={freteTipo}
+                          onChange={e => setFreteTipo(e.target.value as '' | '0' | '1')}
+                          className="w-full p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-800 outline-none font-medium text-sm"
+                        >
+                          <option value="">Não definido</option>
+                          <option value="0">CIF — por conta da empresa</option>
+                          <option value="1">FOB — por conta do cliente</option>
+                        </select>
                       </div>
                     </div>
                   </div>

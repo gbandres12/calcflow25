@@ -154,7 +154,7 @@ export const SalesOrderPrintDocument: React.FC<Props> = ({ order, customer, comp
           <div className="px-3 py-1.5 text-[11px] font-black tracking-widest text-white uppercase" style={{ background: SO.navy }}>Resumo do pedido</div>
           <div className="border border-t-0 text-xs" style={{ borderColor: SO.border }}>
             <div className="flex justify-between px-3 py-1.5 border-b" style={{ borderColor: SO.border }}><span>Subtotal</span><strong>{formatBRL(order.subtotal)}</strong></div>
-            <div className="flex justify-between px-3 py-1.5 border-b" style={{ borderColor: SO.border }}><span>Frete</span><strong>{formatBRL(order.shipping || 0)}</strong></div>
+            <div className="flex justify-between px-3 py-1.5 border-b" style={{ borderColor: SO.border }}><span>Frete{order.frete?.modalidade === 0 ? ' (CIF)' : order.frete?.modalidade === 1 ? ' (FOB)' : ''}</span><strong>{formatBRL(order.shipping || 0)}</strong></div>
             <div className="flex justify-between px-3 py-1.5 border-b" style={{ borderColor: SO.border }}><span>Desconto</span><strong>{formatBRL(order.discount || 0)}</strong></div>
             <div className="flex justify-between px-3 py-2 text-white font-black" style={{ background: SO.green }}><span>Total geral</span><span>{formatBRL(order.total)}</span></div>
           </div>
