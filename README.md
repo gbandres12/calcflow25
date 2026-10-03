@@ -26,7 +26,9 @@ Obrigatórias: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
 Para webhook de NF-e atualizar pedidos no Supabase: `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
 
-Opcional: `NOTAAS_API_KEY`, `NOTAAS_WEBHOOK_SECRET`.
+Opcional: `NOTAAS_API_KEY`.
+
+Para receber atualizações fiscais, configure `NOTAAS_WEBHOOK_SECRET` e o mesmo segredo no provedor, no header `x-webhook-secret`, `x-notaas-secret` ou `Authorization: Bearer ...`. Sem segredo configurado, o webhook recusa POST com HTTP 401. O webhook do Telegram também exige `TELEGRAM_WEBHOOK_SECRET`.
 
 Não coloque service_role no frontend.
 

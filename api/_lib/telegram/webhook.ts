@@ -1,4 +1,5 @@
 import { getTable, upsert } from '../erpRepository.js';
+import { hasValidWebhookSecret } from '../webhookAuth.js';
 import {
   answerCallbackQuery,
   downloadFileAsBase64,
@@ -55,9 +56,7 @@ const writesEnabled = (): boolean =>
 
 function webhookAuthorized(req: any): boolean {
   const expected = (process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
-  if (!expected) return true;
-  const received = String(req.headers['x-telegram-bot-api-secret-token'] || '').trim();
-  return received === expected;
+  return hasValidWebhookSecret(expected, req.headers['x-telegram-bot-api-secret-token']);
 }
 
 function buildContext(link: TelegramLink): AgentContext {
