@@ -1638,6 +1638,8 @@ const App: React.FC = () => {
               categories={categories} 
               company={operatingCompany}
               customers={customers}
+              orders={orders}
+              onReceiptForOrder={(receipt, updatedOrder) => { handleUpdateOrder(updatedOrder); handlePaymentReceived(receipt, updatedOrder); }}
               onAddTransaction={handleAddTransaction} 
               onUpdateTransaction={handleUpdateTransaction} 
               onDeleteTransaction={handleDeleteTransaction} 
