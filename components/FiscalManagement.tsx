@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
+import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador, OrderStatus } from '../types';
 import { fiscalService } from '../services/fiscalService';
-import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe, dedupeEmittedNfeRows } from '../services/saleNfe';
+import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe, dedupeEmittedNfeRows, isFiscalOnlyOrder } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
