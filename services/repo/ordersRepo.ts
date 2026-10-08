@@ -241,13 +241,46 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
       .maybeSingle();
 
     if (!custExists) {
+      // Tenta buscar os dados reais do cliente em app_records ou no próprio pedido
+      const { data: appCustRecord } = await supabase
+        .from('app_records')
+        .select('data')
+        .eq('company_id', companyId)
+        .eq('table_name', 'customers')
+        .eq('id', customerId)
+        .maybeSingle();
+
+      const realData = appCustRecord?.data || {};
+      const custName =
+        realData.name ||
+        order.customerName ||
+        order.nfePayload?.dest?.nome ||
+        order.linkedNfe?.destinatario ||
+        `Cliente ${customerId}`;
+
       await supabase
         .schema('erp')
         .from('customers')
         .insert({
           company_id: companyId,
           id: customerId,
-          name: `Cliente ${customerId}`,
+          name: custName,
+          document: realData.document || order.nfePayload?.dest?.cpf || order.nfePayload?.dest?.cnpj || '',
+          tipo_pessoa: realData.tipoPessoa || 'PF',
+          ie: realData.ie || order.nfePayload?.dest?.ie || null,
+          isento_ie: Boolean(realData.isentoIE),
+          phone: realData.phone || null,
+          email: realData.email || null,
+          street: realData.street || order.nfePayload?.dest?.enderDest?.xLgr || null,
+          number: realData.number || order.nfePayload?.dest?.enderDest?.nro || null,
+          neighborhood: realData.neighborhood || order.nfePayload?.dest?.enderDest?.xBairro || null,
+          city: realData.city || order.nfePayload?.dest?.enderDest?.xMun || null,
+          state: realData.state || order.nfePayload?.dest?.enderDest?.UF || null,
+          zip_code: realData.zipCode || order.nfePayload?.dest?.enderDest?.CEP || null,
+          ibge_code: realData.ibgeCode || order.nfePayload?.dest?.enderDest?.cMun || null,
+          status: realData.status || 'Ativo',
+          notes: realData.notes || null,
+          total_spent: Number(realData.totalSpent || 0),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
