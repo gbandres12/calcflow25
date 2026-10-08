@@ -117,6 +117,7 @@ const Customers: React.FC<CustomersProps> = ({
       if (!c) return false;
       const cName = String(c.name || '').toLowerCase();
       const cDoc = String(c.document || '').toLowerCase();
+      const cIe = String(c.ie || '').toLowerCase();
       const cEmail = String(c.email || '').toLowerCase();
       const cPhone = String(c.phone || '').toLowerCase();
       const cCity = String(c.city || '').toLowerCase();
@@ -124,6 +125,7 @@ const Customers: React.FC<CustomersProps> = ({
       const matchSearch = !q ||
         cName.includes(q) ||
         cDoc.includes(q) ||
+        cIe.includes(q) ||
         cEmail.includes(q) ||
         cPhone.includes(q) ||
         cCity.includes(q);
@@ -429,7 +431,7 @@ const Customers: React.FC<CustomersProps> = ({
             <thead>
               <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase tracking-wider">
                 <th className="px-5 py-4">Cliente / Contato</th>
-                <th className="px-3 py-4">Documento</th>
+                <th className="px-3 py-4">Documento / IE</th>
                 <th className="px-3 py-4">Categoria</th>
                 <th className="px-3 py-4 text-right">Volume Comprado</th>
                 <th className="px-3 py-4 text-center">Situação Financeira</th>
@@ -474,7 +476,16 @@ const Customers: React.FC<CustomersProps> = ({
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-4 text-sm text-slate-700 font-mono whitespace-nowrap">{c.document || '—'}</td>
+                      <td className="px-3 py-4 text-sm font-mono whitespace-nowrap">
+                        <div className="text-slate-700">{c.document || '—'}</div>
+                        {c.ie && (
+                          <div className="mt-1">
+                            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 inline-block font-sans">
+                              IE: {c.ie}
+                            </span>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-4"><span className={`text-xs font-medium px-2 py-1 rounded-md border whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>
                       <td className="px-3 py-4 text-right whitespace-nowrap">
                         <div className="font-bold text-slate-900 text-sm">{formatBRL(totalSpent)}</div>

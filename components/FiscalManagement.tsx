@@ -26,6 +26,7 @@ interface FiscalManagementProps {
   currentUser?: User;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
+  onUpdateCustomer?: (customer: Customer) => void;
   onUpdateOrder: (order: SaleOrder) => void;
   onAddOrder?: (order: any) => void;
   onNavigate?: (view: View) => void;
@@ -41,6 +42,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   currentUser,
   transportadores = [],
   onAddTransportador,
+  onUpdateCustomer,
   onUpdateOrder,
   onNavigate,
   canConfigure = false
@@ -573,6 +575,19 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                       row.order.customerName ||
                       row.nfe.destinatarioNome ||
                       'Cliente Geral';
+                    const customerIe =
+                      row.order.nfePayload?.dest?.ie ||
+                      row.nfe.nfePayload?.dest?.ie ||
+                      row.overlay.nfePayload?.dest?.ie ||
+                      customer?.ie;
+                    const customerDoc =
+                      row.order.nfePayload?.dest?.cpf ||
+                      row.order.nfePayload?.dest?.cnpj ||
+                      row.nfe.nfePayload?.dest?.cpf ||
+                      row.nfe.nfePayload?.dest?.cnpj ||
+                      row.overlay.nfePayload?.dest?.cpf ||
+                      row.overlay.nfePayload?.dest?.cnpj ||
+                      customer?.document;
                     return (
                       <tr key={`${row.order.id}-${row.nfe.id}`} className="border-t border-slate-100">
                         <td className="px-4 py-3 font-black">
@@ -586,7 +601,17 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                           </div>
                           <p className="text-xs font-bold text-slate-500">{row.order.reference}</p>
                         </td>
-                        <td className="px-4 py-3">{customerName}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-slate-900">{customerName}</p>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
+                            {customerDoc && <span>DOC: {customerDoc}</span>}
+                            {customerIe && (
+                              <span className="font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                IE: {customerIe}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className={`px-4 py-3 ${row.nfe.nfeStatus === 'cancelada' ? 'font-black text-rose-700' : ''}`}>{nfeStatusLabel(row.nfe.nfeStatus)}</td>
                         <td className="px-4 py-3 text-right font-black">{formatBRL(row.nfe.total)}</td>
                         <td className="px-4 py-3 text-center">
@@ -668,7 +693,19 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                   <div className="flex justify-between gap-3 flex-wrap">
                     <div>
                       <p className="font-black text-slate-900 text-sm">Pedido {order.reference}</p>
-                      <p className="text-xs font-bold text-slate-700">Cliente: {customerName}</p>
+                      <p className="text-xs font-bold text-slate-700">
+                        Cliente: {customerName}
+                        {(customer?.ie || order.nfePayload?.dest?.ie) && (
+                          <span className="ml-2 font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            IE: {customer?.ie || order.nfePayload?.dest?.ie}
+                          </span>
+                        )}
+                        {(customer?.document || order.nfePayload?.dest?.cpf || order.nfePayload?.dest?.cnpj) && (
+                          <span className="ml-2 text-slate-500 font-mono text-[11px]">
+                            ({customer?.document || order.nfePayload?.dest?.cpf || order.nfePayload?.dest?.cnpj})
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-rose-700 font-bold">{validation.valid ? '' : validation.errors[0]}</p>
                     </div>
                     <div className="text-right space-y-2">
@@ -741,7 +778,19 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                           Rascunho · {row.nfe.tipo}
                         </span>
                       </div>
-                      <p className="text-xs font-bold text-slate-700">Cliente: {customerName}</p>
+                      <p className="text-xs font-bold text-slate-700">
+                        Cliente: {customerName}
+                        {(customer?.ie || row.nfe.nfePayload?.dest?.ie || row.order.nfePayload?.dest?.ie) && (
+                          <span className="ml-2 font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            IE: {customer?.ie || row.nfe.nfePayload?.dest?.ie || row.order.nfePayload?.dest?.ie}
+                          </span>
+                        )}
+                        {(customer?.document || row.nfe.nfePayload?.dest?.cpf || row.nfe.nfePayload?.dest?.cnpj || row.order.nfePayload?.dest?.cpf || row.order.nfePayload?.dest?.cnpj) && (
+                          <span className="ml-2 text-slate-500 font-mono text-[11px]">
+                            ({customer?.document || row.nfe.nfePayload?.dest?.cpf || row.nfe.nfePayload?.dest?.cnpj || row.order.nfePayload?.dest?.cpf || row.order.nfePayload?.dest?.cnpj})
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-500 font-medium mt-1">
                         {row.nfe.nfeNaturezaOperacao || 'Natureza não informada'} · {row.nfe.items?.length || 0} item(ns)
                       </p>
@@ -801,6 +850,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           orders={orders}
           transportadores={transportadores}
           onAddTransportador={onAddTransportador}
+          onUpdateCustomer={onUpdateCustomer}
           duplicateFrom={duplicateDraft}
           onClose={() => {
             setShowAvulsaModal(false);

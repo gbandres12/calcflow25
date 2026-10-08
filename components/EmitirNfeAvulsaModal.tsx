@@ -29,6 +29,7 @@ interface EmitirNfeAvulsaModalProps {
   onDraftSaved?: (draftOrder: SaleOrder) => void;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
+  onUpdateCustomer?: (customer: Customer) => void;
   duplicateFrom?: NfeDuplicateDraft | null;
 }
 
@@ -67,6 +68,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   onDraftSaved,
   transportadores = [],
   onAddTransportador,
+  onUpdateCustomer,
   duplicateFrom
 }) => {
   const toast = useToast();
@@ -87,10 +89,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(seedCustomer?.id || duplicateFrom?.customerId || '');
   const [customerSearch, setCustomerSearch] = useState<string>(seedCustomer?.name || duplicateFrom?.customerName || '');
   const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(true);
+  const [saveCustomerUpdates, setSaveCustomerUpdates] = useState(true);
 
-  // Dados manuais se for novo cliente
-  const [destName, setDestName] = useState(seedCustomer?.name || '');
-  const [destDoc, setDestDoc] = useState(seedCustomer?.document || '');
+  // Dados do destinatário (com fallbacks para duplicar nota e cliente da base)
+  const [destName, setDestName] = useState(seedCustomer?.name || duplicateFrom?.customerName || '');
+  const [destDoc, setDestDoc] = useState(seedCustomer?.document || duplicateFrom?.customerDocument || '');
   const [destIe, setDestIe] = useState(seedCustomer?.ie || '');
   const [destIsentoIe, setDestIsentoIe] = useState(Boolean(seedCustomer?.isentoIE));
   const [destStreet, setDestStreet] = useState(seedCustomer?.street || '');
@@ -118,10 +122,45 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [generateFinance, setGenerateFinance] = useState<boolean>(false);
   const [financeDueDate, setFinanceDueDate] = useState<string>(getLocalDateStr());
-  const [placaCaminhao, setPlacaCaminhao] = useState<string>('');
-  const [nomeMotorista, setNomeMotorista] = useState<string>('');
+  const [placaCaminhao, setPlacaCaminhao] = useState<string>(duplicateFrom?.frete?.veiculo?.placa || '');
+  const [nomeMotorista, setNomeMotorista] = useState<string>(duplicateFrom?.frete?.transportadora?.nome || '');
   const [ticketBalanca, setTicketBalanca] = useState<string>('');
   const [pedidoExterno, setPedidoExterno] = useState<string>('');
+
+  const handleFreteChange = (nextFrete: FreteInfo) => {
+    setFrete(nextFrete);
+    if (nextFrete.veiculo?.placa && nextFrete.veiculo.placa !== placaCaminhao) {
+      setPlacaCaminhao(nextFrete.veiculo.placa);
+    }
+    if (nextFrete.transportadora?.nome && nextFrete.transportadora.nome !== nomeMotorista) {
+      setNomeMotorista(nextFrete.transportadora.nome);
+    }
+  };
+
+  const handlePlacaCaminhaoChange = (val: string) => {
+    const formatted = val.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    setPlacaCaminhao(formatted);
+    const cleanPlaca = formatted.replace(/[^A-Z0-9]/g, '');
+    setFrete(prev => ({
+      ...prev,
+      veiculo: {
+        ...(prev.veiculo || {}),
+        placa: cleanPlaca,
+        uf: prev.veiculo?.uf || (prev.transportadora?.uf ? prev.transportadora.uf : 'PA')
+      }
+    }));
+  };
+
+  const handleNomeMotoristaChange = (val: string) => {
+    setNomeMotorista(val);
+    setFrete(prev => ({
+      ...prev,
+      transportadora: {
+        ...(prev.transportadora || {}),
+        nome: val
+      }
+    }));
+  };
 
   // Itens da Nota
   const [items, setItems] = useState<AvulsaItem[]>(() => {
@@ -222,41 +261,72 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     return orders.filter(o => o.customerId === activeCustomer.id && o.status !== OrderStatus.CANCELLED);
   }, [orders, activeCustomer?.id]);
 
-  // Seletor de clientes cadastrados (blindado contra cadastros com campos vazios)
+  // Lista segura de clientes cadastrados
+  const safeCustomerList = useMemo(() => {
+    return (Array.isArray(customers) ? customers.filter(Boolean) : [])
+      .filter(c => c.id !== '__seed__' && !(c as any).__isSeedMeta && !String(c.id).startsWith('__'))
+      .map(c => {
+        const rawName = String(c.name || (c as any).nome || (c as any).razaoSocial || (c as any).fantasia || '').trim();
+        const rawDoc = String(c.document ?? (c as any).cpfCnpj ?? (c as any).cnpj ?? (c as any).cpf ?? '').trim();
+        const finalName = rawName && rawName !== 'Cliente sem nome' ? rawName : (rawDoc ? `Cliente (${rawDoc})` : (rawName || 'Cliente'));
+        return {
+          ...c,
+          name: finalName,
+          document: rawDoc,
+          city: c.city || (c as any).cidade || 'Santarém',
+          state: (c.state || (c as any).uf || 'PA').toUpperCase()
+        };
+      })
+      .filter(c => Boolean(c.name && c.name.trim()));
+  }, [customers]);
+
+  // Seletor de clientes cadastrados com busca por nome, documento ou cidade
   const filteredCustomers = useMemo(() => {
-    const list = Array.isArray(customers) ? customers.filter(Boolean) : [];
     const rawSearch = (customerSearch || '').trim();
-    if (!rawSearch) return list.slice(0, 60);
+    if (!rawSearch) return safeCustomerList.slice(0, 100);
     const term = rawSearch.toLowerCase();
     const cleanDigits = rawSearch.replace(/\D/g, '');
-    return list.filter(c => {
+    return safeCustomerList.filter(c => {
       const name = String(c.name || '').toLowerCase();
       const doc = String(c.document || '').replace(/\D/g, '');
       const city = String(c.city || '').toLowerCase();
       const docMatch = cleanDigits ? doc.includes(cleanDigits) : false;
       return name.includes(term) || docMatch || city.includes(term);
-    }).slice(0, 60);
-  }, [customers, customerSearch]);
+    }).slice(0, 100);
+  }, [safeCustomerList, customerSearch]);
 
   const selectCustomer = (c: Customer) => {
     if (!c) return;
+    const cName = c.name || (c as any).nome || (c as any).razaoSocial || '';
+    const cDoc = c.document || (c as any).cpfCnpj || (c as any).cnpj || (c as any).cpf || '';
+    const cIe = c.ie || (c as any).inscricaoEstadual || '';
+    const cStreet = c.street || (c as any).logradouro || (c as any).endereco || '';
+    const cNumber = c.number || (c as any).numero || '';
+    const cNeighborhood = c.neighborhood || (c as any).bairro || '';
+    const cCity = c.city || (c as any).cidade || 'Santarém';
+    const cState = (c.state || (c as any).uf || 'PA').toUpperCase();
+    const cZip = c.zipCode || (c as any).cep || '';
+    const cIbge = c.ibgeCode || (c as any).codigoIbge || '';
+    const cEmail = c.email || '';
+
     setSelectedCustomerId(c.id || '');
     setIsNewCustomer(false);
-    setDestName(c.name || '');
-    setDestDoc(c.document || '');
-    setDestIe(c.ie || '');
+    setIsCustomerPickerOpen(false);
+    setDestName(cName);
+    setDestDoc(cDoc);
+    setDestIe(cIe);
     setDestIsentoIe(Boolean(c.isentoIE));
-    setDestStreet(c.street || '');
-    setDestNumber(c.number || '');
-    setDestNeighborhood(c.neighborhood || '');
-    setDestCity(c.city || 'Santarém');
-    setDestState(c.state || 'PA');
-    setDestZip(c.zipCode || '');
-    setDestIbge(c.ibgeCode || '');
-    setDestEmail(c.email || '');
+    setDestStreet(cStreet);
+    setDestNumber(cNumber);
+    setDestNeighborhood(cNeighborhood);
+    setDestCity(cCity);
+    setDestState(cState);
+    setDestZip(cZip);
+    setDestIbge(cIbge);
+    setDestEmail(cEmail);
 
     // Ajustar CFOPs dos itens caso mude para interestadual (sem quebrar com CFOP vazio)
-    const isInter = Boolean(c.state) && c.state !== 'PA';
+    const isInter = Boolean(cState) && cState !== 'PA';
     const cfopInter = config?.cfopPadraoInterestadual || '6101';
     const cfopEstadual = config?.cfopPadraoEstadual || '5101';
     setItems(prev => prev.map(it => {
@@ -353,11 +423,44 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
   const resolvedInfCpl = infCplTouched ? infCplCustom : autoInfCpl;
 
+  const maybePersistCustomerUpdates = () => {
+    if (saveCustomerUpdates && selectedCustomerId && !selectedCustomerId.startsWith('cust_avulso_')) {
+      const orig = (Array.isArray(customers) ? customers : []).find(c => c && c.id === selectedCustomerId);
+      const updatedCustomer: Customer = {
+        ...(orig || {}),
+        id: selectedCustomerId,
+        companyId: company.id,
+        name: (destName || orig?.name || 'Sem nome').trim(),
+        document: (destDoc || orig?.document || '').trim(),
+        ie: destIsentoIe ? '' : (destIe || orig?.ie || '').trim(),
+        isentoIE: destIsentoIe,
+        street: (destStreet || orig?.street || '').trim(),
+        number: (destNumber || orig?.number || 'SN').trim(),
+        neighborhood: (destNeighborhood || orig?.neighborhood || '').trim(),
+        city: (destCity || orig?.city || 'Santarém').trim(),
+        state: (destState || orig?.state || 'PA').trim().toUpperCase(),
+        zipCode: (destZip || orig?.zipCode || '').trim(),
+        ibgeCode: (destIbge || orig?.ibgeCode || '').trim(),
+        email: (destEmail || orig?.email || '').trim(),
+        phone: orig?.phone || '',
+        totalSpent: Number(orig?.totalSpent || 0)
+      };
+      if (onUpdateCustomer) {
+        onUpdateCustomer(updatedCustomer);
+      }
+      db.upsert('customers', company.id, updatedCustomer).catch(err => {
+        console.warn('Falha ao atualizar dados do cliente no banco:', err);
+      });
+    }
+  };
+
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
     id: draftOrderId,
     reference: avulsaReferenceRef.current,
     customerId: activeCustomer.id,
+    customerName: activeCustomer.name,
+    customerDocument: activeCustomer.document,
     sellerName: currentUser?.name || 'Emissão Fiscal Direta',
     date: getLocalDateStr(),
     isAvulsa: true,
@@ -383,7 +486,20 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     discount: 0,
     shipping: shippingVal,
     total,
-    frete: { ...frete, modalidade: freteModalidadeNum as FreteInfo['modalidade'], valor: shippingVal },
+    frete: {
+      ...frete,
+      modalidade: freteModalidadeNum as FreteInfo['modalidade'],
+      valor: shippingVal,
+      veiculo: {
+        ...(frete.veiculo || {}),
+        placa: (placaCaminhao.trim() || frete.veiculo?.placa || '').toUpperCase().trim(),
+        uf: frete.veiculo?.uf || (frete.transportadora?.uf ? frete.transportadora.uf : 'PA')
+      },
+      transportadora: {
+        ...(frete.transportadora || {}),
+        nome: (frete.transportadora?.nome || nomeMotorista || '').trim() || undefined
+      }
+    },
     status: OrderStatus.FINALIZED,
     withoutFinance: !generateFinance || Boolean(selectedOrderId),
     paymentMethod: paymentMethod === 'Sem Pagamento' || !generateFinance ? 'Outros' : paymentMethod,
@@ -398,7 +514,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     receipts: [],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, financeDueDate, selectedOrderId]);
+  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, financeDueDate, selectedOrderId, placaCaminhao, nomeMotorista]);
 
   const previewOrder: SaleOrder = useMemo(() => ({
     ...syntheticOrder,
@@ -416,6 +532,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       setErrorMsg('Adicione ao menos um item com quantidade para salvar o rascunho.');
       return null;
     }
+    maybePersistCustomerUpdates();
     const linkedId = draftLinkedId || newId('nfa');
     let payloadSent: any;
     try {
@@ -437,6 +554,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       nfeNaturezaOperacao: naturezaOperacao,
       nfeInfCpl: resolvedInfCpl,
       nfePayload: payloadSent,
+      destinatarioNome: activeCustomer.name || syntheticOrder.customerName,
     });
     setDraftLinkedId(linkedId);
     return upsertLinkedNfe(
@@ -517,10 +635,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       const result = await fiscalService.emitirNFe(syntheticOrder, activeCustomer, config, company.id, opts);
 
       if (result.success || result.nfeId) {
+        maybePersistCustomerUpdates();
         const linkedId = draftLinkedId || newId('nfa');
         let createdOrder: SaleOrder = {
           ...syntheticOrder,
           companyId: company.id,
+          customerName: activeCustomer.name || syntheticOrder.customerName,
+          customerDocument: activeCustomer.document || syntheticOrder.customerDocument,
           status: OrderStatus.FINALIZED,
           nfeStatus: result.nfeStatus,
           nfeId: result.nfeId,
@@ -568,6 +689,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           nfeInfCpl: resolvedInfCpl,
           nfePayload: payloadSent,
           nfeRawResponse: createdOrder.nfeRawResponse,
+          destinatarioNome: activeCustomer.name || createdOrder.customerName,
         });
 
         const orderWithLinked = upsertLinkedNfe(createdOrder, linked);
@@ -784,7 +906,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
-                  onClick={() => setIsNewCustomer(false)}
+                  onClick={() => {
+                    setIsNewCustomer(false);
+                    setIsCustomerPickerOpen(true);
+                  }}
                   className={`px-2 sm:px-3 py-2 sm:py-1 rounded-xl text-xs sm:text-xs font-bold transition-all ${
                     !isNewCustomer ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-200'
                   }`}
@@ -806,43 +931,131 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </div>
             </div>
 
-            {!isNewCustomer ? (
+            {!isNewCustomer && (
               <div className="space-y-3">
-                <div className="relative">
-                  <Search size={16} className="absolute left-4 top-3.5 text-slate-400" />
-                  <input 
-                    type="text"
-                    placeholder="Buscar cliente por Razão Social, CNPJ/CPF ou Município..."
-                    value={customerSearch}
-                    onChange={e => setCustomerSearch(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-medium outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1">
-                  {filteredCustomers.length === 0 ? (
-                    <p className="col-span-full text-center text-xs text-slate-500 font-medium py-6">
-                      Nenhum cliente encontrado para essa busca.
-                    </p>
-                  ) : filteredCustomers.map((c, idx) => (
+                {/* Resumo quando há cliente selecionado e picker fechado */}
+                {selectedCustomerId && !isCustomerPickerOpen && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-purple-50/80 border border-purple-200 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                        ✓
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black text-purple-950 truncate">
+                            {destName || 'Cliente Selecionado'}
+                          </span>
+                          <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full border border-purple-200 font-mono">
+                            {destDoc ? destDoc : 'Sem documento'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-purple-700 truncate mt-0.5">
+                          {destCity || 'Santarém'} - {destState || 'PA'} {destStreet ? `· ${destStreet}` : ''}
+                        </p>
+                      </div>
+                    </div>
                     <button
-                      key={c.id || `cust-${idx}`}
                       type="button"
-                      onClick={() => selectCustomer(c)}
-                      className={`text-left p-3 rounded-2xl border transition-all ${
-                        selectedCustomerId === c.id
-                          ? 'bg-purple-50 border-purple-500 shadow-sm ring-1 ring-purple-500'
-                          : 'bg-white border-slate-200 hover:bg-slate-100/70'
-                      }`}
+                      onClick={() => setIsCustomerPickerOpen(true)}
+                      className="px-3 py-2 bg-white hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl border border-purple-300 shadow-sm transition-all shrink-0 self-end sm:self-auto"
                     >
-                      <p className="font-bold text-slate-800 text-xs truncate">{c.name || 'Sem nome'}</p>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">{c.document || 'Sem documento'}</p>
-                      <p className="text-xs text-slate-500 truncate">{c.city || '—'} - {c.state || '—'}</p>
+                      Trocar Cliente
                     </button>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* Painel de busca e grid de clientes cadastrados */}
+                {(!selectedCustomerId || isCustomerPickerOpen) && (
+                  <div className="space-y-2 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                        Buscar na base de clientes ({filteredCustomers.length} disponíveis)
+                      </span>
+                      {selectedCustomerId && (
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomerPickerOpen(false)}
+                          className="text-xs text-purple-600 font-bold hover:underline"
+                        >
+                          Manter selecionado ({destName || 'Cliente'}) ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Search size={16} className="absolute left-4 top-3.5 text-slate-400" />
+                      <input 
+                        type="text"
+                        placeholder="Buscar cliente por Razão Social, CNPJ/CPF ou Município..."
+                        value={customerSearch}
+                        onChange={e => setCustomerSearch(e.target.value)}
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-purple-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1">
+                      {filteredCustomers.length === 0 ? (
+                        <p className="col-span-full text-center text-xs text-slate-500 font-medium py-6">
+                          Nenhum cliente encontrado para essa busca.
+                        </p>
+                      ) : filteredCustomers.map((c, idx) => {
+                        const hasDoc = Boolean(c.document && c.document.trim());
+                        const isSelected = selectedCustomerId === c.id;
+                        return (
+                          <button
+                            key={c.id || `cust-${idx}`}
+                            type="button"
+                            onClick={() => selectCustomer(c)}
+                            className={`text-left p-3 rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-purple-50 border-purple-500 shadow-sm ring-1 ring-purple-500'
+                                : 'bg-white border-slate-200 hover:bg-slate-100/70'
+                            }`}
+                          >
+                            <p className="font-bold text-slate-800 text-xs truncate">{c.name || 'Sem nome'}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className={`text-[11px] font-mono ${hasDoc ? 'text-slate-600' : 'text-amber-600 font-bold'}`}>
+                                {hasDoc ? c.document : '⚠️ Sem documento'}
+                              </span>
+                              {c.ie && (
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                  IE: {c.ie}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 truncate">{c.city || '—'} - {c.state || '—'}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            ) : (
+            )}
+
+            {/* FORMULÁRIO COMPLETO DO DESTINATÁRIO (SEMPRE VISÍVEL E EDITÁVEL) */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+                <span className="text-[11px] font-black uppercase text-slate-600 tracking-wider">
+                  Dados do Destinatário da Nota
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Confirme ou edite os dados antes da emissão
+                </span>
+              </div>
+
+              {/* Alerta se documento estiver faltando ou incompleto */}
+              {(!destDoc || (destDoc.replace(/\D/g, '').length !== 11 && destDoc.replace(/\D/g, '').length !== 14)) && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-2.5">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-900">
+                    <p className="font-black">CPF ou CNPJ obrigatório para emissão da NF-e</p>
+                    <p className="text-amber-800 mt-0.5">
+                      Este cliente está sem CPF/CNPJ cadastrado. Digite o CPF (11 dígitos) ou CNPJ (14 dígitos) no campo abaixo para autorizar a nota.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="text-[11px] font-black uppercase text-slate-500">Nome / Razão Social *</label>
@@ -860,8 +1073,10 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     type="text" 
                     value={destDoc} 
                     onChange={e => setDestDoc(e.target.value)} 
-                    placeholder="CNPJ ou CPF"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500"
+                    placeholder="CNPJ ou CPF (obrigatório)"
+                    className={`w-full p-2.5 bg-white border rounded-xl text-xs font-mono font-bold outline-none focus:border-purple-500 ${
+                      !destDoc ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'
+                    }`}
                   />
                 </div>
                 <div className="space-y-1">
@@ -933,10 +1148,32 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                       placeholder="UF"
                       className="w-14 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-center uppercase outline-none focus:border-purple-500"
                     />
+                    <input 
+                      type="text" 
+                      value={destZip} 
+                      onChange={e => setDestZip(e.target.value)} 
+                      placeholder="CEP"
+                      className="w-24 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-purple-500"
+                    />
                   </div>
                 </div>
               </div>
-            )}
+
+              {/* Opção para atualizar cadastro no banco */}
+              {selectedCustomerId && !selectedCustomerId.startsWith('cust_avulso_') && (
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="flex items-center gap-2 text-xs text-purple-900 font-bold cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={saveCustomerUpdates} 
+                      onChange={e => setSaveCustomerUpdates(e.target.checked)} 
+                      className="rounded text-purple-600 focus:ring-purple-500"
+                    />
+                    Salvar atualizações no cadastro do cliente (mantém CPF/CNPJ e endereço atualizados permanentemente no banco)
+                  </label>
+                </div>
+              )}
+            </div>
 
             {/* Vínculo Opcional a Pedido de Venda */}
             {customerOrders.length > 0 && (
