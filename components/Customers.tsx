@@ -40,7 +40,7 @@ const Customers: React.FC<CustomersProps> = ({
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterDebtOnly, setFilterDebtOnly] = useState<'ALL' | 'DEBT_ONLY' | 'SETTLED_ONLY' | 'NO_PURCHASE'>('ALL');
+  const [filterDebtOnly, setFilterDebtOnly] = useState<'ALL' | 'WITH_DOC' | 'NO_DOC' | 'DEBT_ONLY' | 'SETTLED_ONLY' | 'NO_PURCHASE'>('ALL');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [importError, setImportError] = useState('');
@@ -133,6 +133,8 @@ const Customers: React.FC<CustomersProps> = ({
       if (!matchSearch) return false;
 
       const stats = customerFinancialStats[c.id] || { totalPurchased: 0, totalPaid: 0, totalDebt: 0, orderCount: 0 };
+      if (filterDebtOnly === 'WITH_DOC' && !c.document?.trim()) return false;
+      if (filterDebtOnly === 'NO_DOC' && Boolean(c.document?.trim())) return false;
       if (filterDebtOnly === 'DEBT_ONLY' && stats.totalDebt <= 0.01) return false;
       if (filterDebtOnly === 'SETTLED_ONLY' && (stats.totalPurchased === 0 || stats.totalDebt > 0.01)) return false;
       if (filterDebtOnly === 'NO_PURCHASE' && stats.totalPurchased > 0) return false;
@@ -307,12 +309,36 @@ const Customers: React.FC<CustomersProps> = ({
   const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
   const avatarTone = (c: Customer) => c.tipoPessoa === 'PJ' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700';
   const categoryOf = (c: Customer) => {
-    if (c.tipoPessoa === 'PJ') return { label: 'PJ / Revenda', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
-    if (c.tipoPessoa === 'PF') return { label: 'Pessoa Física', cls: 'bg-slate-50 text-slate-700 border-slate-200' };
-    return { label: 'Produtor Rural', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
+    const docDigits = (c.document || '').replace(/\D/g, '');
+    const isPj =
+      c.tipoPessoa === 'PJ' ||
+      docDigits.length === 14 ||
+      /\b(ltda|s\/a|s\.a|eireli|me\b|epp\b|minera[cç][aã]o|agropecu[aá]ria|comercial|com[eé]rcio)\b/i.test(c.name || '');
+
+    if (isPj) return { label: 'PJ / Empresa', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+
+    const isProdutor =
+      (c.tipoPessoa === 'PRODUTOR' || Boolean(c.ie && c.ie.trim())) &&
+      (docDigits.length === 11 || Boolean(c.ie && c.ie.trim()));
+
+    if (isProdutor) {
+      return { label: 'Produtor Rural', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
+    }
+
+    if (docDigits.length === 11 || c.tipoPessoa === 'PF') {
+      return { label: 'Pessoa Física', cls: 'bg-slate-50 text-slate-700 border-slate-200' };
+    }
+
+    return { label: 'Sem Documento', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
   };
+
+  const withDocCount = safeCustomerList.filter(c => Boolean(c.document?.trim())).length;
+  const withoutDocCount = safeCustomerList.filter(c => !c.document?.trim()).length;
+
   const filterChips: { key: typeof filterDebtOnly; label: string; count: number; active: string; idle: string; dot?: string }[] = [
     { key: 'ALL', label: 'Todos', count: safeCustomerList.length, active: 'bg-slate-900 text-white border-slate-900', idle: 'bg-white text-slate-700 border-slate-200' },
+    { key: 'WITH_DOC', label: 'Com CPF/CNPJ', count: withDocCount, active: 'bg-blue-600 text-white border-blue-600', idle: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { key: 'NO_DOC', label: 'Sem Documento', count: withoutDocCount, active: 'bg-rose-600 text-white border-rose-600', idle: 'bg-rose-50 text-rose-700 border-rose-200' },
     { key: 'DEBT_ONLY', label: 'Com Débito', count: walletStats.customersWithDebtCount, active: 'bg-rose-600 text-white border-rose-600', idle: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
     { key: 'SETTLED_ONLY', label: 'Quites', count: walletStats.settledCustomersCount, active: 'bg-emerald-600 text-white border-emerald-600', idle: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
     { key: 'NO_PURCHASE', label: 'Sem Compras', count: noPurchaseCount, active: 'bg-slate-700 text-white border-slate-700', idle: 'bg-white text-slate-600 border-slate-200' }
@@ -469,15 +495,27 @@ const Customers: React.FC<CustomersProps> = ({
                               {c.name || 'Cliente Sem Razão Social'}
                             </div>
                             <div className="flex flex-wrap gap-x-3 text-xs text-slate-500 uppercase mt-0.5">
-                              {c.city && <span>{c.city}-{c.state || 'PA'}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>}
-                              {!c.city && c.phone && <span className="flex items-center gap-1"><Phone size={11} /> {c.phone}</span>}
-                              {!c.city && !c.phone && c.email && <span className="flex items-center gap-1 normal-case"><Mail size={11} /> {c.email}</span>}
+                              {c.city ? (
+                                <span>{c.city}{c.state ? `-${c.state}` : ''}{c.ibgeCode ? ` · IBGE ${c.ibgeCode}` : ''}</span>
+                              ) : c.phone ? (
+                                <span className="flex items-center gap-1"><Phone size={11} /> {c.phone}</span>
+                              ) : c.email ? (
+                                <span className="flex items-center gap-1 normal-case"><Mail size={11} /> {c.email}</span>
+                              ) : (
+                                <span className="text-slate-400 font-normal lowercase italic">endereço não informado</span>
+                              )}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-4 text-sm font-mono whitespace-nowrap">
-                        <div className="text-slate-700">{c.document || '—'}</div>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap">
+                        {c.document?.trim() ? (
+                          <div className="font-mono text-slate-800 font-semibold">{c.document}</div>
+                        ) : (
+                          <div className="text-xs text-rose-600 font-medium bg-rose-50/70 border border-rose-200 rounded-md px-2 py-0.5 inline-block">
+                            Sem CPF/CNPJ
+                          </div>
+                        )}
                         {c.ie && (
                           <div className="mt-1">
                             <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 inline-block font-sans">
