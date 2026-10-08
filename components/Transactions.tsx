@@ -15,10 +15,12 @@ import {
   Customer, 
   Company, 
   PaymentReceipt,
+  SaleOrder,
   TransactionPayment 
 } from '../types';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
-import { TransactionFormDialog } from './TransactionFormDialog';
+import { TransactionFormDialog, ReceiptLink } from './TransactionFormDialog';
+import { buildOrderReceipt, settleReceivable, ReceiptInput } from '../services/receiptLink';
 import { QuickEntryDialog } from './QuickEntryDialog';
 import { ReceivePayDialog } from './ReceivePayDialog';
 import { DailyFinancialReport } from './DailyFinancialReport';
@@ -31,6 +33,10 @@ interface TransactionsProps {
   categories: Category[];
   customers: Customer[];
   company: Company;
+  /** Vendas, para vincular um recebimento ao pedido. */
+  orders?: SaleOrder[];
+  /** Recebimento ligado a uma venda: grava o recibo no pedido e lança no financeiro. */
+  onReceiptForOrder?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
   onAddTransaction: (transaction: Omit<Transaction, 'id' | 'companyId'>) => Promise<void> | void;
   onUpdateTransaction: (transaction: Transaction) => Promise<void> | void;
   onDeleteTransaction: (id: string) => Promise<void> | void;
@@ -44,6 +50,8 @@ export const Transactions: React.FC<TransactionsProps> = ({
   categories,
   customers,
   company,
+  orders = [],
+  onReceiptForOrder,
   onAddTransaction,
   onUpdateTransaction,
   onDeleteTransaction,
@@ -219,6 +227,21 @@ export const Transactions: React.FC<TransactionsProps> = ({
     } else {
       await onAddTransaction(txData);
     }
+  };
+
+  // Recebimento vinculado a uma venda (vira recibo no pedido) ou a uma conta a receber (baixa).
+  const handleLinkedReceipt = async (link: ReceiptLink, input: ReceiptInput) => {
+    if (link.kind === 'order') {
+      const order = orders.find(o => o.id === link.id);
+      if (!order || !onReceiptForOrder) throw new Error('Venda não encontrada.');
+      const receipt = buildOrderReceipt(order, customers.find(c => c.id === order.customerId), input);
+      onReceiptForOrder(receipt, { ...order, receipts: [...(order.receipts || []), receipt] });
+      setViewingReceipt(receipt);
+      return;
+    }
+    const tx = transactions.find(t => t.id === link.id);
+    if (!tx) throw new Error('Conta a receber não encontrada.');
+    await onUpdateTransaction(settleReceivable(tx, input));
   };
 
   // Abrir Modal de Liquidação / Abatimento
@@ -706,6 +729,9 @@ export const Transactions: React.FC<TransactionsProps> = ({
         categories={categories}
         customers={customers}
         historyTransactions={transactions}
+        companyName={company?.name}
+        orders={orders}
+        onLinkedReceipt={handleLinkedReceipt}
         onSave={handleSaveForm}
       />
 

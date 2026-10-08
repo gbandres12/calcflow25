@@ -1,4 +1,5 @@
 import React from 'react';
+import * as Sentry from '@sentry/react';
 
 type Props = { children: React.ReactNode; label?: string };
 type State = { error: Error | null };
@@ -12,6 +13,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error) {
     console.error('[ErrorBoundary]', this.props.label || 'view', error);
+    Sentry.captureException(error, { tags: { boundary: this.props.label || 'view' } });
   }
 
   render() {

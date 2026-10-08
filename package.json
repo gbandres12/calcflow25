@@ -8,14 +8,16 @@
     "dev:full": "tsx --env-file-if-exists=.env.local server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
-    "test": "node --import tsx --test services/repo/repoAssembler.test.ts services/persistMerge.test.ts services/nfeStatusMap.test.ts services/membershipCompany.test.ts services/tenantMerge.test.ts services/companyUsers.test.ts services/cloudRead.test.ts services/nfeRecover.test.ts services/nfeDuplicate.test.ts services/quickRomaneio.test.ts services/companyPermissions.test.ts services/viewAccess.test.ts services/domain/telegramWrites.test.ts services/domain/telegramNfe.test.ts services/domain/salesOrderPdf.test.ts services/domain/nfeDraftPdf.test.ts services/domain/loadings.test.ts services/domain/orderTimeline.test.ts services/domain/commandSearch.test.ts services/saleFinance.test.ts services/agent/search.test.ts services/agent/tools.test.ts",
+    "test": "node --import tsx --test services/persistMerge.test.ts services/nfeStatusMap.test.ts services/membershipCompany.test.ts services/tenantMerge.test.ts services/companyUsers.test.ts services/cloudRead.test.ts services/nfeRecover.test.ts services/nfeDuplicate.test.ts services/quickRomaneio.test.ts services/companyPermissions.test.ts services/viewAccess.test.ts services/domain/telegramWrites.test.ts services/domain/telegramNfe.test.ts services/domain/salesOrderPdf.test.ts services/domain/nfeDraftPdf.test.ts services/domain/loadings.test.ts services/domain/orderTimeline.test.ts services/domain/commandSearch.test.ts services/saleFinance.test.ts services/agent/search.test.ts services/agent/tools.test.ts",
     "testsprite:mcp": "testsprite-mcp-plugin"
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
+    "@sentry/react": "^11.2.0",
     "@supabase/supabase-js": "^2.48.1",
     "express": "^5.2.1",
     "firebase": "^12.18.0",
+    "jszip": "^3.10.2",
     "lucide-react": "^0.562.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",

@@ -6,7 +6,7 @@ import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplic
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
-  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit, X
+  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit, X, Download
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
@@ -98,6 +98,9 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [exportMonth, setExportMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [exportingXml, setExportingXml] = useState(false);
+  const [exportMessage, setExportMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     fiscalService.getConfig(companyId).then((c) => {
@@ -191,6 +194,61 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     } finally {
       setSyncingId(null);
       setSyncingAll(false);
+    }
+  };
+
+  const exportMonthlyXmls = async () => {
+    if (!config || exportingXml || !/^\d{4}-\d{2}$/.test(exportMonth)) return;
+    setExportMessage(null);
+    const targets = emittedOrders.filter((row) => {
+      const d = row.nfe.nfeEmissao || row.nfe.createdAt || row.order.date;
+      return row.nfe.nfeStatus === 'autorizada' && Boolean(row.nfe.nfeId) && (d || '').slice(0, 7) === exportMonth;
+    });
+    if (targets.length === 0) {
+      setExportMessage({ type: 'error', text: 'Nenhuma nota autorizada neste mês.' });
+      return;
+    }
+    setExportingXml(true);
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      const failed: string[] = [];
+      for (const row of targets) {
+        const label = row.nfe.nfeNumero ? `NFe ${row.nfe.nfeNumero}` : row.nfe.reference || row.nfe.id;
+        const xml = await fiscalService.baixarXmlNFe(
+          row.nfe.nfeId as string,
+          { ...config, companyId: row.order.companyId || config.companyId },
+          'emission'
+        );
+        if (!xml.ok || !xml.blob) {
+          failed.push(label);
+          continue;
+        }
+        zip.file(`NFe_${row.nfe.nfeChave || row.nfe.nfeNumero || row.nfe.id}.xml`, xml.blob);
+      }
+      const done = targets.length - failed.length;
+      if (done === 0) {
+        setExportMessage({ type: 'error', text: 'Não foi possível baixar nenhum XML.' });
+        return;
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `XML_NFe_${exportMonth}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setExportMessage(
+        failed.length
+          ? { type: 'error', text: `${done} XML(s) exportados. Falharam: ${failed.join(', ')}.` }
+          : { type: 'ok', text: `${done} XML(s) exportados.` }
+      );
+    } catch (err: any) {
+      setExportMessage({ type: 'error', text: err?.message || 'Falha ao gerar o ZIP.' });
+    } finally {
+      setExportingXml(false);
     }
   };
 
@@ -450,7 +508,31 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               <RefreshCw size={12} className={syncingAll ? 'animate-spin' : ''} />
               {syncingAll ? 'Atualizando…' : 'Atualizar status'}
             </button>
+            <div className="inline-flex items-center gap-1.5">
+              <input
+                type="month"
+                value={exportMonth}
+                onChange={(e) => setExportMonth(e.target.value)}
+                className="px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
+                aria-label="Mês para exportar os XMLs"
+              />
+              <button
+                type="button"
+                onClick={exportMonthlyXmls}
+                disabled={exportingXml || !exportMonth}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black disabled:opacity-50 inline-flex items-center gap-1"
+                title="Baixa um ZIP com o XML de todas as notas autorizadas do mês (canceladas ficam de fora)"
+              >
+                <Download size={12} />
+                {exportingXml ? 'Gerando ZIP…' : 'Exportar XMLs do mês'}
+              </button>
+            </div>
           </div>
+          {exportMessage && (
+            <p className={`text-xs font-bold ${exportMessage.type === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {exportMessage.text}
+            </p>
+          )}
           {filteredEmittedOrders.length === 0 ? (
             <div className="text-center py-10 space-y-2">
               <p className="text-sm font-bold text-slate-500">
