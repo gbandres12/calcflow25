@@ -90,9 +90,21 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       return;
     }
 
-    const rawInvoiceId = (invoice.nfeId || invoice.nfeDanfeUrl || '').trim();
-    const uuidMatch = rawInvoiceId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-    const invoiceId = uuidMatch ? uuidMatch[0] : rawInvoiceId;
+    const findUuid = (str?: string) => {
+      if (!str) return null;
+      const m = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return m ? m[0] : null;
+    };
+
+    const invoiceId =
+      findUuid(invoice.nfeDanfeUrl) ||
+      findUuid(invoice.nfeXmlUrl) ||
+      findUuid(invoice.nfeId) ||
+      findUuid(order.nfeDanfeUrl) ||
+      findUuid(order.nfeXmlUrl) ||
+      findUuid(order.nfeId) ||
+      (invoice.nfeId || invoice.nfeDanfeUrl || '').trim();
+
     const canPdf = invoice.nfeStatus === 'autorizada' || invoice.nfeStatus === 'cancelada';
     if (!invoiceId || !canPdf) {
       revokeBlob();
@@ -181,7 +193,18 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   };
 
   const handleDownloadXml = async () => {
-    const invoiceId = (current.nfeId || '').trim();
+    const findUuid = (str?: string) => {
+      if (!str) return null;
+      const m = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return m ? m[0] : null;
+    };
+    const invoiceId =
+      findUuid(current.nfeXmlUrl) ||
+      findUuid(current.nfeDanfeUrl) ||
+      findUuid(current.nfeId) ||
+      findUuid(order.nfeXmlUrl) ||
+      findUuid(order.nfeDanfeUrl) ||
+      (current.nfeId || '').trim();
     if (!invoiceId) return;
     const xml = await fiscalService.baixarXmlNFe(
       invoiceId,

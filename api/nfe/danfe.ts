@@ -1,4 +1,5 @@
 import { fetchNotaasBinary, resolveNotaasAuth, setDocCors } from '../_lib/notaasBinary.js';
+import { findSalesOrder } from '../_lib/supabaseAdmin.js';
 
 export const config = { runtime: 'nodejs', maxDuration: 30 };
 
@@ -13,7 +14,24 @@ export default async function handler(req: any, res: any) {
     const body = req.body || {};
     const rawId = String(body.invoiceId || body.nfeIdOrChave || '').trim();
     const uuidMatch = rawId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-    const id = uuidMatch ? uuidMatch[0] : rawId;
+    let id = uuidMatch ? uuidMatch[0] : rawId;
+
+    if (!uuidMatch && rawId) {
+      try {
+        const order = await findSalesOrder({
+          companyId: body.companyId,
+          orderId: rawId,
+          invoiceId: rawId,
+          reference: rawId
+        });
+        if (order?.data) {
+          const str = JSON.stringify(order.data);
+          const found = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (found) id = found[0];
+        }
+      } catch {}
+    }
+
     if (!id) return res.status(400).json({ error: 'Informe o invoiceId da NotaAs para baixar o DANFE.' });
 
     const auth = await resolveNotaasAuth(body);

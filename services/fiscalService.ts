@@ -303,10 +303,26 @@ export function mergeNfeConsulta(order: SaleOrder, result: ConsultarNFeResult): 
       : nfeStatus === 'autorizada'
         ? ''
         : (n?.xMotivo || order.nfeErro);
+    const findUuid = (str?: string) => {
+      if (!str) return null;
+      const m = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return m ? m[0] : null;
+    };
+    const resolvedId =
+      findUuid(n?.pdfUrl) ||
+      findUuid(n?.danfeUrl) ||
+      findUuid(n?.xmlUrl) ||
+      findUuid(n?.invoiceId) ||
+      findUuid(n?.id) ||
+      findUuid(order.nfeDanfeUrl) ||
+      n?.invoiceId ||
+      n?.id ||
+      order.nfeId;
+
   const merged: SaleOrder = {
     ...order,
     nfeStatus,
-    nfeId: n?.invoiceId || n?.id || order.nfeId,
+    nfeId: resolvedId,
     nfeChave: n?.chaveAcesso || order.nfeChave,
     nfeNumero: n?.nNf != null ? String(n.nNf) : (n?.numero != null ? String(n.numero) : order.nfeNumero),
     nfeSerie: n?.serie != null ? String(n.serie) : order.nfeSerie,
@@ -1017,16 +1033,32 @@ export const fiscalService = {
         const statusRetornado = resolveNfeStatus(data.status, proxied.status, chaveAcesso);
         const nfeProtocolo = data.nProt || data.protocolo || data.protocol || '';
 
+        const urlToUuid = (str?: string) => {
+          if (!str) return null;
+          const m = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          return m ? m[0] : null;
+        };
+        const danfeUrl = data.pdfUrl || data.danfeUrl || data.urlDanfe || data.caminho_danfe;
+        const xmlUrl = data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal;
+        const realNfeId =
+          urlToUuid(danfeUrl) ||
+          urlToUuid(xmlUrl) ||
+          urlToUuid(data.invoiceId) ||
+          urlToUuid(data.id) ||
+          data.invoiceId ||
+          data.id ||
+          data.uuid;
+
         return {
           success: statusRetornado !== 'rejeitada',
           nfeStatus: statusRetornado,
-          nfeId: data.invoiceId || data.id || data.uuid,
+          nfeId: realNfeId,
           nfeChave: chaveAcesso || undefined,
           nfeNumero: data.nNf != null ? String(data.nNf) : (data.numero ? String(data.numero) : nfeNumero),
           nfeSerie: data.serie ? String(data.serie) : serie,
           nfeProtocolo: nfeProtocolo || undefined,
-          nfeDanfeUrl: data.pdfUrl || data.danfeUrl || data.urlDanfe || data.caminho_danfe,
-          nfeXmlUrl: data.xmlUrl || data.urlXml || data.caminho_xml_nota_fiscal,
+          nfeDanfeUrl: danfeUrl,
+          nfeXmlUrl: xmlUrl,
           nfeEmissao: data.dataEmissao,
           naturezaOperacao: payload.naturezaOperacao,
           nfeErro: statusRetornado === 'rejeitada' ? (data.xMotivo || data.message || data.erro || data.motivo) : undefined,
@@ -1401,7 +1433,12 @@ export const fiscalService = {
    */
   async sincronizarPedidoComSefaz(order: SaleOrder, overrideConfig?: FiscalConfig): Promise<SaleOrder> {
     const config = overrideConfig || (await this.getConfig(order.companyId || overrideConfig?.companyId));
-    const id = (order.nfeId || '').trim();
+    const findUuid = (str?: string) => {
+      if (!str) return null;
+      const m = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return m ? m[0] : null;
+    };
+    const id = findUuid(order.nfeDanfeUrl) || findUuid(order.nfeXmlUrl) || findUuid(order.nfeId) || (order.nfeId || '').trim();
     if (id) {
       const result = await this.consultarNFe(id, config);
       if (result.status !== 'nao_emitida' || result.nfe) {
