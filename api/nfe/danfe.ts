@@ -11,7 +11,9 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = req.body || {};
-    const id = String(body.invoiceId || body.nfeIdOrChave || '').trim();
+    const rawId = String(body.invoiceId || body.nfeIdOrChave || '').trim();
+    const uuidMatch = rawId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const id = uuidMatch ? uuidMatch[0] : rawId;
     if (!id) return res.status(400).json({ error: 'Informe o invoiceId da NotaAs para baixar o DANFE.' });
 
     const auth = await resolveNotaasAuth(body);

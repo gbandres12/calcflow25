@@ -391,6 +391,7 @@ export function buildLinkedNfe(params: {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  destinatarioNome?: string;
 }): SaleOrderLinkedNfe {
   return {
     id: params.id,
@@ -416,6 +417,7 @@ export function buildLinkedNfe(params: {
     nfeInfCpl: params.nfeInfCpl,
     nfePayload: params.nfePayload,
     nfeRawResponse: params.nfeRawResponse,
+    destinatarioNome: params.destinatarioNome || params.order.customerName,
     createdAt: new Date().toISOString(),
   };
 }

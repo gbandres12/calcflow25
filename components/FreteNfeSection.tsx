@@ -236,158 +236,150 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
         </span>
       </p>
 
-      {comCobranca && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex-1 space-y-1">
-              <label className="text-[11px] font-black uppercase tracking-wide text-emerald-800">
-                Transportador cadastrado
-              </label>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="search"
-                  value={transportadorSearch}
-                  onChange={e => setTransportadorSearch(e.target.value)}
-                  placeholder="Buscar nome, CPF/CNPJ, placa ou RNTRC..."
-                  className="w-full rounded-xl border border-emerald-200 bg-white py-2.5 pl-9 pr-3 text-xs font-semibold outline-none focus:border-emerald-600"
-                />
-              </div>
-              <select
-                value={value.transportadorId || ''}
-                onChange={e => selectTransportador(e.target.value)}
-                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600"
-              >
-                <option value="">Selecionar da lista...</option>
-                {transportadoresAtivos.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.nome}{item.placa ? ` · ${item.placa}` : ''}{item.contratacao === 'CLIENTE' ? ' · do cliente' : item.contratacao === 'EMPRESA' ? ' · da empresa' : ''}
-                  </option>
-                ))}
-              </select>
-              {transportadoresAtivos.length === 0 && transportadorSearch && (
-                <p className="text-xs font-semibold text-slate-500">Nenhum cadastro encontrado.</p>
-              )}
-            </div>
-            {onAddTransportador && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowQuickAdd(!showQuickAdd);
-                  setQuickError('');
-                }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-[11px] font-black uppercase text-emerald-800 hover:bg-emerald-100 sm:w-auto"
-              >
-                {showQuickAdd ? <X size={14} /> : <Plus size={14} />}
-                {showQuickAdd ? 'Fechar cadastro' : 'Cadastrar agora'}
-              </button>
-            )}
-          </div>
-
-          {value.transportadorId && (
-            <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-800">
-              Cadastro selecionado: {value.transportadora?.nome}
-              {value.veiculo?.placa ? ` · Placa ${value.veiculo.placa}` : ''}
-            </p>
-          )}
-
-          {showQuickAdd && onAddTransportador && (
-            <div className="space-y-3 rounded-2xl border border-emerald-200 bg-white p-3 animate-in fade-in duration-150">
-              <div>
-                <p className="text-xs font-black text-slate-800">Cadastro rápido do transportador</p>
-                <p className="text-xs text-slate-500">O cadastro ficará salvo para as próximas notas.</p>
-              </div>
-              {quickError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{quickError}</p>}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <input value={quick.nome} onChange={e => setQuick({ ...quick, nome: e.target.value })} placeholder="Nome / Razão social *" className={inputCls} />
-                <input value={quick.documento} onChange={e => setQuick({ ...quick, documento: e.target.value })} inputMode="numeric" placeholder="CPF / CNPJ" className={inputCls} />
-                <input value={quick.telefone} onChange={e => setQuick({ ...quick, telefone: e.target.value })} inputMode="tel" placeholder="Telefone / WhatsApp" className={inputCls} />
-                <input value={quick.rntrc} onChange={e => setQuick({ ...quick, rntrc: e.target.value })} placeholder="RNTRC / ANTT" className={inputCls} />
-                <input value={quick.placa} onChange={e => setQuick({ ...quick, placa: e.target.value.toUpperCase() })} placeholder="Placa do veículo" className={inputCls} />
-                <div className="flex gap-2">
-                  <input value={quick.cidade} onChange={e => setQuick({ ...quick, cidade: e.target.value })} placeholder="Cidade" className={`${inputCls} flex-1`} />
-                  <input value={quick.uf} onChange={e => setQuick({ ...quick, uf: e.target.value.toUpperCase() })} maxLength={2} placeholder="UF" className={`${inputCls} w-16 text-center`} />
-                </div>
-              </div>
-              <button type="button" onClick={saveQuickTransportador} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-[11px] font-black uppercase text-white hover:bg-emerald-800">
-                <Save size={14} /> Salvar e usar nesta NF-e
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {comCobranca && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {!isFobMotorista && (
-            <div className="space-y-1">
-              <label className={labelCls}>Valor do frete (R$) — compõe o total</label>
+      {/* Transportador cadastrado / busca e cadastro rápido */}
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex-1 space-y-1">
+            <label className="text-[11px] font-black uppercase tracking-wide text-emerald-800">
+              Transportador cadastrado
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-3 text-slate-400" />
               <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={value.valor ?? 0}
-                onChange={(e) => update({ valor: parseFloat(e.target.value) || 0 })}
-                className={inputCls}
-                placeholder="0.00"
+                type="search"
+                value={transportadorSearch}
+                onChange={e => setTransportadorSearch(e.target.value)}
+                placeholder="Buscar nome, CPF/CNPJ, placa ou RNTRC..."
+                className="w-full rounded-xl border border-emerald-200 bg-white py-2.5 pl-9 pr-3 text-xs font-semibold outline-none focus:border-emerald-600"
               />
             </div>
-          )}
-          {isFobMotorista && (
-            <div className="space-y-1 sm:col-span-1">
-              <label className={labelCls}>Valor do frete na NF-e</label>
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-900">
-                FOB: permanece <b>R$ 0,00</b> — declare só o motorista (CPF) e a placa abaixo.
-              </p>
-            </div>
-          )}
-          <div className="space-y-1">
-            <label className={labelCls}>Modalidade SEFAZ (modFrete)</label>
             <select
-              value={mod}
-              onChange={(e) => {
-                const nextMod = parseInt(e.target.value, 10) as FreteInfo['modalidade'];
-                update({
-                  modalidade: nextMod,
-                  valor: nextMod === 9 || nextMod === 1 || nextMod === 4 ? 0 : value.valor,
-                });
-              }}
-              className={inputCls}
+              value={value.transportadorId || ''}
+              onChange={e => selectTransportador(e.target.value)}
+              className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-600"
             >
-              {FRETE_MODALIDADES.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+              <option value="">Selecionar da lista de transportadores...</option>
+              {transportadoresAtivos.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.nome}{item.placa ? ` · ${item.placa}` : ''}{item.contratacao === 'CLIENTE' ? ' · do cliente' : item.contratacao === 'EMPRESA' ? ' · da empresa' : ''}
+                </option>
               ))}
             </select>
+            {transportadoresAtivos.length === 0 && transportadorSearch && (
+              <p className="text-xs font-semibold text-slate-500">Nenhum cadastro encontrado.</p>
+            )}
           </div>
+          {onAddTransportador && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickAdd(!showQuickAdd);
+                setQuickError('');
+              }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-[11px] font-black uppercase text-emerald-800 hover:bg-emerald-100 sm:w-auto"
+            >
+              {showQuickAdd ? <X size={14} /> : <Plus size={14} />}
+              {showQuickAdd ? 'Fechar cadastro' : 'Cadastrar agora'}
+            </button>
+          )}
         </div>
-      )}
 
-      {!comCobranca && (
-        <input type="hidden" value={9} readOnly />
-      )}
+        {value.transportadorId && (
+          <p className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-800">
+            Cadastro selecionado: {value.transportadora?.nome}
+            {value.veiculo?.placa ? ` · Placa ${value.veiculo.placa}` : ''}
+          </p>
+        )}
+
+        {showQuickAdd && onAddTransportador && (
+          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-white p-3 animate-in fade-in duration-150">
+            <div>
+              <p className="text-xs font-black text-slate-800">Cadastro rápido do transportador</p>
+              <p className="text-xs text-slate-500">O cadastro ficará salvo para as próximas notas.</p>
+            </div>
+            {quickError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{quickError}</p>}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input value={quick.nome} onChange={e => setQuick({ ...quick, nome: e.target.value })} placeholder="Nome / Razão social *" className={inputCls} />
+              <input value={quick.documento} onChange={e => setQuick({ ...quick, documento: e.target.value })} inputMode="numeric" placeholder="CPF / CNPJ" className={inputCls} />
+              <input value={quick.telefone} onChange={e => setQuick({ ...quick, telefone: e.target.value })} inputMode="tel" placeholder="Telefone / WhatsApp" className={inputCls} />
+              <input value={quick.rntrc} onChange={e => setQuick({ ...quick, rntrc: e.target.value })} placeholder="RNTRC / ANTT" className={inputCls} />
+              <input value={quick.placa} onChange={e => setQuick({ ...quick, placa: e.target.value.toUpperCase() })} placeholder="Placa do veículo" className={inputCls} />
+              <div className="flex gap-2">
+                <input value={quick.cidade} onChange={e => setQuick({ ...quick, cidade: e.target.value })} placeholder="Cidade" className={`${inputCls} flex-1`} />
+                <input value={quick.uf} onChange={e => setQuick({ ...quick, uf: e.target.value.toUpperCase() })} maxLength={2} placeholder="UF" className={`${inputCls} w-16 text-center`} />
+              </div>
+            </div>
+            <button type="button" onClick={saveQuickTransportador} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-[11px] font-black uppercase text-white hover:bg-emerald-800">
+              <Save size={14} /> Salvar e usar nesta NF-e
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {!isFobMotorista && mod !== 9 && (
+          <div className="space-y-1">
+            <label className={labelCls}>Valor do frete (R$) — compõe o total</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={value.valor ?? 0}
+              onChange={(e) => update({ valor: parseFloat(e.target.value) || 0 })}
+              className={inputCls}
+              placeholder="0.00"
+            />
+          </div>
+        )}
+        {(isFobMotorista || mod === 9) && (
+          <div className="space-y-1 sm:col-span-1">
+            <label className={labelCls}>Valor do frete na NF-e</label>
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-700">
+              {mod === 9 ? 'Sem cobrança de frete (R$ 0,00).' : 'FOB: permanece R$ 0,00 (por conta do destinatário).'}
+            </p>
+          </div>
+        )}
+        <div className="space-y-1">
+          <label className={labelCls}>Modalidade SEFAZ (modFrete)</label>
+          <select
+            value={mod}
+            onChange={(e) => {
+              const nextMod = parseInt(e.target.value, 10) as FreteInfo['modalidade'];
+              update({
+                modalidade: nextMod,
+                valor: nextMod === 9 || nextMod === 1 || nextMod === 4 ? 0 : value.valor,
+              });
+            }}
+            className={inputCls}
+          >
+            {FRETE_MODALIDADES.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {/* Transportadora */}
-      {(precisaTransportadora || showTransportadora || isFobMotorista) && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">
-          <button
-            type="button"
-            onClick={() => setShowTransportadora(!showTransportadora)}
-            className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[11px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
-          >
-            <span>
-              Transportadora{' '}
-              {mod === 0
-                ? '(contratada pelo remetente — CIF, vai na NF-e)'
-                : mod === 1
-                  ? '(FOB: motorista — CPF + nome na NF-e)'
-                  : mod === 2
-                    ? '(terceiros — vai na NF-e)'
-                    : '(opcional)'}
-            </span>
-            {showTransportadora ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">
+        <button
+          type="button"
+          onClick={() => setShowTransportadora(!showTransportadora)}
+          className="w-full flex items-start sm:items-center justify-between gap-2 text-left text-[11px] sm:text-[11px] font-black uppercase text-slate-600 tracking-wide"
+        >
+          <span>
+            Dados da Transportadora / Motorista{' '}
+            {mod === 0
+              ? '(contratada pelo remetente — CIF)'
+              : mod === 1
+                ? '(FOB: motorista — CPF + nome)'
+                : mod === 9
+                  ? '(Sem frete — sai nas observações da nota)'
+                  : '(opcional)'}
+          </span>
+          {showTransportadora ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
 
-          {showTransportadora && (
+        {showTransportadora && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-150">
               <div className="space-y-1">
                 <label className={labelCls}>{isFobMotorista ? 'CPF do motorista *' : 'CNPJ / CPF da transportadora'}</label>
@@ -462,17 +454,6 @@ export const FreteNfeSection: React.FC<FreteNfeSectionProps> = ({
             </div>
           )}
         </div>
-      )}
-
-      {!precisaTransportadora && !showTransportadora && !isFobMotorista && comCobranca && (
-        <button
-          type="button"
-          onClick={() => setShowTransportadora(true)}
-          className="text-xs font-bold text-purple-700 hover:text-purple-900 underline underline-offset-2"
-        >
-          + Informar transportadora (opcional)
-        </button>
-      )}
 
       {/* Veículo + volumes */}
       <div className="bg-white border border-slate-200 rounded-2xl p-3.5 space-y-3">

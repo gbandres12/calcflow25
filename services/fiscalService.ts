@@ -169,9 +169,7 @@ export function resolveFreteModalidade(order: Pick<SaleOrder, 'frete' | 'shippin
 
   if (raw != null && Number.isFinite(Number(raw))) {
     const n = Number(raw);
-    if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4) return n as FreteMod;
-    if (n === 9 && hasMotorista) return 1;
-    if (n === 9) return 9;
+    if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4 || n === 9) return n as FreteMod;
   }
   if (hasMotorista) return 1;
   const ship = Math.max(0, Number(order.shipping) || Number(order.frete?.valor) || 0);
@@ -710,36 +708,52 @@ export const fiscalService = {
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
 
     // ---- Frete / transporte (modFrete SEFAZ: 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2 terceiros · 3/4 próprio) ----
+    const emitUf = (config.ufEmitente || 'PA').trim().toUpperCase();
+    const destUfNormalized = destUf.trim().toUpperCase();
+    const isOperacaoInterestadual = destUfNormalized !== emitUf || Boolean(isInterestadual);
+
     const freteModalidade = resolveFreteModalidade(order);
     const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
     const hasFreteCobrado = freteValorCompoeTotalNota(freteModalidade, freteValor);
 
+    // SEFAZ Regra de Validação X25-10 e X25-20 (Rejeição 868 e 852):
+    // 1) Em operações interestaduais (idDest=2, destUf !== emitUf), a SEFAZ PROÍBE o grupo veicTransp e transporta
+    //    pois o transporte interestadual é acobertado por MDF-e / CT-e da transportadora.
+    // 2) Em modFrete = 9 (sem frete), a SEFAZ também proíbe os grupos transportadora e veiculo.
+    // 3) No Schema XML da SEFAZ, o grupo <transporta> EXIGE CNPJ (14 dígitos) ou CPF (11 dígitos).
+    //    Se não houver documento válido, NÃO PODE enviar a tag estruturada na SEFAZ (evita cStat 225 de schema).
+    // Nesses casos, os dados de veículo, placa, motorista e transportadora CONSTAM integralmente nas Informações Complementares (infCpl).
+    const transpDoc = onlyDigits(order.frete?.transportadora?.documento);
+    const hasValidTranspDoc = transpDoc.length === 11 || transpDoc.length === 14;
+    const allowsGrupoTransp = !isOperacaoInterestadual &&
+      freteModalidade !== 9 &&
+      hasValidTranspDoc &&
+      modFreteAllowsGrupoTransportador(freteModalidade, transpDoc);
+
+    const cleanPlaca = (order.frete?.veiculo?.placa || opts?.carregamento?.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const hasValidPlaca = cleanPlaca.length === 7;
+    const allowsGrupoVeiculo = !isOperacaoInterestadual && freteModalidade !== 9 && hasValidPlaca;
+
     const transporte: NotaAsTransporte = { modalidadeFrete: freteModalidade };
     const transp = order.frete?.transportadora;
-    const effectiveModFrete = freteModalidade;
-    const transpDocDigits = onlyDigits(transp?.documento);
-    if (
-      modFreteAllowsGrupoTransportador(effectiveModFrete, transpDocDigits) &&
-      transp &&
-      (transp.documento || transp.nome || transp.rntrc)
-    ) {
+    if (allowsGrupoTransp && transp && hasValidTranspDoc) {
       transporte.transportadora = {
-        ...(transp.documento ? { documento: onlyDigits(transp.documento) } : {}),
+        documento: transpDoc,
         ...(transp.nome?.trim() ? { nome: transp.nome.trim() } : {}),
         ...(transp.ie?.trim() ? { ie: onlyDigits(transp.ie) } : {}),
         ...(transp.endereco?.trim() ? { endereco: transp.endereco.trim() } : {}),
         ...(transp.cidade?.trim() ? { cidade: transp.cidade.trim() } : {}),
-        ...(transp.uf?.trim() ? { uf: transp.uf.trim().toUpperCase() } : {}),
+        ...(transp.uf?.trim() ? { uf: transp.uf.trim().toUpperCase() } : { uf: emitUf }),
         ...(transp.rntrc?.trim() ? { rntrc: transp.rntrc.trim() } : {}),
       };
     }
     const veic = order.frete?.veiculo;
-    if (veic && (veic.placa || veic.rntrc)) {
+    if (allowsGrupoVeiculo && cleanPlaca) {
       transporte.veiculo = {
-        ...(veic.placa?.trim() ? { placa: veic.placa.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') } : {}),
-        ...(veic.uf?.trim() ? { uf: veic.uf.trim().toUpperCase() } : {}),
-        ...(veic.rntrc?.trim() ? { rntrc: veic.rntrc.trim() } : {}),
+        placa: cleanPlaca,
+        uf: (veic?.uf?.trim() || transp?.uf?.trim() || emitUf).toUpperCase().slice(0, 2),
+        ...(veic?.rntrc?.trim() ? { rntrc: veic.rntrc.trim() } : {}),
       };
     }
     const vol = order.frete?.volumes;
@@ -757,16 +771,28 @@ export const fiscalService = {
     }
 
     // Montar observações fiscais e complementares da nota
+    const finalMotoristaOuTransp = transp?.nome?.trim() || opts?.carregamento?.motorista?.trim();
+    const finalPlacaVeic = cleanPlaca || (veic?.placa?.trim() || opts?.carregamento?.placa?.trim() || '').toUpperCase();
     const freteInfParts: string[] = [];
-    if (freteModalidade !== 9) {
-      const modLabel = freteModalidade === 0 ? 'CIF' : freteModalidade === 1 ? 'FOB' : `modFrete ${freteModalidade}`;
-      freteInfParts.push(
-        hasFreteCobrado
-          ? `Frete ${modLabel} R$ ${freteValor.toFixed(2)} incluso no total da nota`
-          : `Frete ${modLabel} sem valor cobrado na nota`
-      );
+
+    if (freteModalidade !== 9 || isInterestadual || finalMotoristaOuTransp || finalPlacaVeic) {
+      const modLabel = freteModalidade === 0 ? 'CIF' : freteModalidade === 1 ? 'FOB' : freteModalidade === 9 ? 'Sem Frete' : `modFrete ${freteModalidade}`;
+      if (freteModalidade !== 9) {
+        freteInfParts.push(
+          hasFreteCobrado
+            ? `Frete ${modLabel} R$ ${freteValor.toFixed(2)} incluso no total da nota`
+            : `Frete ${modLabel} sem valor cobrado na nota`
+        );
+      }
       if (transp?.nome?.trim()) freteInfParts.push(`Transportadora: ${transp.nome.trim()}`);
-      if (veic?.placa?.trim()) freteInfParts.push(`Placa: ${veic.placa.trim().toUpperCase()}`);
+      if (transpDoc) freteInfParts.push(`Doc. Transp: ${transpDoc}`);
+      if (finalMotoristaOuTransp && finalMotoristaOuTransp !== transp?.nome?.trim()) {
+        freteInfParts.push(`Motorista: ${finalMotoristaOuTransp}`);
+      }
+      if (finalPlacaVeic) {
+        const placaUf = veic?.uf ? `/${veic.uf.trim().toUpperCase()}` : '';
+        freteInfParts.push(`Placa Veículo: ${finalPlacaVeic}${placaUf}`);
+      }
     }
 
     const carregamentoParts: string[] = [
@@ -776,7 +802,7 @@ export const fiscalService = {
       opts?.carregamento?.motorista ? `Motorista: ${opts.carregamento.motorista}` : '',
     ].filter(Boolean);
 
-    // infCpl: texto do modal ou cláusulas do produto. NFA avulsa não recebe Pedido/NFA/disclaimer.
+    // infCpl: texto do modal ou cláusulas do produto. NFA avulsa não recebe Pedido/NFA/disclaimer, mas preserva dados de frete e carregamento.
     const isAvulsaNote = Boolean(order.isAvulsa) || (order.nfeReferenciaExterna || '').includes('#AV#');
     const infCpl = buildNfeInfCpl({
       nfeInfCpl: order.nfeInfCpl,
@@ -784,10 +810,10 @@ export const fiscalService = {
       items: order.items,
       extras: [
         ...carregamentoParts,
+        ...freteInfParts,
         ...(isAvulsaNote
           ? []
           : [
-              ...freteInfParts,
               order.reference ? `Pedido: ${order.reference}` : '',
               isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
               isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
@@ -1400,15 +1426,18 @@ export const fiscalService = {
 
   /** DANFE oficial (PDF binário) gerado pela NotaAs. Exige invoiceId e nota issued/cancelled. */
   async baixarDanfePdf(invoiceId: string, overrideConfig?: FiscalConfig): Promise<{ ok: boolean; blob?: Blob; error?: string }> {
-    if (!invoiceId) return { ok: false, error: 'NF-e sem invoiceId da NotaAs. Não é possível gerar o DANFE oficial.' };
+    const rawId = String(invoiceId || '').trim();
+    const uuidMatch = rawId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const cleanId = uuidMatch ? uuidMatch[0] : rawId;
+    if (!cleanId) return { ok: false, error: 'NF-e sem invoiceId da NotaAs. Não é possível gerar o DANFE oficial.' };
     const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
     try {
       const res = await fetch('/api/nfe/danfe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoiceId,
-          nfeIdOrChave: invoiceId,
+          invoiceId: cleanId,
+          nfeIdOrChave: cleanId,
           apiKey: (config.apiKey || '').trim(),
           apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
           companyId: config.companyId || overrideConfig?.companyId,
@@ -1481,9 +1510,10 @@ export const fiscalService = {
     const freteValXml = freteModXml === 9 ? 0 : (Number(order.frete?.valor ?? order.shipping) || 0);
     const transpDoc = (order.frete?.transportadora?.documento || '').replace(/\D/g, '');
     const transpNome = order.frete?.transportadora?.nome || '';
+    const hasValidDocXml = transpDoc.length === 11 || transpDoc.length === 14;
     const transpBloco =
-      modFreteAllowsGrupoTransportador(freteModXml, transpDoc) && (transpDoc || transpNome)
-        ? `<transporta>${transpDoc.length === 11 ? `<CPF>${transpDoc}</CPF>` : `<CNPJ>${transpDoc}</CNPJ>`}<xNome>${transpNome}</xNome></transporta>`
+      modFreteAllowsGrupoTransportador(freteModXml, transpDoc) && hasValidDocXml
+        ? `<transporta>${transpDoc.length === 11 ? `<CPF>${transpDoc}</CPF>` : `<CNPJ>${transpDoc}</CNPJ>`}${transpNome ? `<xNome>${transpNome}</xNome>` : ''}</transporta>`
         : '';
     const vol = order.frete?.volumes;
     const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)

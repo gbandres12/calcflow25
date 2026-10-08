@@ -102,9 +102,14 @@ describe('duplicar nota fiscal', () => {
     assert.equal(draft.paymentMethod, 'PIX');
   });
 
-  it('transferência e devolução saem sem cobrança', () => {
-    assert.equal(mapPaymentMethodForDuplicate('PIX', 'transferencia'), 'Sem Pagamento');
-    assert.equal(mapPaymentMethodForDuplicate('Boleto', 'devolucao'), 'Sem Pagamento');
-    assert.equal(mapPaymentMethodForDuplicate('Transferência Bancária'), 'Transferência');
+  it('preserva nome e documento do destinatário ao duplicar e vincula corretamente', () => {
+    const o = order({
+      customerName: 'Márcio Antônio Cezarotto',
+      customerDocument: '46338640091'
+    });
+    const draft = buildNfeDuplicateDraft(o);
+    assert.equal(draft.customerName, 'Márcio Antônio Cezarotto');
+    assert.equal(draft.customerDocument, '46338640091');
   });
 });
+

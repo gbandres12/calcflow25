@@ -621,12 +621,14 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
     try {
       const semPgto = !generateFinance || Boolean(selectedOrderId);
+      const finalPlaca = (placaCaminhao || frete.veiculo?.placa || '').toUpperCase().trim();
+      const finalMotorista = (nomeMotorista || frete.transportadora?.nome || '').trim();
       const opts = {
         semPagamento: semPgto,
         carregamento: {
           ticketPesagem: ticketBalanca.trim() || undefined,
-          placa: placaCaminhao.trim() || undefined,
-          motorista: nomeMotorista.trim() || undefined,
+          placa: finalPlaca || undefined,
+          motorista: finalMotorista || undefined,
           pedidoExterno: pedidoExterno.trim() || undefined
         }
       };
@@ -708,8 +710,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               orderId: linkedOrder.id,
               orderReference: linkedOrder.reference,
               date: getLocalDateStr(),
-              driverName: nomeMotorista.trim() || 'Motorista',
-              plateNumber: placaCaminhao.trim().toUpperCase() || 'PLACA',
+              driverName: finalMotorista || 'Motorista',
+              plateNumber: finalPlaca || 'PLACA',
               quantityWithdrawn: thisQty,
               productName: items[0]?.productName || 'Calcário Agrícola',
               weighTicketNumber: ticketBalanca.trim() || `PES-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -1391,7 +1393,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   <input 
                     type="text" 
                     value={placaCaminhao} 
-                    onChange={e => setPlacaCaminhao(e.target.value.toUpperCase())} 
+                    onChange={e => handlePlacaCaminhaoChange(e.target.value)} 
                     placeholder="ABC-1D23"
                     className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold uppercase outline-none"
                   />
@@ -1401,7 +1403,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   <input 
                     type="text" 
                     value={nomeMotorista} 
-                    onChange={e => setNomeMotorista(e.target.value)} 
+                    onChange={e => handleNomeMotoristaChange(e.target.value)} 
                     placeholder="Nome"
                     className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs outline-none"
                   />
@@ -1493,7 +1495,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           {/* Seção 5: Frete & Transporte — sem frete, CIF, FOB */}
           <FreteNfeSection
             value={frete}
-            onChange={setFrete}
+            onChange={handleFreteChange}
             totalQuantidade={totalQuantidade}
             transportadores={transportadores}
             onAddTransportador={onAddTransportador}

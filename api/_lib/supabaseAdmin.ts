@@ -69,20 +69,23 @@ export async function getFiscalConfigForCompany(companyId: string): Promise<any 
   if (companyId) {
     const { data, error } = await supabase
       .from('app_records')
-      .select('data')
+      .select('id, data')
       .eq('table_name', 'fiscal_config')
       .eq('company_id', companyId)
-      .limit(5);
+      .limit(10);
     if (!error && Array.isArray(data) && data.length > 0) {
-      const row = data.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || data[0];
+      const row = data.find((r: any) => 
+        r?.data && 
+        !r.data.__isSeedMeta && 
+        r.id !== '__seed__' && 
+        r.data.id !== '__seed__' && 
+        (r.data.apiKey || r.data.apiKeyNotaas)
+      ) || data.find((r: any) => (r?.data?.apiKey || r?.data?.apiKeyNotaas)) || data.find((r: any) => r?.id !== '__seed__' && r?.data?.id !== '__seed__') || data[0];
       if (row?.data) return row.data;
     }
     return null;
   }
 
-  // Sem companyId não há como saber de quem é a nota: com matriz + filiais
-  // (cada uma com CNPJ e certificado próprios), "pegar qualquer um" emitiria
-  // pelo emitente errado.
   return null;
 }
 

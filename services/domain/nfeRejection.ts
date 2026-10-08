@@ -74,6 +74,14 @@ const RULES: Rule[] = [
       title: 'Campo obrigatório vazio ou fora do formato',
       fix: 'Algum dado do cliente, do transporte ou do produto está incompleto (ex.: CEP, município, placa, CPF do motorista). Revise os cadastros e tente de novo.'
     }
+  },
+  {
+    codes: [852, 853, 854, 868],
+    pattern: /grupos transportador|veiculo transporte|reboque n[aã]o devem ser informados/i,
+    help: {
+      title: 'Dados de transporte em operação interestadual ou sem frete',
+      fix: 'Em operações interestaduais ou sem frete, a SEFAZ não aceita a placa e transportador no XML da NF-e (devem constar em dados adicionais ou MDF-e). O sistema agora faz esse ajuste automaticamente.'
+    }
   }
 ];
 

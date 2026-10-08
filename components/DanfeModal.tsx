@@ -90,7 +90,9 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       return;
     }
 
-    const invoiceId = (invoice.nfeId || '').trim();
+    const rawInvoiceId = (invoice.nfeId || invoice.nfeDanfeUrl || '').trim();
+    const uuidMatch = rawInvoiceId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const invoiceId = uuidMatch ? uuidMatch[0] : rawInvoiceId;
     const canPdf = invoice.nfeStatus === 'autorizada' || invoice.nfeStatus === 'cancelada';
     if (!invoiceId || !canPdf) {
       revokeBlob();

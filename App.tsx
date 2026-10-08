@@ -354,16 +354,30 @@ const App: React.FC = () => {
 
         const normalizeCustomers = (rows: any[]): Customer[] =>
           (Array.isArray(rows) ? rows : [])
-            .filter((c): c is Customer => Boolean(c && typeof c === 'object' && (c as Customer).id))
-            .map(c => ({
-              ...c,
-              id: String(c.id),
-              name: String(c.name || 'Cliente sem nome'),
-              document: String(c.document ?? ''),
-              email: String(c.email ?? ''),
-              phone: String(c.phone ?? ''),
-              totalSpent: Number(c.totalSpent) || 0
-            }));
+            .filter((c): c is Customer => Boolean(c && typeof c === 'object' && (c as Customer).id && (c as any).id !== '__seed__' && !(c as any).__isSeedMeta && !String((c as any).id).startsWith('__')))
+            .map(c => {
+              const rawName = String((c as any).name || (c as any).nome || (c as any).razaoSocial || (c as any).fantasia || '').trim();
+              const rawDoc = String((c as any).document ?? (c as any).cpfCnpj ?? (c as any).cnpj ?? (c as any).cpf ?? '').trim();
+              const finalName = rawName && rawName !== 'Cliente sem nome' ? rawName : (rawDoc ? `Cliente (${rawDoc})` : (rawName || 'Cliente'));
+              return {
+                ...c,
+                id: String(c.id),
+                name: finalName,
+                document: rawDoc,
+                email: String((c as any).email ?? ''),
+                phone: String((c as any).phone ?? (c as any).telefone ?? ''),
+                totalSpent: Number((c as any).totalSpent) || 0,
+                street: (c as any).street || (c as any).endereco || (c as any).logradouro || '',
+                number: (c as any).number || (c as any).numero || '',
+                neighborhood: (c as any).neighborhood || (c as any).bairro || '',
+                city: (c as any).city || (c as any).cidade || 'Santarém',
+                state: ((c as any).state || (c as any).uf || 'PA').toUpperCase(),
+                zipCode: (c as any).zipCode || (c as any).cep || '',
+                ibgeCode: (c as any).ibgeCode || (c as any).codigoIbge || '',
+                ie: (c as any).ie || (c as any).inscricaoEstadual || '',
+                isentoIE: (c as any).isentoIE ?? false
+              };
+            });
 
         setTransactions((prev) => adoptFetched('transactions', savedTxs, prev));
         setInventory((prev) => adoptFetched('inventory', savedInv, prev));
@@ -1597,6 +1611,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               transportadores={transportadores}
               onAddTransportador={handleAddTransportador}
+              onUpdateCustomer={handleUpdateCustomer}
               onUpdateOrder={handleUpdateOrder} 
               onAddOrder={handleAddOrder}
               onNavigate={setCurrentView}
