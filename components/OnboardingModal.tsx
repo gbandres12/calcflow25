@@ -193,7 +193,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </p>
             </div>
             <div className="bg-purple-600/20 border border-purple-500/30 px-4 py-2 rounded-2xl text-right">
-              <span className="text-[10px] font-black text-purple-300 uppercase tracking-widest block">Passo Atual</span>
+              <span className="text-[11px] font-black text-purple-300 uppercase tracking-widest block">Passo Atual</span>
               <span className="text-sm font-black text-white">{step} de 5</span>
             </div>
           </div>
@@ -218,7 +218,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 >
                   <div className="flex items-center gap-1">
                     {isDone ? <CheckCircle2 size={14} /> : <Icon size={14} />}
-                    <span className="text-[10px] hidden sm:inline">{s.title}</span>
+                    <span className="text-xs hidden sm:inline">{s.title}</span>
                   </div>
                   <div className={`h-1 w-full rounded-full ${isCurrent ? 'bg-white' : isDone ? 'bg-emerald-400' : 'bg-slate-700'}`}></div>
                 </div>
@@ -245,7 +245,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Usina / Mineração</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome da Usina / Mineração</label>
                   <input
                     type="text"
                     value={companyName}
@@ -256,7 +256,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CNPJ da Empresa</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CNPJ da Empresa</label>
                   <input
                     type="text"
                     value={cnpj}
@@ -267,7 +267,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Capacidade Nominal de Moagem</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Capacidade Nominal de Moagem</label>
                   <div className="relative">
                     <input
                       type="number"
@@ -276,12 +276,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       placeholder="15000"
                       className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-purple-500"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">TON / Mês</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">TON / Mês</span>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cidade do Pátio / Jazida</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Cidade do Pátio / Jazida</label>
                   <input
                     type="text"
                     value={cityLocation}
@@ -292,7 +292,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado (UF)</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Estado (UF)</label>
                   <select
                     value={stateLocation}
                     onChange={e => setStateLocation(e.target.value)}
@@ -348,13 +348,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                       />
                       <div>
                         <p className="font-black text-sm text-slate-800">{prod.name}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Unidade Padrão: Tonelada (TON)</p>
+                        <p className="text-[11px] font-bold text-slate-500 uppercase">Unidade Padrão: Tonelada (TON)</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto">
                       <div className="w-1/2 md:w-32">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Estoque Inicial (T)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Estoque Inicial (T)</label>
                         <input
                           type="number"
                           value={prod.quantity}
@@ -368,7 +368,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                         />
                       </div>
                       <div className="w-1/2 md:w-32">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Preço Sugerido (R$/T)</label>
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">Preço Sugerido (R$/T)</label>
                         <input
                           type="number"
                           value={prod.unitPrice}
@@ -409,7 +409,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Instituição Bancária</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Instituição Bancária</label>
                     <select
                       value={bankName}
                       onChange={e => setBankName(e.target.value)}
@@ -426,7 +426,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Número da Conta / Agência</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Número da Conta / Agência</label>
                     <input
                       type="text"
                       value={accountNumber}
@@ -437,7 +437,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo de Abertura (R$)</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo de Abertura (R$)</label>
                     <input
                       type="number"
                       value={bankInitialBalance}
@@ -459,7 +459,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </p>
 
                   <div className="space-y-1.5 pt-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Inicial em Caixa Físico (R$)</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Inicial em Caixa Físico (R$)</label>
                     <input
                       type="number"
                       value={cashboxInitialBalance}
@@ -489,7 +489,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               <div className="p-6 bg-slate-50 border border-slate-200 rounded-3xl space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome do Operador</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome do Operador</label>
                     <input
                       type="text"
                       value={teamMember.name}
@@ -500,7 +500,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail de Login do Operador</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">E-mail de Login do Operador</label>
                     <input
                       type="email"
                       value={teamMember.email}
@@ -511,7 +511,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível de Acesso Inicial</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nível de Acesso Inicial</label>
                     <select
                       value={teamMember.role}
                       onChange={e => setTeamMember({ ...teamMember, role: e.target.value as UserRole })}
@@ -523,7 +523,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     </select>
                   </div>
                   <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Senha inicial do operador</label>
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Senha inicial do operador</label>
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -564,19 +564,19 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left max-w-2xl mx-auto">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Capacidade</span>
+                  <span className="text-[11px] font-black text-slate-500 uppercase">Capacidade</span>
                   <p className="text-sm font-black text-slate-800">{Number(monthlyCapacity).toLocaleString('pt-BR')} T/mês</p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Bancos & Caixa</span>
+                  <span className="text-[11px] font-black text-slate-500 uppercase">Bancos & Caixa</span>
                   <p className="text-sm font-black text-emerald-600">
                     R$ {(Number(bankInitialBalance) + Number(cashboxInitialBalance)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Plano Ativo</span>
+                  <span className="text-[11px] font-black text-slate-500 uppercase">Plano Ativo</span>
                   <p className="text-sm font-black text-purple-700 flex items-center gap-1">
                     <Award size={14} /> SaaS PRO
                   </p>

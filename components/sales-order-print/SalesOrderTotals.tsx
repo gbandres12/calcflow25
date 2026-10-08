@@ -13,22 +13,22 @@ export const SalesOrderTotals: React.FC<Props> = ({ order }) => (
       <h2 className="text-[12px] font-bold mb-2.5" style={{ color: SO.navy }}>
         Valor total do pedido
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[9px]">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <div>
           <p className="font-medium" style={{ color: SO.muted }}>Total dos itens</p>
-          <p className="text-[11px] font-semibold" style={{ color: SO.text }}>{formatBRL(order.subtotal)}</p>
+          <p className="text-xs font-semibold" style={{ color: SO.text }}>{formatBRL(order.subtotal)}</p>
         </div>
         <div>
           <p className="font-medium" style={{ color: SO.muted }}>Desconto</p>
-          <p className="text-[11px] font-semibold" style={{ color: SO.text }}>{formatBRL(order.discount || 0)}</p>
+          <p className="text-xs font-semibold" style={{ color: SO.text }}>{formatBRL(order.discount || 0)}</p>
         </div>
         <div>
           <p className="font-medium" style={{ color: SO.muted }}>Frete</p>
-          <p className="text-[11px] font-semibold" style={{ color: SO.text }}>{formatBRL(order.shipping || 0)}</p>
+          <p className="text-xs font-semibold" style={{ color: SO.text }}>{formatBRL(order.shipping || 0)}</p>
         </div>
         <div>
           <p className="font-medium" style={{ color: SO.muted }}>Outros</p>
-          <p className="text-[11px] font-semibold" style={{ color: SO.text }}>{formatBRL(0)}</p>
+          <p className="text-xs font-semibold" style={{ color: SO.text }}>{formatBRL(0)}</p>
         </div>
       </div>
     </div>
@@ -37,7 +37,7 @@ export const SalesOrderTotals: React.FC<Props> = ({ order }) => (
       className="md:w-[220px] rounded-md px-4 py-3 flex flex-col justify-center"
       style={{ background: SO.totalBg, border: `1px solid ${SO.border}` }}
     >
-      <p className="text-[11px] font-bold tracking-wide" style={{ color: SO.green }}>
+      <p className="text-xs font-bold tracking-wide" style={{ color: SO.green }}>
         Valor total
       </p>
       <p className="text-[22px] font-bold leading-tight" style={{ color: SO.navy }}>

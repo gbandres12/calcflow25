@@ -23,7 +23,33 @@ export function normalizeCustomer(input?: Customer | null, fallbackId?: string):
   };
 }
 
-export function resolveCustomerForOrder(customers: Customer[], customerId?: string): Customer {
+export function resolveCustomerForOrder(customers: Customer[], customerId?: string, order?: any): Customer {
   const found = customers.find(c => c.id === customerId);
+  if (found) return normalizeCustomer(found, customerId);
+
+  if (order) {
+    const dest = order.nfePayload?.dest;
+    const fallbackName = dest?.nome || order.customerName;
+    const fallbackDoc = dest?.cpf || dest?.cnpj || order.customerDocument;
+    if (fallbackName || fallbackDoc) {
+      return {
+        id: String(customerId || 'cliente-pendente'),
+        name: String(fallbackName || 'Cliente sem nome'),
+        document: String(fallbackDoc || ''),
+        email: String(dest?.email || ''),
+        phone: String(dest?.telefone || ''),
+        street: dest?.endereco?.logradouro,
+        number: dest?.endereco?.numero,
+        neighborhood: dest?.endereco?.bairro,
+        city: dest?.endereco?.municipio,
+        state: dest?.endereco?.uf,
+        zipCode: dest?.endereco?.cep,
+        ibgeCode: dest?.endereco?.codigoMunicipio,
+        tipoPessoa: dest?.cnpj ? 'PJ' : 'PF',
+        totalSpent: Number(order.total) || 0
+      };
+    }
+  }
+
   return normalizeCustomer(found, customerId);
 }

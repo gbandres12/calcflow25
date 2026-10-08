@@ -23,3 +23,43 @@ describe('NF-e não vira venda recebida', () => {
     );
   });
 });
+
+describe('inativação e cancelamento de pedidos de venda', () => {
+  it('pedido cancelado zera saldo devedor e retorna status CANCELADO', async () => {
+    const { calculateOrderPayment } = await import('../components/SalesOrders');
+    const { OrderStatus } = await import('../types');
+
+    const cancelledOrder: any = {
+      id: 'ped-cancelled-1',
+      reference: 'PED-2026-0043',
+      total: 5000,
+      status: OrderStatus.CANCELLED,
+      receipts: []
+    };
+
+    const payment = calculateOrderPayment(cancelledOrder);
+    assert.equal(payment.paymentStatus, 'CANCELADO');
+    assert.equal(payment.remainingDebt, 0);
+    assert.equal(payment.financialProgress, 0);
+  });
+
+  it('bloqueia inativação/cancelamento se houver NF-e autorizada vinculada', async () => {
+    const { hasAuthorizedFiscalDocument } = await import('./saleNfe');
+    const orderWithAuthorizedNfe: any = {
+      id: 'ped-auth-1',
+      reference: 'PED-2026-0044',
+      nfeStatus: 'autorizada',
+      nfes: [{ id: 'nfe-1', tipo: 'pedido', nfeStatus: 'autorizada' }]
+    };
+    assert.equal(hasAuthorizedFiscalDocument(orderWithAuthorizedNfe), true);
+
+    const orderWithoutAuthNfe: any = {
+      id: 'ped-draft-1',
+      reference: 'PED-2026-0045',
+      nfeStatus: 'rascunho',
+      nfes: [{ id: 'nfe-2', tipo: 'pedido', nfeStatus: 'rascunho' }]
+    };
+    assert.equal(hasAuthorizedFiscalDocument(orderWithoutAuthNfe), false);
+  });
+});
+

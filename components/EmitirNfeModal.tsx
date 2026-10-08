@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
-import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
+import { fiscalService, freteValorCompoeTotalNota, mergeNfeConsulta, resolveFreteModalidade } from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
 import {
@@ -22,6 +22,7 @@ import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
+import NfeRejectionHint from './NfeRejectionHint';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -131,16 +132,21 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   const [frete, setFrete] = useState<FreteInfo>(() => {
     if (draftNfe?.frete) return { ...draftNfe.frete };
     if (order.frete) return { ...order.frete };
+    const base = { ...(order.frete || {}) };
     const shippingVal = Number(draftNfe?.shipping ?? order.shipping) || 0;
     return {
-      modalidade: shippingVal > 0 ? 0 : 9,
-      valor: shippingVal > 0 ? shippingVal : 0,
+      ...base,
+      modalidade: resolveFreteModalidade({ ...order, frete: base, shipping: shippingVal }),
+      valor: shippingVal > 0 && freteValorCompoeTotalNota(resolveFreteModalidade(order), shippingVal)
+        ? shippingVal
+        : Math.max(0, Number(base.valor) || 0),
     };
   });
 
   const freteValorEfetivo = useMemo(() => {
     const mod = Number(frete.modalidade ?? 9);
     if (isDevolucao || isTransferencia || mod === 9) return 0;
+    if (!freteValorCompoeTotalNota(mod, frete.valor)) return 0;
     return Math.max(0, Number(frete.valor) || 0);
   }, [frete, isDevolucao, isTransferencia]);
 
@@ -288,7 +294,9 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     subtotal: itemsSubtotal,
     frete: {
       ...frete,
-      modalidade: (isDevolucao || isTransferencia) ? 9 : (Number(frete.modalidade ?? 9) as FreteInfo['modalidade']),
+      modalidade: (isDevolucao || isTransferencia)
+        ? 9
+        : (resolveFreteModalidade({ ...order, frete, shipping: freteValorEfetivo }) as FreteInfo['modalidade']),
       valor: freteValorEfetivo,
     },
     nfeNaturezaOperacao: naturezaOperacao,
@@ -584,7 +592,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       footer={(
         <div className="flex items-center gap-2 flex-wrap">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total</p>
             <p className="text-base font-black text-slate-900 leading-none">{formatBRL(totalComFrete)}</p>
           </div>
           {isPreview ? (
@@ -663,7 +671,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     >
           {(draftLinkedId || draftNfe) && (
             <div className="mb-3 flex items-center gap-2">
-              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+              <span className="text-[11px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
                 Rascunho
               </span>
             </div>
@@ -675,13 +683,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           )}
           {isPreview && (
             <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-950 mb-3">
-              <p className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
                 <Eye size={14} /> Prévia em PDF do rascunho — revise antes de transmitir
               </p>
               <p className="text-xs font-medium mt-1">
                 {items.length} item(ns) · Total {formatBRL(totalComFrete)} · {naturezaOperacao}
               </p>
-              <p className="text-[11px] text-emerald-800 mt-1">
+              <p className="text-xs text-emerald-800 mt-1">
                 Este PDF é uma prévia interna (RASCUNHO / SEM VALOR FISCAL). O DANFE oficial só existe depois da autorização da SEFAZ.
               </p>
             </div>
@@ -730,7 +738,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 </ul>
               )}
               {validation.warnings && validation.warnings.length > 0 && (
-                <ul className="list-disc pl-4 text-[11px] text-amber-800">
+                <ul className="list-disc pl-4 text-xs text-amber-800">
                   {validation.warnings.map((w, idx) => (
                     <li key={`w-${idx}`}>{w}</li>
                   ))}
@@ -762,13 +770,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowCompanyModal(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold uppercase"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-[11px] font-bold uppercase"
                 >
                   <Settings size={11} /> Configurar
                 </button>
               </div>
-              <p className="text-[11px] text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente || company.cnpj}</b> · IE: <b>{currentConfig.inscricaoEstadual || company.stateRegistration || '—'}</b></p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-xs text-slate-600">CNPJ: <b>{currentConfig.cnpjEmitente || company.cnpj}</b> · IE: <b>{currentConfig.inscricaoEstadual || company.stateRegistration || '—'}</b></p>
+              <p className="text-xs text-slate-500">
                 {currentConfig.logradouroEmitente
                   ? `${currentConfig.logradouroEmitente}, ${currentConfig.numeroEmitente || 'S/N'} — ${currentConfig.cidadeEmitente || 'Santarém'}/${currentConfig.ufEmitente || 'PA'}`
                   : 'Santarém/PA'}
@@ -786,7 +794,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     e.preventDefault();
                     setIsEditingCustomer((v) => !v);
                   }}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold uppercase"
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[11px] font-bold uppercase"
                 >
                   <Edit3 size={11} /> {isEditingCustomer ? 'Fechar' : 'Editar'}
                 </button>
@@ -795,8 +803,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               {!isEditingCustomer ? (
                 <>
                   <p className="text-xs font-bold text-slate-800">{activeCustomer.name}</p>
-                  <p className="text-[11px] text-slate-600">Doc: <b>{activeCustomer.document || '—'}</b> · IE: <b>{activeCustomer.isentoIE ? 'Isento' : (activeCustomer.ie || '—')}</b></p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-600">Doc: <b>{activeCustomer.document || '—'}</b> · IE: <b>{activeCustomer.isentoIE ? 'Isento' : (activeCustomer.ie || '—')}</b></p>
+                  <p className="text-xs text-slate-500">
                     {activeCustomer.street || 'Zona Rural'}, {activeCustomer.number || 'SN'} — {activeCustomer.city || 'Santarém'}/{activeCustomer.state || 'PA'}
                   </p>
                 </>
@@ -804,7 +812,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <div className="space-y-2.5">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">CPF / CNPJ</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">CPF / CNPJ</label>
                       <input
                         type="text"
                         value={activeCustomer.document}
@@ -813,7 +821,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">IE</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">IE</label>
                       <input
                         type="text"
                         disabled={activeCustomer.isentoIE}
@@ -824,7 +832,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-black uppercase text-slate-400">CEP</label>
+                    <label className="text-[11px] font-black uppercase text-slate-500">CEP</label>
                     <div className="flex gap-1">
                       <input
                         type="text"
@@ -842,7 +850,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-black uppercase text-slate-400">Endereço</label>
+                    <label className="text-[11px] font-black uppercase text-slate-500">Endereço</label>
                     <input
                       type="text"
                       value={activeCustomer.street || ''}
@@ -852,19 +860,19 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">Nº</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">Nº</label>
                       <input type="text" value={activeCustomer.number || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, number: e.target.value }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold" />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">Bairro</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">Bairro</label>
                       <input type="text" value={activeCustomer.neighborhood || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, neighborhood: e.target.value }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold" />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-400">UF</label>
+                      <label className="text-[11px] font-black uppercase text-slate-500">UF</label>
                       <input type="text" maxLength={2} value={activeCustomer.state || ''} onChange={(e) => setActiveCustomer(prev => ({ ...prev, state: e.target.value.toUpperCase() }))} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-center" />
                     </div>
                   </div>
-                  {cepFeedback && <p className="text-[10px] text-emerald-700 font-bold">{cepFeedback}</p>}
+                  {cepFeedback && <p className="text-xs text-emerald-700 font-bold">{cepFeedback}</p>}
                   <button type="button" onClick={handleSaveCustomerFiscalData} className="w-full min-h-11 px-3 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
                     <Save size={12} /> Salvar destinatário
                   </button>
@@ -873,7 +881,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </FlowSection>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Natureza da operação</label>
+              <label className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Natureza da operação</label>
               <input
                 type="text"
                 value={naturezaOperacao}
@@ -883,18 +891,18 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
             </div>
 
             {isAvulsa && (
-              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
                 Parcial desta venda — o saldo não faturado continua no pedido.
               </p>
             )}
             {isTransferencia && (
-              <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
                 Transferência · CFOP {(activeCustomer.state && activeCustomer.state !== 'PA') ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152')} · sem cobrança.
               </p>
             )}
             {isDevolucao && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase text-slate-400">Chave da NF-e original</label>
+                <label className="text-[11px] font-bold uppercase text-slate-500">Chave da NF-e original</label>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -921,7 +929,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 />
               </FlowSection>
             ) : (
-              <p className="text-[11px] text-slate-500 px-1">Sem frete (modFrete 9).</p>
+              <p className="text-xs text-slate-500 px-1">Sem frete (modFrete 9).</p>
             )}
 
             <FlowSection
@@ -935,17 +943,17 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                     <div className="flex justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-800 leading-tight">{it.productName}</p>
-                        <p className="text-[11px] text-slate-400">{it.productCode}</p>
+                        <p className="text-xs text-slate-500">{it.productCode}</p>
                       </div>
                       <p className="text-sm font-black text-slate-900 shrink-0">{formatBRL(it.total)}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500">NCM</label>
+                        <label className="text-xs font-bold text-slate-500">NCM</label>
                         <input type="text" inputMode="numeric" value={it.ncm || '25171000'} onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold" />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500">Qtd {it.unit || ''}</label>
+                        <label className="text-xs font-bold text-slate-500">Qtd {it.unit || ''}</label>
                         {isAvulsa ? (
                           <input type="number" inputMode="decimal" min={0} max={it.maxQuantity} step="0.01" value={it.quantity} onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold" />
                         ) : (
@@ -953,16 +961,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                         )}
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-purple-700">CFOP</label>
+                        <label className="text-xs font-bold text-purple-700">CFOP</label>
                         <input type="text" inputMode="numeric" value={it.cfop || ''} onChange={e => handleUpdateItem(idx, 'cfop', e.target.value)} className="w-full px-2 py-2 bg-purple-50 border border-purple-200 rounded-lg text-sm font-mono font-black" />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-blue-700">CST</label>
+                        <label className="text-xs font-bold text-blue-700">CST</label>
                         <input type="text" value={it.cst || ''} onChange={e => handleUpdateItem(idx, 'cst', e.target.value)} className="w-full px-2 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm font-mono font-bold" />
                       </div>
                     </div>
                     {isAvulsa && items.length > 1 && (
-                      <button type="button" onClick={() => handleRemoveItem(idx)} className="text-[11px] text-rose-600 font-bold">Remover item</button>
+                      <button type="button" onClick={() => handleRemoveItem(idx)} className="text-xs text-rose-600 font-bold">Remover item</button>
                     )}
                   </div>
                 ))}
@@ -970,7 +978,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
               <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
+                  <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
                     <tr>
                       <th className="px-3 py-2">Item</th>
                       <th className="px-3 py-2">NCM</th>
@@ -985,7 +993,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                       <tr key={idx}>
                         <td className="px-3 py-2">
                           <p className="font-bold text-slate-800">{it.productName}</p>
-                          <p className="text-[10px] text-slate-400">{it.productCode}</p>
+                          <p className="text-xs text-slate-500">{it.productCode}</p>
                         </td>
                         <td className="px-3 py-2">
                           <input type="text" value={it.ncm || '25171000'} onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)} className="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold" />
@@ -1025,7 +1033,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
           {errorMsg && (
             <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-2">
               <p className="font-bold text-rose-900">A SEFAZ não autorizou</p>
-              <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-[11px] break-words">{errorMsg}</p>
+              <p className="font-mono bg-white/80 p-2 rounded-lg border border-rose-200 text-xs break-words">{errorMsg}</p>
+              <NfeRejectionHint message={errorMsg} />
               <button type="button" onClick={() => setShowDatabaseModal(true)} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5">
                 <Database size={13} /> Status do banco
               </button>

@@ -248,7 +248,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+              className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
             >
               <X size={20} />
             </button>
@@ -261,7 +261,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
           {/* Cabeçalho do Relatório */}
           <div className="flex justify-between items-start border-b border-slate-200 pb-5">
             <div>
-              <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest block">
+              <span className="text-[11px] font-black text-amber-600 uppercase tracking-widest block">
                 {company.name}
               </span>
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">
@@ -275,7 +275,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-black">
                 <CheckCircle2 size={12} className="text-emerald-600" /> Relatório Auditado
               </span>
-              <p className="text-[10px] text-slate-400 mt-1 font-mono">
+              <p className="text-xs text-slate-500 mt-1 font-mono">
                 Emissão: {new Date().toLocaleTimeString('pt-BR')}
               </p>
             </div>
@@ -284,29 +284,29 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
           {/* KPIs Resumo do Dia */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Saldo Inicial</span>
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Saldo Inicial</span>
               <strong className="text-sm font-black text-slate-700">{formatBRL(reportData.initialBalance)}</strong>
             </div>
             <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl">
-              <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest block flex items-center gap-1">
+              <span className="text-[11px] font-black text-emerald-700 uppercase tracking-widest block flex items-center gap-1">
                 📥 Entradas
               </span>
               <strong className="text-sm font-black text-emerald-700">+{formatBRL(reportData.totalIncome)}</strong>
             </div>
             <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl">
-              <span className="text-[9px] font-black text-rose-700 uppercase tracking-widest block flex items-center gap-1">
+              <span className="text-[11px] font-black text-rose-700 uppercase tracking-widest block flex items-center gap-1">
                 📤 Saídas
               </span>
               <strong className="text-sm font-black text-rose-700">-{formatBRL(reportData.totalExpense)}</strong>
             </div>
             <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-2xl">
-              <span className="text-[9px] font-black text-purple-700 uppercase tracking-widest block flex items-center gap-1">
+              <span className="text-[11px] font-black text-purple-700 uppercase tracking-widest block flex items-center gap-1">
                 🏷️ Abatimentos
               </span>
               <strong className="text-sm font-black text-purple-700">{formatBRL(reportData.totalDeduction)}</strong>
             </div>
             <div className="p-3.5 bg-slate-900 text-white rounded-2xl col-span-2 md:col-span-1">
-              <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest block">Saldo Final</span>
+              <span className="text-[11px] font-black text-amber-400 uppercase tracking-widest block">Saldo Final</span>
               <strong className="text-sm font-black text-white">{formatBRL(reportData.finalBalance)}</strong>
             </div>
           </div>
@@ -322,11 +322,11 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
             </div>
 
             {reportData.incomes.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-2">Nenhum recebimento registrado nesta data.</p>
+              <p className="text-xs text-slate-500 italic py-2">Nenhum recebimento registrado nesta data.</p>
             ) : (
               <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+                  <thead className="bg-slate-50 text-[11px] font-black text-slate-500 uppercase">
                     <tr>
                       <th className="p-3">Descrição</th>
                       <th className="p-3">Categoria</th>
@@ -341,7 +341,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
                         <td className="p-3 font-bold text-slate-900">{item.description}</td>
                         <td className="p-3 text-slate-500">{item.category}</td>
                         <td className="p-3 text-slate-600">{item.accountName}</td>
-                        <td className="p-3 font-mono text-[11px] text-slate-500">{item.paymentMethod}</td>
+                        <td className="p-3 font-mono text-xs text-slate-500">{item.paymentMethod}</td>
                         <td className="p-3 text-right font-black text-emerald-600">+{formatBRL(item.amount)}</td>
                       </tr>
                     ))}
@@ -362,11 +362,11 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
             </div>
 
             {reportData.expenses.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-2">Nenhum pagamento registrado nesta data.</p>
+              <p className="text-xs text-slate-500 italic py-2">Nenhum pagamento registrado nesta data.</p>
             ) : (
               <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+                  <thead className="bg-slate-50 text-[11px] font-black text-slate-500 uppercase">
                     <tr>
                       <th className="p-3">Descrição</th>
                       <th className="p-3">Categoria</th>
@@ -381,7 +381,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
                         <td className="p-3 font-bold text-slate-900">{item.description}</td>
                         <td className="p-3 text-slate-500">{item.category}</td>
                         <td className="p-3 text-slate-600">{item.accountName}</td>
-                        <td className="p-3 font-mono text-[11px] text-slate-500">{item.paymentMethod}</td>
+                        <td className="p-3 font-mono text-xs text-slate-500">{item.paymentMethod}</td>
                         <td className="p-3 text-right font-black text-rose-600">-{formatBRL(item.amount)}</td>
                       </tr>
                     ))}
@@ -404,7 +404,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
 
               <div className="border border-purple-200 bg-purple-50/40 rounded-2xl overflow-hidden text-xs">
                 <table className="w-full text-left">
-                  <thead className="bg-purple-100/50 text-[10px] font-black text-purple-800 uppercase">
+                  <thead className="bg-purple-100/50 text-[11px] font-black text-purple-800 uppercase">
                     <tr>
                       <th className="p-3">Origem / Referência</th>
                       <th className="p-3">Categoria</th>

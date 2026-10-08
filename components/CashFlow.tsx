@@ -160,21 +160,21 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 border-l-8 border-l-emerald-500">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Entradas</p>
+          <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1">Entradas</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-800">R$ {totalIn.toLocaleString('pt-BR')}</h3>
             <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600"><TrendingUp size={24} /></div>
           </div>
         </div>
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 border-l-8 border-l-rose-500">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saídas</p>
+          <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-1">Saídas</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-slate-800">R$ {totalOut.toLocaleString('pt-BR')}</h3>
             <div className="bg-rose-50 p-3 rounded-2xl text-rose-600"><TrendingDown size={24} /></div>
           </div>
         </div>
         <div className="bg-slate-900 text-white p-6 rounded-[2rem] shadow-2xl border-l-8 border-l-amber-500">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Líquido</p>
+          <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Líquido</p>
           <div className="flex items-center justify-between">
             <h3 className="text-2xl font-black text-amber-400">R$ {(totalIn - totalOut).toLocaleString('pt-BR')}</h3>
             <div className="bg-amber-500 p-3 rounded-2xl text-slate-900"><CheckCircle2 size={24} /></div>
@@ -186,11 +186,11 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
         <div className="lg:col-span-1 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
           <div className="flex items-center gap-2 mb-2">
              <Filter size={16} className="text-purple-600" />
-             <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Filtros Avançados</h4>
+             <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Filtros Avançados</h4>
           </div>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Inicial</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Data Inicial</label>
               <input 
                 type="date" 
                 value={startDate} 
@@ -199,7 +199,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data Final</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Data Final</label>
               <input 
                 type="date" 
                 value={endDate} 
@@ -208,19 +208,19 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Centro de Custo</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Centro de Custo</label>
               <select value={selectedCCId} onChange={(e) => setSelectedCCId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs">
                 <option value="Todos">Todos os C. Custo</option>
                 {INITIAL_COST_CENTERS.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Categoria</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Categoria</label>
               <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs">
                 {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
-            <button onClick={resetFilters} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+            <button onClick={resetFilters} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-black text-[11px] uppercase hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
               <RefreshCcw size={14} /> Redefinir Busca
             </button>
           </div>
@@ -264,10 +264,10 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
               <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
               <div className="flex justify-between items-start">
                  <h3 className="text-2xl font-black text-slate-800 tracking-tight">Fechamento de Caixa Diário</h3>
-                 <button onClick={() => setIsClosureModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full text-slate-400"><X size={24}/></button>
+                 <button onClick={() => setIsClosureModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full text-slate-500"><X size={24}/></button>
               </div>
               <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-xl text-center">
-                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saldo Final em Caixa</p>
+                 <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Final em Caixa</p>
                  <p className={`text-4xl font-black ${todayBalance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>R$ {todayBalance.toLocaleString('pt-BR')}</p>
               </div>
               <div className="flex gap-4">

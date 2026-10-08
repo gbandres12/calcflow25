@@ -58,7 +58,7 @@ export const CompanyLogoSettings: React.FC<{ companyId?: string }> = ({ companyI
       </div>
       <div className="flex flex-wrap items-center gap-4">
         <div className="w-40 h-24 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
-          {logo ? <img src={logo} alt="Logo" className="max-h-full max-w-full object-contain" /> : <span className="text-[11px] font-bold text-slate-400">Sem logo</span>}
+          {logo ? <img src={logo} alt="Logo" className="max-h-full max-w-full object-contain" /> : <span className="text-xs font-bold text-slate-500">Sem logo</span>}
         </div>
         <div className="space-y-2">
           <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black cursor-pointer">

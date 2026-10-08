@@ -62,7 +62,7 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
               <div className={`p-4 rounded-2xl ${machine.status === 'Operacional' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                 <Truck size={24} />
               </div>
-              <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase border ${
+              <span className={`text-[11px] font-black px-2 py-1 rounded-full uppercase border ${
                 machine.status === 'Operacional' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
               }`}>
                 {machine.status}
@@ -71,19 +71,19 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
 
             <div className="mb-6">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">{machine.name}</h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{machine.type} • {machine.plateOrId}</p>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{machine.type} • {machine.plateOrId}</p>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-2xl flex items-center justify-between mb-6">
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
                   <Clock size={10} /> Horímetro Atual
                 </p>
                 <p className="text-xl font-black text-slate-800">{machine.currentHorimeter.toFixed(1)} h</p>
               </div>
               <button 
                 onClick={() => { setSelectedMachineId(machine.id); setIsHorimeterModalOpen(true); }}
-                className="p-2 bg-white text-slate-400 hover:text-purple-600 rounded-xl shadow-sm border border-slate-200 transition-all"
+                className="p-2 bg-white text-slate-500 hover:text-purple-600 rounded-xl shadow-sm border border-slate-200 transition-all"
                 title="Atualizar Horímetro"
               >
                 <Activity size={18} />
@@ -91,10 +91,10 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
             </div>
 
             <div className="flex gap-2">
-              <button className="flex-1 py-2.5 text-[10px] font-black uppercase text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+              <button className="flex-1 py-2.5 text-[11px] font-black uppercase text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
                 Histórico
               </button>
-              <button className="flex-1 py-2.5 text-[10px] font-black uppercase text-slate-400 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+              <button className="flex-1 py-2.5 text-[11px] font-black uppercase text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
                 Editar
               </button>
             </div>
@@ -108,16 +108,16 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden p-10 animate-in zoom-in-95">
             <div className="flex justify-between items-center mb-8">
                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Cadastrar Máquina</h3>
-               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24}/></button>
+               <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-slate-600 transition-colors"><X size={24}/></button>
             </div>
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome do Equipamento</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome do Equipamento</label>
                 <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" placeholder="Ex: Pá Carregadeira 01" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Tipo</label>
                   <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as Machine['type']})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm">
                     <option value="Trator">Trator</option>
                     <option value="Caminhão">Caminhão</option>
@@ -127,12 +127,12 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Placa / ID Interno</label>
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Placa / ID Interno</label>
                   <input required type="text" value={formData.plateOrId} onChange={e => setFormData({...formData, plateOrId: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Horímetro Inicial</label>
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Horímetro Inicial</label>
                 <input required type="number" step="0.1" value={formData.currentHorimeter} onChange={e => setFormData({...formData, currentHorimeter: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-black text-lg" />
               </div>
               <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-100 mt-4">Salvar Ativo</button>
@@ -148,11 +148,11 @@ const FleetManagement: React.FC<FleetManagementProps> = ({ machines, onAddMachin
             <h3 className="text-xl font-black text-slate-800 mb-6 tracking-tight">Atualizar Horímetro</h3>
             <form onSubmit={handleUpdateHori} className="space-y-4">
                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Valor (h)</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Novo Valor (h)</label>
                   <input required autoFocus type="number" step="0.1" value={newHorimeter} onChange={e => setNewHorimeter(e.target.value)} className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-purple-500 font-black text-3xl text-center" />
                </div>
                <div className="flex gap-3">
-                  <button type="button" onClick={() => setIsHorimeterModalOpen(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-400 border border-slate-200 rounded-2xl hover:bg-slate-50">Cancelar</button>
+                  <button type="button" onClick={() => setIsHorimeterModalOpen(false)} className="flex-1 py-4 text-xs font-black uppercase text-slate-500 border border-slate-200 rounded-2xl hover:bg-slate-50">Cancelar</button>
                   <button type="submit" className="flex-[2] py-4 bg-purple-600 text-white text-xs font-black uppercase rounded-2xl shadow-xl shadow-purple-100">Atualizar</button>
                </div>
             </form>

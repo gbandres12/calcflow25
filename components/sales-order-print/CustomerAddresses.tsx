@@ -13,11 +13,11 @@ const AddressCard: React.FC<{ title: string; customer?: Customer }> = ({ title, 
     className="rounded-md px-3.5 py-3 min-w-0"
     style={{ background: SO.bg, border: `1px solid ${SO.border}` }}
   >
-    <p className="flex items-center gap-1.5 text-[11px] font-bold mb-2.5" style={{ color: SO.navy }}>
+    <p className="flex items-center gap-1.5 text-xs font-bold mb-2.5" style={{ color: SO.navy }}>
       <MapPin size={12} style={{ color: SO.green }} />
       {title}
     </p>
-    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[10px]">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
       <div className="col-span-2">
         <span className="block font-medium" style={{ color: SO.muted }}>Endereço</span>
         <span className="font-semibold" style={{ color: SO.text }}>{dash(customer?.street)}</span>

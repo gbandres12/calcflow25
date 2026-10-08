@@ -34,6 +34,34 @@ export function getAdminSupabase(): SupabaseClient | null {
   return cached;
 }
 
+const actorClients = new Map<string, SupabaseClient>();
+
+/**
+ * Cliente service role que identifica o usuário (já autenticado) no cabeçalho
+ * x-actor-id. O trigger de auditoria (migração 027) usa esse valor para gravar
+ * quem fez a ação em vez de deixar actor_id vazio.
+ */
+export function getAdminSupabaseAs(userId: string): SupabaseClient | null {
+  const base = getAdminSupabase();
+  if (!base || !userId) return base;
+  const hit = actorClients.get(userId);
+  if (hit) return hit;
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const key = (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    ''
+  ).trim();
+  const client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { 'x-actor-id': userId } }
+  });
+  if (actorClients.size > 200) actorClients.clear();
+  actorClients.set(userId, client);
+  return client;
+}
+
 export async function getFiscalConfigForCompany(companyId: string): Promise<any | null> {
   const supabase = getAdminSupabase();
   if (!supabase) return null;
@@ -52,17 +80,9 @@ export async function getFiscalConfigForCompany(companyId: string): Promise<any 
     return null;
   }
 
-  // Fallback: busca qualquer registro válido de fiscal_config
-  const { data: fallbackData, error: fallbackError } = await supabase
-    .from('app_records')
-    .select('data')
-    .eq('table_name', 'fiscal_config')
-    .limit(5);
-  if (!fallbackError && Array.isArray(fallbackData) && fallbackData.length > 0) {
-    const row = fallbackData.find((r: any) => r?.data && !r.data.__isSeedMeta && r.data.id !== '__seed__') || fallbackData[0];
-    return row?.data || null;
-  }
-
+  // Sem companyId não há como saber de quem é a nota: com matriz + filiais
+  // (cada uma com CNPJ e certificado próprios), "pegar qualquer um" emitiria
+  // pelo emitente errado.
   return null;
 }
 

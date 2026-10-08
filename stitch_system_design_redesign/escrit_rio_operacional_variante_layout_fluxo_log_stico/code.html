@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Escritório Operacional | CBA Mineração - CalcFlow</title>
+<!-- Tailwind CSS CDN com plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              200: '#a7f3d0',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+              900: '#064e3b',
+              950: '#022c22',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-scrollbars">
+    /* Barra de rolagem suave e discreta */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+<style data-purpose="base-styling">
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased text-slate-800 bg-slate-50 selection:bg-brand-100 selection:text-brand-900">
+<!-- BEGIN: ApplicationLayout -->
+<div class="flex h-screen w-full overflow-hidden">
+<!-- BEGIN: MainSidebar -->
+<aside class="w-64 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between select-none z-20">
+<!-- Top Section: Brand & Navigation -->
+<div class="flex flex-col flex-1 overflow-y-auto">
+<!-- Brand Identity CBA / CalcFlow -->
+<div class="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 shadow-sm">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="leading-tight">
+<h1 class="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+              CalcFlow
+            </h1>
+<span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Mineração em Fluxo Real</span>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="p-3 space-y-6 text-xs font-medium">
+<!-- Category 1: Visão Geral -->
+<div>
+<span class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Visão Geral</span>
+<div class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-800 font-semibold border-l-[3px] border-emerald-600 transition-colors" href="#">
+<svg class="w-4 h-4 text-emerald-700" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Visão Geral</span>
+</a>
+</div>
+</div>
+<!-- Category 2: Comercial & Clientes -->
+<div>
+<span class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Comercial &amp; Clientes</span>
+<div class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Vendas &amp; Romaneios</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Orçamentos</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Carregamentos</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Clientes &amp; Fornecedores</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Notas Fiscais</span>
+</a>
+</div>
+</div>
+<!-- Category 3: Produção & Fábrica -->
+<div>
+<span class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Produção &amp; Fábrica</span>
+<div class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Produtos &amp; NCM</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Moagem / Britagem</span>
+</a>
+</div>
+</div>
+<!-- Category 4: Frota, Pátio & Suprimentos -->
+<div>
+<span class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Frota, Pátio &amp; Suprimentos</span>
+<div class="mt-1.5 space-y-0.5">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Pátio, Balança &amp; Peças</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Transferências</span>
+</a>
+</div>
+</div>
+</nav>
+</div>
+<!-- Bottom User Profile Indicator in Sidebar -->
+<div class="p-3 border-t border-slate-100 bg-slate-50/60">
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-white transition-all cursor-pointer border border-transparent hover:border-slate-200">
+<div class="flex items-center gap-2.5">
+<div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-700">
+              A
+            </div>
+<div class="leading-none">
+<p class="text-xs font-semibold text-slate-800">Alana</p>
+<span class="text-[10px] text-slate-400">Administrador</span>
+</div>
+</div>
+<div class="flex items-center gap-1 text-slate-400">
+<svg class="w-3.5 h-3.5 hover:text-slate-700" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<svg class="w-3.5 h-3.5 hover:text-slate-700" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</div>
+</aside>
+<!-- END: MainSidebar -->
+<!-- Right Side Layout: Topbar + Main Body -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+<!-- BEGIN: TopBar -->
+<header class="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0 z-10">
+<!-- Left: Filial / Jazida Dropdown Selector -->
+<div class="flex items-center gap-3">
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer shadow-xs transition-colors">
+<span class="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100"></span>
+<span class="font-semibold text-slate-900">CBA Mineração</span>
+<span class="text-slate-400">·</span>
+<span class="text-slate-500 font-mono text-[11px]">comp-1788898385141</span>
+<svg class="w-3.5 h-3.5 text-slate-400 ml-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Right: Search, Notifications & Full User Profile Badge -->
+<div class="flex items-center gap-3">
+<!-- Quick Search Bar -->
+<div class="relative flex items-center">
+<input class="w-64 pl-8 pr-12 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-600 focus:bg-white transition-all shadow-xs" placeholder="Buscar cliente, placa, pedido..." type="text"/>
+<svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 pointer-events-none">
+<kbd class="px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 bg-white border border-slate-200 rounded shadow-2xs">Ctrl K</kbd>
+</div>
+</div>
+<!-- Notification Bell with Notification Badge -->
+<button class="relative p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 shadow-2xs">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="absolute top-1 right-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white"></span>
+</button>
+<!-- Divider -->
+<div class="h-5 w-px bg-slate-200"></div>
+<!-- User Menu Profile -->
+<div class="flex items-center gap-2 pl-1 cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-brand-900 text-white flex items-center justify-center font-bold text-xs ring-2 ring-brand-100 shadow-xs">
+              A
+            </div>
+<div class="text-left hidden sm:block">
+<div class="text-xs font-semibold text-slate-800 leading-tight">Alana</div>
+<div class="text-[10px] text-slate-400 font-medium">Administrador Geral</div>
+</div>
+<svg class="w-3.5 h-3.5 text-slate-400 ml-0.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</header>
+<!-- END: TopBar -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+<!-- Header Page Title + Status Badge -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+<div>
+<h1 class="text-xl font-bold tracking-tight text-slate-900">Escritório operacional</h1>
+<p class="text-xs text-slate-500 mt-0.5">Fila de carga, estoque ao vivo e alerta fiscal em tempo real.</p>
+</div>
+<!-- Pulsing Live Data Status Pill -->
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium self-start sm:self-auto shadow-2xs">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span>Dados atualizados agora</span>
+</div>
+</div>
+<!-- VARIANT 2: ASYMMETRIC SPLIT OPERATIONAL FLOW (58% Primary Logistics / 42% Telemetry & Monitoring) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- ============================================================== -->
+<!-- LEFT PRIMARY COLUMN (7 Cols / ~58%): DEDICATED LOGISTICS BOARD -->
+<!-- ============================================================== -->
+<section class="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col" data-purpose="fila-operacional">
+<!-- Board Header -->
+<div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+<div class="flex items-center gap-2.5">
+<span class="w-1.5 h-4 bg-slate-700 rounded-full"></span>
+<div>
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-800">Fila Operacional</h2>
+<span class="text-[11px] text-slate-500 font-medium">Controle de entrada, balança e carregamentos ativos</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold font-mono">
+7
+</span>
+</div>
+</div>
+<div class="p-5 space-y-4">
+<!-- Subhead & Quick Stats Strip -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-50/80 rounded-lg border border-slate-100">
+<div>
+<span class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Romaneios a Carregar</span>
+<span class="text-[11px] text-slate-400 block sm:inline sm:ml-2">Sequência prioritária de carregamento</span>
+</div>
+<div class="inline-flex items-center gap-2 text-xs">
+<span class="text-slate-500 font-medium">Peso Total:</span>
+<span class="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">932.8 t</span>
+</div>
+</div>
+<!-- List of Orders in Loading Queue (Expanded Structured Flow) -->
+<div class="divide-y divide-slate-100 text-xs">
+<!-- Queue Item 1 -->
+<div class="py-3 first:pt-1 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center font-mono font-bold text-xs">1</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0006</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">Em pátio</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">LUIZ FERNANDO MASIERO</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">150.0 t</span>
+<span class="block text-[10px] text-slate-400">Granel agrícola</span>
+</div>
+</div>
+<!-- Queue Item 2 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center font-mono font-bold text-xs">2</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0039</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">Chamado balança</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">ENDELSON LUIZ BARP</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">250.0 t</span>
+<span class="block text-[10px] text-slate-400">Granel agrícola</span>
+</div>
+</div>
+<!-- Queue Item 3 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center font-mono font-semibold text-xs">3</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0014</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">Aguardando</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">LAIS BONKOSKI ESPINDOLA</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">50.0 t</span>
+<span class="block text-[10px] text-slate-400">Britado / Cascalho</span>
+</div>
+</div>
+<!-- Queue Item 4 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center font-mono font-semibold text-xs">4</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0037</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">Aguardando</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">ENDELSON LUIZ BARP</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">250.0 t</span>
+<span class="block text-[10px] text-slate-400">Granel agrícola</span>
+</div>
+</div>
+<!-- Queue Item 5 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center font-mono font-semibold text-xs">5</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0035</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">Aguardando</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">PEIXOTO CONSTRUTORA LTDA</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">17.8 t</span>
+<span class="block text-[10px] text-slate-400">Britado / Cascalho</span>
+</div>
+</div>
+<!-- Queue Item 6 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center font-mono font-semibold text-xs">6</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0038</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">Aguardando</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">ENDELSON LUIZ BARP</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">250.0 t</span>
+<span class="block text-[10px] text-slate-400">Granel agrícola</span>
+</div>
+</div>
+<!-- Queue Item 7 -->
+<div class="py-3 flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-3 rounded-lg transition-colors group">
+<div class="flex items-center gap-3">
+<span class="w-6 h-6 rounded-md bg-slate-100 text-slate-500 flex items-center justify-center font-mono font-semibold text-xs">7</span>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-mono font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">PED-2026-0033</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">Aguardando</span>
+</div>
+<p class="text-[11px] text-slate-500 uppercase font-medium mt-0.5">ISILDO PFEIFER</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-mono font-bold text-sm text-slate-900">15.0 t</span>
+<span class="block text-[10px] text-slate-400">Britado / Cascalho</span>
+</div>
+</div>
+</div>
+<!-- Transferências Aguardando Fazenda Section -->
+<div class="pt-4 border-t border-slate-100">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Transferências aguardando fazenda</span>
+<div class="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200/60 text-slate-500 text-xs">
+<div class="flex items-center gap-2.5">
+<svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-xs">Nenhuma remessa em trânsito no momento.</span>
+</div>
+<span class="text-[11px] font-semibold text-emerald-700">0 pendências</span>
+</div>
+</div>
+<!-- Action Link Footer -->
+<div class="pt-1 flex items-center justify-between">
+<a class="inline-flex items-center text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors" href="#">
+Ver filas completas
+<svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</a>
+<span class="text-[11px] text-slate-400">Atualização automática contínua</span>
+</div>
+</div>
+</section>
+<!-- ============================================================== -->
+<!-- RIGHT MONITORING COLUMN (5 Cols / ~42%): STACKED TELEMETRY     -->
+<!-- ============================================================== -->
+<div class="lg:col-span-5 space-y-6">
+<!-- Top: Estoque Ao Vivo Card -->
+<section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col" data-purpose="estoque-liquidez">
+<div class="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-3.5 bg-emerald-600 rounded-full"></span>
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-700">Estoque Ao Vivo</h2>
+</div>
+<span class="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+Silos OK
+</span>
+</div>
+<div class="p-4 space-y-3.5">
+<!-- Stock Product 1 -->
+<div class="p-3.5 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-slate-200 transition-all">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Calcário Agrícola Dolomítico (Granel)</span>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-2xl font-bold font-mono text-slate-900">1.681</span>
+<span class="text-sm font-semibold text-slate-600">t</span>
+</div>
+</div>
+<span class="text-[10px] font-medium text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 shadow-2xs">mínimo 200 t</span>
+</div>
+<!-- Progress Bar -->
+<div class="mt-3">
+<div class="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+<span>Capacidade ocupada</span>
+<span class="font-bold text-slate-700">84%</span>
+</div>
+<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+<div class="bg-emerald-600 h-2 rounded-full transition-all duration-500" style="width: 84%"></div>
+</div>
+</div>
+</div>
+<!-- Stock Product 2 -->
+<div class="p-3.5 rounded-xl border border-slate-100 bg-slate-50/40 hover:border-slate-200 transition-all">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Calcário Britado / Cascalho Industrial</span>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="text-2xl font-bold font-mono text-slate-900">3.500</span>
+<span class="text-sm font-semibold text-slate-600">t</span>
+</div>
+</div>
+<span class="text-[10px] font-medium text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 shadow-2xs">mínimo 200 t</span>
+</div>
+<!-- Progress Bar -->
+<div class="mt-3">
+<div class="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+<span>Capacidade ocupada</span>
+<span class="font-bold text-slate-700">92%</span>
+</div>
+<div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+<div class="bg-emerald-600 h-2 rounded-full transition-all duration-500" style="width: 92%"></div>
+</div>
+</div>
+</div>
+<!-- Link to full inventory -->
+<div class="pt-0.5">
+<a class="inline-flex items-center text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors" href="#">
+Ver estoque completo
+<svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</a>
+</div>
+</div>
+</section>
+<!-- Middle: Alertas Fiscais Card -->
+<section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col" data-purpose="alertas-fiscais">
+<div class="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-3.5 bg-amber-500 rounded-full"></span>
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-700">Alertas Fiscais</h2>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold font-mono">
+5
+</span>
+</div>
+<div class="p-4 space-y-4">
+<!-- Subhead -->
+<div class="flex items-center justify-between">
+<span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">Pendentes de Emissão</span>
+<span class="text-[10px] text-slate-400 font-mono font-medium">Total: R$ 162.519,60</span>
+</div>
+<!-- Pending Invoices List -->
+<div class="divide-y divide-slate-100 text-xs">
+<div class="py-2 first:pt-0 flex items-center justify-between group hover:bg-slate-50/80 -mx-1.5 px-1.5 rounded-lg transition-colors">
+<div>
+<span class="font-mono font-bold text-slate-800">PED-2026-0006</span>
+<p class="text-[11px] text-slate-500 uppercase truncate max-w-[190px]">LUIZ FERNANDO MA...</p>
+</div>
+<span class="font-mono font-bold text-amber-700">R$ 35.250,00</span>
+</div>
+<div class="py-2 flex items-center justify-between group hover:bg-slate-50/80 -mx-1.5 px-1.5 rounded-lg transition-colors">
+<div>
+<span class="font-mono font-bold text-slate-800">PED-2026-0039</span>
+<p class="text-[11px] text-slate-500 uppercase truncate max-w-[190px]">ENDELSON LUIZ BARP</p>
+</div>
+<span class="font-mono font-bold text-amber-700">R$ 57.500,00</span>
+</div>
+<div class="py-2 flex items-center justify-between group hover:bg-slate-50/80 -mx-1.5 px-1.5 rounded-lg transition-colors">
+<div>
+<span class="font-mono font-bold text-slate-800">PED-2026-0014</span>
+<p class="text-[11px] text-slate-500 uppercase truncate max-w-[190px]">LAIS BONKOSKI ESPIN...</p>
+</div>
+<span class="font-mono font-bold text-amber-700">R$ 8.000,00</span>
+</div>
+<div class="py-2 flex items-center justify-between group hover:bg-slate-50/80 -mx-1.5 px-1.5 rounded-lg transition-colors">
+<div>
+<span class="font-mono font-bold text-slate-800">PED-2026-0037</span>
+<p class="text-[11px] text-slate-500 uppercase truncate max-w-[190px]">ENDELSON LUIZ BARP</p>
+</div>
+<span class="font-mono font-bold text-amber-700">R$ 57.500,00</span>
+</div>
+<div class="py-2 flex items-center justify-between group hover:bg-slate-50/80 -mx-1.5 px-1.5 rounded-lg transition-colors">
+<div>
+<span class="font-mono font-bold text-slate-800">PED-2026-0035</span>
+<p class="text-[11px] text-slate-500 uppercase truncate max-w-[190px]">PEIXOTO CONSTRUTO...</p>
+</div>
+<span class="font-mono font-bold text-amber-700">R$ 4.269,60</span>
+</div>
+</div>
+<!-- Rejeitadas Sub-section -->
+<div class="pt-3 border-t border-slate-100">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Rejeitadas</span>
+<div class="flex items-center gap-2 p-2 rounded-lg bg-emerald-50/60 border border-emerald-100 text-emerald-800 text-xs">
+<svg class="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="font-medium text-[11px]">Nenhuma rejeição fiscal na SEFAZ.</span>
+</div>
+</div>
+<!-- Link to Fiscal Area -->
+<div class="pt-1">
+<a class="inline-flex items-center text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors" href="#">
+Abrir notas fiscais
+<svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</a>
+</div>
+</div>
+</section>
+<!-- Bottom: Dual Telemetry Widgets (Liquidez 7 Dias + Radar Comercial 30 Dias) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Liquidez dos Últimos 7 Dias Card -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-1.5">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Liquidez dos Últimos 7 Dias</span>
+<a class="text-[10px] font-semibold text-emerald-700 hover:underline" href="#">Abrir fluxo →</a>
+</div>
+<div class="flex items-baseline gap-1.5 mb-2.5">
+<span class="text-lg font-bold font-mono text-slate-900">R$ 384.210,00</span>
+<span class="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">+12.4%</span>
+</div>
+</div>
+<!-- Sparkline simulation with simple SVG/bars -->
+<div>
+<div class="h-10 flex items-end gap-1.5 pt-2 border-t border-slate-100">
+<div class="flex-1 bg-slate-100 hover:bg-emerald-200 rounded-t h-3.5 transition-all" title="Seg: R$ 42k"></div>
+<div class="flex-1 bg-slate-100 hover:bg-emerald-200 rounded-t h-6 transition-all" title="Ter: R$ 68k"></div>
+<div class="flex-1 bg-slate-100 hover:bg-emerald-200 rounded-t h-4.5 transition-all" title="Qua: R$ 51k"></div>
+<div class="flex-1 bg-slate-100 hover:bg-emerald-200 rounded-t h-8 transition-all" title="Qui: R$ 89k"></div>
+<div class="flex-1 bg-slate-100 hover:bg-emerald-200 rounded-t h-5.5 transition-all" title="Sex: R$ 60k"></div>
+<div class="flex-1 bg-emerald-500 rounded-t h-9 transition-all" title="Sáb: R$ 110k"></div>
+<div class="flex-1 bg-emerald-600 rounded-t h-7 transition-all" title="Hoje: R$ 74k"></div>
+</div>
+<div class="flex justify-between text-[8px] text-slate-400 mt-1 uppercase font-mono">
+<span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Hoje</span>
+</div>
+</div>
+</div>
+<!-- Radar Comercial 30 Dias (Dark Solid Card) -->
+<div class="bg-slate-900 text-white rounded-xl p-4 shadow-md relative overflow-hidden flex flex-col justify-between" data-purpose="radar-comercial">
+<!-- Decorative subtle background glow -->
+<div class="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-600/20 rounded-full blur-2xl"></div>
+<div>
+<div class="flex items-center justify-between mb-2 relative z-10">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Radar Comercial · 30 Dias</span>
+<span class="text-[9px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded-full">
+Alta conversão
+</span>
+</div>
+<div class="relative z-10 mb-2">
+<span class="text-[11px] text-slate-400">Total contratado</span>
+<div class="text-lg font-bold font-mono text-white mt-0.5">R$ 1.022.982,00</div>
+</div>
+</div>
+<div class="space-y-1.5 relative z-10 pt-2 border-t border-slate-800 text-[11px]">
+<div class="flex items-center justify-between text-slate-300">
+<span>Volume faturado:</span>
+<span class="font-mono font-semibold text-white">4.950,53 t</span>
+</div>
+<div class="flex items-center justify-between text-slate-300">
+<span>Meta atingida:</span>
+<span class="font-mono font-semibold text-emerald-400">90.0% (5.500 t)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- END: MainContent -->
+</div>
+</div>
+<!-- END: ApplicationLayout -->
+</body></html>

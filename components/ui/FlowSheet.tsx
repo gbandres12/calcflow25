@@ -69,13 +69,13 @@ export const FlowSheet: React.FC<FlowSheetProps> = ({
               {title}
             </h3>
             {subtitle ? (
-              <div className="mt-0.5 text-[11px] text-slate-500 font-medium leading-snug">{subtitle}</div>
+              <div className="mt-0.5 text-xs text-slate-500 font-medium leading-snug">{subtitle}</div>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 -mr-1 -mt-1 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 shrink-0 min-h-11 min-w-11 flex items-center justify-center"
+            className="p-2 -mr-1 -mt-1 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 shrink-0 min-h-11 min-w-11 flex items-center justify-center"
             aria-label="Fechar"
           >
             <X size={20} />
@@ -123,13 +123,13 @@ export const FlowSection: React.FC<FlowSectionProps> = ({
       <div className="min-w-0">
         <p className="text-xs font-bold text-slate-800">{title}</p>
         {summary ? (
-          <p className="text-[11px] text-slate-500 truncate mt-0.5 group-open:hidden">{summary}</p>
+          <p className="text-xs text-slate-500 truncate mt-0.5 group-open:hidden">{summary}</p>
         ) : null}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {badge}
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-open:hidden">Abrir</span>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden group-open:inline">Fechar</span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 group-open:hidden">Abrir</span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 hidden group-open:inline">Fechar</span>
       </div>
     </summary>
     <div className="px-3.5 pb-3.5 pt-0 space-y-3 border-t border-slate-100">{children}</div>

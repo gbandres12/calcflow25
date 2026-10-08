@@ -1,10 +1,9 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib';
 import { Customer, FiscalConfig, SaleOrder } from '../../types.js';
-import { DEFAULT_PRODUCT_SHEET } from '../../utils/salesOrderProduct.js';
+import { productBlockLines } from '../../utils/salesOrderProduct.js';
 import { formatBRL } from './telegramWrites.js';
 
 const NAVY = rgb(11 / 255, 31 / 255, 74 / 255);
-const NAVY_DEEP = rgb(7 / 255, 21 / 255, 54 / 255);
 const GREEN = rgb(30 / 255, 107 / 255, 58 / 255);
 const BORDER = rgb(197 / 255, 205 / 255, 216 / 255);
 const ROW_ALT = rgb(247 / 255, 249 / 255, 252 / 255);
@@ -148,14 +147,10 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   const multiItem = items.length > 1;
   const sheetTitle =
     input.order.productSheetTitle?.trim() ||
-    (multiItem ? 'Informações complementares do pedido' : DEFAULT_PRODUCT_SHEET.title);
-  const sheetLines = (
-    input.order.productSheetBody?.trim() ||
-    (multiItem ? 'Consulte a tabela de itens acima para descrição de cada produto.' : DEFAULT_PRODUCT_SHEET.body)
-  )
-    .split('\n')
-    .map((line) => line.replace(/^\*+\s*/, '').trim())
-    .filter(Boolean);
+    (multiItem ? 'Informações complementares do pedido' : items[0]?.productName || '');
+  const sheetLines = productBlockLines(input.order);
+  const visibleSheetLines = sheetLines.slice(0, 8);
+  const sheetH = Math.max(78, 48 + Math.max(visibleSheetLines.length - 1, 0) * 11);
 
   const logo = await embedLogo(pdf, brand.logoDataUrl);
   if (logo) {
@@ -304,11 +299,11 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   y -= 12;
   const half = (width - 10) / 2;
   const sheetTop = y;
-  page.drawRectangle({ x: left, y: y - 78, width: half, height: 78, borderColor: BORDER, borderWidth: 0.8 });
+  page.drawRectangle({ x: left, y: y - sheetH, width: half, height: sheetH, borderColor: BORDER, borderWidth: 0.8 });
   draw('PRODUTO', left + 8, y - 12, 6.5, bold, MUTED);
   draw(fit(sheetTitle, 9, half - 16, bold), left + 8, y - 26, 9, bold, NAVY);
   let sy = y - 40;
-  sheetLines.slice(0, 4).forEach((line) => {
+  visibleSheetLines.forEach((line) => {
     const italicLook = line.toLowerCase().includes('sujeito');
     draw(fit(line, 7.5, half - 16), left + 8, sy, 7.5, font, italicLook ? MUTED : TEXT);
     sy -= 11;
@@ -332,7 +327,7 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   page.drawRectangle({ x: summaryX, y: ry - 18, width: half, height: 18, color: GREEN });
   draw('Total geral', summaryX + 8, ry - 12, 9, bold, WHITE);
   drawRight(formatBRL(input.order.total), summaryX + half - 8, ry - 12, 10, bold, WHITE);
-  y = Math.min(sheetTop - 78, ry - 18) - 12;
+  y = Math.min(sheetTop - sheetH, ry - 18) - 12;
 
   const blockH = 68;
   page.drawRectangle({ x: left, y: y - 16, width: half, height: 16, color: NAVY });
@@ -352,24 +347,29 @@ export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uin
   drawCenter('ASSINATURA DO CLIENTE', signX, half, y - 42, 7.5, bold, NAVY);
   drawCenter('Data: ____ / ____ / ________', signX, half, y - 56, 8, font, MUTED);
   const footerH = 70;
-  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: footerH, color: NAVY_DEEP });
+  page.drawLine({
+    start: { x: left, y: footerH },
+    end: { x: right, y: footerH },
+    thickness: 1.2,
+    color: NAVY
+  });
   let fy = footerH - 16;
-  draw(razao, left, fy, 10, bold, WHITE);
+  draw(razao, left, fy, 10, bold, NAVY);
   fy -= 11;
   if (cnpjEmp) {
-    draw(`CNPJ ${cnpjEmp}`, left, fy, 8, font, WHITE);
+    draw(`CNPJ ${cnpjEmp}`, left, fy, 8, font, NAVY);
     fy -= 10;
   }
   endEmp.forEach((line) => {
-    draw(line, left, fy, 8, font, WHITE);
+    draw(line, left, fy, 8, font, NAVY);
     fy -= 10;
   });
   phones.forEach((phone) => {
-    draw(String(phone), left, fy, 8, font, WHITE);
+    draw(String(phone), left, fy, 8, font, NAVY);
     fy -= 10;
   });
   const printed = input.printedAt || new Date().toLocaleString('pt-BR');
-  drawRight(`Impresso em ${printed}`, right, footerH - 16, 7, font, rgb(0.85, 0.88, 0.92));
+  drawRight(`Impresso em ${printed}`, right, footerH - 16, 7, font, MUTED);
 
   return pdf.save();
 }

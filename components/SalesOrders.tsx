@@ -18,7 +18,8 @@ import {
   Plus, Printer, FileCheck, Search, X, 
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
-  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft, Files, Copy
+  CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft, Files, Copy,
+  Ban, RotateCcw
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
@@ -35,24 +36,31 @@ import { DateFilterControl } from './ui/DateFilterControl';
 import { DatePreset, getDatePresetRange, isDateInRange } from '../utils/dateFilterUtils';
 import { fiscalService } from '../services/fiscalService';
 import { DEFAULT_FISCAL_CONFIG } from '../constants';
-import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes, isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
+import { listOrderNfes, remainingQuantityByProduct, saleItemKey, totalRemainingQuantity, findDraftNfe, isDraftNfe, listDraftNfes, isFiscalOnlyOrder, orderReceiptsPaid, hasAuthorizedFiscalDocument } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
 import {
   DEFAULT_PRODUCT_SHEET,
   OrderLineDraft,
   buildItemsFromDrafts,
+  defaultWarrantyDraft,
   lineDraftSubtotal,
   newOrderLineDraft,
   orderItemsToDrafts,
   productSheetFromInventory,
   resolveInventoryProduct,
+  sanitizeSalesOrderSheetBody,
   sellableInventoryItems,
   sumLineDrafts
 } from '../utils/salesOrderProduct';
 import ErrorBoundary from './ErrorBoundary';
+import { useToast } from './ui/Toast';
+import { useConfirm } from './ui/ConfirmDialog';
+import OrderTimeline from './OrderTimeline';
+import { formatTons } from '../services/domain/loadings';
 
 interface SalesOrdersProps {
+  currentUser?: { id: string; name?: string; email?: string } | null;
   orders: SaleOrder[];
   customers: Customer[];
   inventory: InventoryItem[];
@@ -65,13 +73,19 @@ interface SalesOrdersProps {
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   onUpdateOrder: (order: SaleOrder, options?: { waitForCloud?: boolean }) => void | Promise<void>;
   onDeleteOrder: (orderId: string) => void;
+  onCancelOrder?: (orderId: string, reason?: string) => void;
+  onReactivateOrder?: (orderId: string) => void;
   onVerifyDeletionPassword?: (password: string) => boolean | Promise<boolean>;
   onFinalizeOrder: (orderId: string, payments: SalePayment[]) => void;
+  /** Pedido nasceu sem lançamento financeiro — usuário clicou pra lançar agora. */
+  onPostFinance?: (order: SaleOrder) => void;
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
+  /** Corrige (next) ou exclui (null) um recibo, ajustando pedido e caixa juntos. */
+  onReviseReceipt?: (order: SaleOrder, receiptId: string, next: PaymentReceipt | null) => void;
   mode?: 'orders' | 'quotes';
 }
 
-export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE';
+export type PaymentStatusType = 'PAGO' | 'PARCIAL' | 'PENDENTE' | 'CANCELADO';
 
 export const calculateOrderPayment = (order?: SaleOrder | null) => {
   if (!order || isFiscalOnlyOrder(order)) {
@@ -80,6 +94,15 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
       remainingDebt: 0,
       financialProgress: 0,
       paymentStatus: 'PENDENTE' as PaymentStatusType
+    };
+  }
+
+  if (order.status === OrderStatus.CANCELLED) {
+    return {
+      totalPaid: 0,
+      remainingDebt: 0,
+      financialProgress: 0,
+      paymentStatus: 'CANCELADO' as PaymentStatusType
     };
   }
 
@@ -106,6 +129,7 @@ export const calculateOrderPayment = (order?: SaleOrder | null) => {
 };
 
 const SalesOrders: React.FC<SalesOrdersProps> = ({ 
+  currentUser,
   orders: rawOrders, 
   customers: rawCustomers, 
   inventory: rawInventory, 
@@ -118,11 +142,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onAddTransportador,
   onUpdateOrder,
   onDeleteOrder,
+  onCancelOrder,
+  onReactivateOrder,
   onVerifyDeletionPassword,
   onFinalizeOrder,
+  onPostFinance,
   onPaymentReceived,
+  onReviseReceipt,
   mode = 'orders'
 }) => {
+  const toast = useToast();
+  const confirmDialog = useConfirm();
+  const [editingReceiptId, setEditingReceiptId] = useState<string | null>(null);
+  const [receiptDraft, setReceiptDraft] = useState<{ amount: string; date: string; paymentMethod: string; accountId: string; notes: string }>({ amount: '', date: '', paymentMethod: '', accountId: '', notes: '' });
   // Dados legados podem conter registros parciais ou nulos. Normalizar aqui evita
   // que um único cadastro inválido derrube toda a tela de vendas.
   const customers = useMemo<Customer[]>(() => {
@@ -192,10 +224,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   }, [rawOrders]);
 
   const isQuotesView = mode === 'quotes';
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET'>(
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'FINALIZED' | 'PAID' | 'PARTIAL' | 'PENDING' | 'BUDGET' | 'CANCELLED'>(
     isQuotesView ? 'BUDGET' : 'ALL'
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(() => new Set());
+  const toggleOrderExpanded = (id: string) => setExpandedOrderIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [activeDatePreset, setActiveDatePreset] = useState<DatePreset>('ALL');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -244,6 +282,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [orderForWithdrawal, setOrderForWithdrawal] = useState<SaleOrder | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<PaymentReceipt | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<SaleOrder | null>(null);
+  // O modal guarda uma cópia do pedido; sem isto, corrigir um recibo não
+  // aparecia até fechar e abrir de novo.
+  useEffect(() => {
+    if (!selectedOrderDetails) return;
+    const fresh = orders.find(o => o.id === selectedOrderDetails.id);
+    if (fresh && fresh !== selectedOrderDetails) setSelectedOrderDetails(fresh);
+  }, [orders]);
 
   // NF-e Modals
   const [orderToEmitNfe, setOrderToEmitNfe] = useState<SaleOrder | null>(null);
@@ -298,6 +343,10 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [discount, setDiscount] = useState('0');
   const [shipping, setShipping] = useState('0');
   const [isBudget, setIsBudget] = useState(isQuotesView);
+  // Desmarcado por padrão: carregamento/venda avulsa não entra sozinho no
+  // financeiro. Quem quiser lançar de cara marca aqui; senão, lança depois
+  // pelo botão "Fazer lançamento financeiro" no pedido já confirmado.
+  const [postFinanceNow, setPostFinanceNow] = useState(false);
   const [notes, setNotes] = useState('');
 
   // Barter / Permuta em Grãos
@@ -378,10 +427,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
   const handleLineProductChange = (lineId: string, productId: string) => {
     const prod = resolveInventoryProduct(productId, sellableProducts, inventory);
+    const warranty = defaultWarrantyDraft(prod);
     updateLineItem(lineId, {
       productId,
       productDescription: prod?.name || '',
-      unitPrice: String(Number(prod?.unitPrice) || 0)
+      unitPrice: String(Number(prod?.unitPrice) || 0),
+      prntMinimo: warranty.prntMinimo,
+      mgoMinimo: warranty.mgoMinimo
     });
   };
 
@@ -427,11 +479,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       setCustomerSearch(cust?.name || '');
       const drafts = orderItemsToDrafts(editingOrder.items);
       setLineItems(drafts.length ? drafts : [newOrderLineDraft(sellableProducts)]);
-      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || DEFAULT_PRODUCT_SHEET.title);
-      setProductSheetBody(editingOrder.productSheetBody?.trim() || DEFAULT_PRODUCT_SHEET.body);
+      setProductSheetTitle(editingOrder.productSheetTitle?.trim() || '');
+      setProductSheetBody(sanitizeSalesOrderSheetBody(editingOrder.productSheetBody));
       setDiscount(String(Number(editingOrder.discount) || 0));
       setShipping(String(Number(editingOrder.shipping) || 0));
       setIsBudget(editingOrder.status === OrderStatus.BUDGET);
+      setPostFinanceNow(!editingOrder.withoutFinance);
       setNotes(String(editingOrder.notes || ''));
       setPayments(
         (Array.isArray(editingOrder.payments) ? editingOrder.payments : [])
@@ -489,19 +542,19 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const handleCreateOrUpdateOrder = (e?: React.FormEvent | React.MouseEvent) => {
     e?.preventDefault?.();
     if (!selectedCustomerId) {
-      alert("Por favor, selecione um cliente da lista.");
+      toast.push("Por favor, selecione um cliente da lista.", 'danger');
       return;
     }
 
     if (!isBudget && Math.abs(remainingToProgram) > 0.01 && payments.length > 0) {
-      alert(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`);
+      toast.push(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`, 'danger');
       return;
     }
 
     const isInter = Boolean(selectedCustomer?.state && selectedCustomer.state !== 'PA');
     const builtItems = buildItemsFromDrafts(lineItems, sellableProducts, inventory, isInter);
     if (!builtItems.length) {
-      alert('Informe ao menos um item com quantidade e preço unitário válidos.');
+      toast.push('Informe ao menos um item com quantidade e preço unitário válidos.', 'danger');
       return;
     }
     const itemsSubtotal = builtItems.reduce((s, it) => s + (Number(it.total) || 0), 0);
@@ -546,13 +599,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       shipping: parseFloat(shipping) || 0,
       total: itemsSubtotal - (parseFloat(discount) || 0) + (parseFloat(shipping) || 0),
       status: isBudget ? OrderStatus.BUDGET : OrderStatus.FINALIZED,
+      // Orçamento não tem esse conceito ainda — só passa a valer quando for
+      // convertido em venda (aí o padrão antigo de lançar automático continua).
+      withoutFinance: isBudget ? undefined : !postFinanceNow,
       isBarter: isBarter,
       barterCommodityType: isBarter ? barterCommodityType : undefined,
       cornTons: isBarter ? grainTonsEquivalent : undefined,
       cornPricePerTon: isBarter ? parseFloat(cornPricePerTon) : undefined,
       items: builtItems,
-      productSheetTitle: productSheetTitle.trim() || DEFAULT_PRODUCT_SHEET.title,
-      productSheetBody: productSheetBody.trim() || DEFAULT_PRODUCT_SHEET.body,
+      productSheetTitle: productSheetTitle.trim(),
+      productSheetBody: sanitizeSalesOrderSheetBody(productSheetBody),
       payments: payments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
@@ -591,6 +647,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     setDiscount('0');
     setShipping('0');
     setIsBudget(isQuotesView);
+    setPostFinanceNow(false);
     setNotes('');
     setIsBarter(false);
     setBarterCommodityType('MILHO');
@@ -614,17 +671,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!selectedCustomerId) {
-        alert("Por favor, selecione um cliente da lista antes de avançar.");
+        toast.push("Por favor, selecione um cliente da lista antes de avançar.", 'danger');
         return;
       }
       if (!hasValidLineItems) {
-        alert('Adicione ao menos um item com quantidade e preço unitário válidos.');
+        toast.push('Adicione ao menos um item com quantidade e preço unitário válidos.', 'danger');
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (!isBudget && payments.length > 0 && Math.abs(remainingToProgram) > 0.05) {
-        alert(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`);
+        toast.push(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`, 'danger');
         return;
       }
       setCurrentStep(3);
@@ -669,6 +726,36 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     }
   };
 
+  const handleCancelOrderClick = async (order: SaleOrder) => {
+    if (hasAuthorizedFiscalDocument(order)) {
+      toast.push('Esta venda possui NF-e autorizada e não pode ser inabilitada. Cancele o documento fiscal antes.', 'danger');
+      return;
+    }
+    const confirmed = await confirmDialog({
+      title: `Inabilitar / Cancelar Pedido ${order.reference}?`,
+      description: `O pedido #${order.reference} será inabilitado e cancelado. A numeração continuará preservada para manter a sincronização da ordem. O estoque e os débitos financeiros vinculados serão estornados.`,
+      confirmLabel: 'Inabilitar Pedido',
+      danger: true
+    });
+    if (!confirmed) return;
+    if (onCancelOrder) {
+      onCancelOrder(order.id, 'Inabilitado pelo usuário');
+    }
+  };
+
+  const handleReactivateOrderClick = async (order: SaleOrder) => {
+    const confirmed = await confirmDialog({
+      title: `Reativar Pedido ${order.reference}?`,
+      description: `O pedido #${order.reference} voltará ao status de Orçamento para que possa ser revisado ou convertido em venda novamente.`,
+      confirmLabel: 'Reativar como Orçamento',
+      danger: false
+    });
+    if (!confirmed) return;
+    if (onReactivateOrder) {
+      onReactivateOrder(order.id);
+    }
+  };
+
   const handlePrint = (order: SaleOrder) => {
     setPrintOrder(order);
   };
@@ -700,7 +787,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   };
 
   // Métricas Globais de Vendas
-  const totalVolumeTon = orders.reduce((acc, o) => acc + o.items.reduce((sum, it) => sum + (it.quantity || 0), 0), 0);
+  const totalVolumeTon = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => acc + o.items.reduce((sum, it) => sum + (it.quantity || 0), 0), 0);
   const totalOrdersAmount = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => acc + o.total, 0);
   
   const totalPaidGlobal = orders.filter(o => o.status === OrderStatus.FINALIZED).reduce((acc, o) => {
@@ -711,17 +798,20 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const totalOutstandingGlobal = Math.max(0, totalOrdersAmount - totalPaidGlobal);
 
   // Contadores para abas de status de pagamento (respeitando o período selecionado se ativo)
-  const { countPaid, countPartial, countPending, countBudget, totalInDateRange } = useMemo(() => {
+  const { countPaid, countPartial, countPending, countBudget, countCancelled, totalInDateRange } = useMemo(() => {
     let paid = 0;
     let partial = 0;
     let pending = 0;
     let budget = 0;
+    let cancelled = 0;
     let inRange = 0;
 
     orders.forEach(o => {
       if (!isDateInRange(o.date, startDate, endDate)) return;
       inRange++;
-      if (o.status === OrderStatus.BUDGET) {
+      if (o.status === OrderStatus.CANCELLED) {
+        cancelled++;
+      } else if (o.status === OrderStatus.BUDGET) {
         budget++;
       } else {
         const { paymentStatus } = calculateOrderPayment(o);
@@ -731,7 +821,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       }
     });
 
-    return { countPaid: paid, countPartial: partial, countPending: pending, countBudget: budget, totalInDateRange: inRange };
+    return { countPaid: paid, countPartial: partial, countPending: pending, countBudget: budget, countCancelled: cancelled, totalInDateRange: inRange };
   }, [orders, startDate, endDate]);
 
   // Filtragem dos Pedidos
@@ -746,6 +836,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       if (activeFilter === 'PARTIAL' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PARCIAL')) return false;
       if (activeFilter === 'PENDING' && (o.status !== OrderStatus.FINALIZED || paymentStatus !== 'PENDENTE')) return false;
       if (activeFilter === 'BUDGET' && o.status !== OrderStatus.BUDGET) return false;
+      if (activeFilter === 'CANCELLED' && o.status !== OrderStatus.CANCELLED) return false;
+      if (activeFilter !== 'CANCELLED' && o.status === OrderStatus.CANCELLED && !searchQuery.trim()) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -756,7 +848,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         const matchCust = name.includes(q) || doc.includes(q);
         const matchRef = ref.includes(q);
         const matchPaymentStatus = paymentStatus.toLowerCase().includes(q);
-        return matchCust || matchRef || matchPaymentStatus;
+        const matchCancelled = o.status === OrderStatus.CANCELLED && ('cancelado'.includes(q) || 'inabilitado'.includes(q));
+        return matchCust || matchRef || matchPaymentStatus || matchCancelled;
       }
       return true;
     });
@@ -777,7 +870,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       {/* Header Principal */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
             {isQuotesView ? 'Orçamentos Comerciais' : 'Pedidos de Venda & Faturamento'}
           </h2>
           <p className="text-slate-500 text-sm font-medium">
@@ -805,50 +898,46 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       </header>
 
       {/* Cards de Métricas Comerciais */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 print:hidden">
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-black">
-            <DollarSign size={24} />
+      {(() => {
+        const paidPct = totalOrdersAmount > 0 ? Math.min(100, (totalPaidGlobal / totalOrdersAmount) * 100) : 0;
+        const pct = (v: number) => `${v.toFixed(1).replace('.', ',')}%`;
+        const money = (v: number, tone: string) => {
+          const [int, dec] = formatBRL(v).split(',');
+          return <p className={`text-xl md:text-3xl font-bold tracking-tight ${tone}`}>{int}<span className="text-base md:text-lg opacity-60">,{dec}</span></p>;
+        };
+        const card = (label: string, icon: React.ReactNode, iconCls: string, body: React.ReactNode) => (
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex justify-between items-start gap-2 mb-1">
+              <p className="text-[11px] md:text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
+              <div className={`p-2 rounded-xl border ${iconCls}`}>{icon}</div>
+            </div>
+            {body}
           </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Faturado</p>
-            <p className="text-base md:text-xl font-black text-slate-900">{formatBRL(totalOrdersAmount)}</p>
+        );
+        return (
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-5 print:hidden">
+            {card('Total Faturado', <DollarSign size={18} />, 'bg-emerald-50 text-emerald-700 border-emerald-100', <>
+              {money(totalOrdersAmount, 'text-slate-900')}
+              <p className="text-xs text-slate-400 mt-3">{formatTons(totalVolumeTon)} t comercializadas</p>
+            </>)}
+            {card('Entradas / Abatimentos', <CheckCircle2 size={18} />, 'bg-emerald-50 text-emerald-700 border-emerald-100', <>
+              {money(totalPaidGlobal, 'text-emerald-700')}
+              <div className="flex items-center gap-3 mt-3"><div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-600 rounded-full" style={{ width: `${paidPct}%` }} /></div><span className="text-xs text-slate-500 whitespace-nowrap">{pct(paidPct)} pago</span></div>
+            </>)}
+            {card('Saldo a Receber', <Clock size={18} />, 'bg-rose-50 text-rose-600 border-rose-100', <>
+              {money(totalOutstandingGlobal, 'text-rose-600')}
+              <div className="flex items-center gap-3 mt-3"><div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-rose-500 rounded-full" style={{ width: `${100 - paidPct}%` }} /></div><span className="text-xs text-rose-600 whitespace-nowrap">{pct(100 - paidPct)} pendente</span></div>
+            </>)}
+            {card('Volume Comercializado', <Package size={18} />, 'bg-blue-50 text-blue-600 border-blue-100', <>
+              <p className="text-xl md:text-3xl font-bold tracking-tight text-blue-600 font-mono">{formatTons(totalVolumeTon)}<span className="text-base ml-1 opacity-70">t</span></p>
+              <p className="text-xs text-slate-400 mt-3">{orders.length} pedido(s) no período</p>
+            </>)}
           </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Entradas / Abatimentos</p>
-            <p className="text-base md:text-xl font-black text-emerald-600">{formatBRL(totalPaidGlobal)}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-black">
-            <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo a Receber</p>
-            <p className="text-base md:text-xl font-black text-rose-600">{formatBRL(totalOutstandingGlobal)}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-3 md:gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
-            <Package size={24} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Volume Comercializado</p>
-            <p className="text-base md:text-xl font-black text-blue-700">{totalVolumeTon.toFixed(1)} TON</p>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Barra de Filtros por Status de Pagamento, Data e Busca */}
-      <div className="bg-white p-3 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm space-y-3.5 print:hidden">
+      <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3.5 print:hidden">
         
         {/* Linha Superior: Status e Busca */}
         <div className="flex flex-col xl:flex-row gap-3 md:gap-4 items-center justify-between">
@@ -860,7 +949,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 activeFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Todos <span className="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 text-[10px]">{totalInDateRange}</span>
+              Todos <span className="px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 text-xs">{totalInDateRange}</span>
             </button>
 
             <button
@@ -871,7 +960,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             >
               <CheckCircle2 size={13} className={activeFilter === 'PAID' ? 'text-white' : 'text-emerald-600'} />
               Pagos / Quitados
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+              <span className={`px-1.5 py-0.2 rounded-md text-xs ${activeFilter === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
                 {countPaid}
               </span>
             </button>
@@ -884,7 +973,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             >
               <Clock size={13} className={activeFilter === 'PARTIAL' ? 'text-white' : 'text-amber-600'} />
               Parciais
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PARTIAL' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
+              <span className={`px-1.5 py-0.2 rounded-md text-xs ${activeFilter === 'PARTIAL' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'}`}>
                 {countPartial}
               </span>
             </button>
@@ -897,7 +986,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             >
               <AlertTriangle size={13} className={activeFilter === 'PENDING' ? 'text-white' : 'text-rose-600'} />
               Débitos Pendentes
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'PENDING' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'}`}>
+              <span className={`px-1.5 py-0.2 rounded-md text-xs ${activeFilter === 'PENDING' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'}`}>
                 {countPending}
               </span>
             </button>
@@ -910,8 +999,21 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             >
               <FileText size={13} />
               Orçamentos
-              <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${activeFilter === 'BUDGET' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+              <span className={`px-1.5 py-0.2 rounded-md text-xs ${activeFilter === 'BUDGET' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
                 {countBudget}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveFilter('CANCELLED')}
+              className={`shrink-0 px-3.5 py-2.5 min-h-11 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeFilter === 'CANCELLED' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Ban size={13} className={activeFilter === 'CANCELLED' ? 'text-white' : 'text-slate-500'} />
+              Cancelados
+              <span className={`px-1.5 py-0.2 rounded-md text-xs ${activeFilter === 'CANCELLED' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                {countCancelled}
               </span>
             </button>
           </div>
@@ -930,7 +1032,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 p-1"
                 title="Limpar busca"
               >
                 <X size={15} />
@@ -955,8 +1057,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             <span className="text-slate-500 font-bold">
               Exibindo <strong className="text-slate-800">{filteredOrders.length}</strong> de {orders.length} pedidos
               {filteredOrders.length > 0 && (
-                <span className="hidden sm:inline text-slate-400 font-medium ml-1">
-                  ({filteredVolumeTon.toFixed(1)} TON · {formatBRL(filteredTotalAmount)})
+                <span className="hidden sm:inline text-slate-500 font-medium ml-1">
+                  ({formatTons(filteredVolumeTon)} t · {formatBRL(filteredTotalAmount)})
                 </span>
               )}
             </span>
@@ -976,7 +1078,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       </div>
 
       {/* Lista de Pedidos em Cards Modernos & Elegantes com Indicador Visual de Pagamento */}
-      <div className="space-y-4 print:hidden">
+      <div className={`print:hidden ${filteredOrders.length > 0 ? 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden' : ''}`}>
+        {filteredOrders.length > 0 && (
+          <div className="hidden lg:grid grid-cols-[48px_1.1fr_2fr_1.6fr_1.3fr_1.3fr_1.3fr] gap-4 px-4 py-3.5 bg-slate-50/70 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <span>Exp.</span><span>Pedido / Data</span><span>Cliente & Documento</span><span>Produto & Volume</span><span>Status Financeiro</span><span>Progresso de Carga</span><span className="text-right">Valor / Saldo</span>
+          </div>
+        )}
         {filteredOrders.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-4 max-w-xl mx-auto my-8">
             <div className="w-16 h-16 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
@@ -995,7 +1102,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             {orders.length === 0 ? (
               <button
                 onClick={openNewOrder}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-purple-200"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-100"
               >
                 <Plus size={16} /> {isQuotesView ? 'Emitir Primeiro Orçamento' : 'Emitir Primeiro Pedido'}
               </button>
@@ -1009,7 +1116,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             )}
           </div>
         ) : (
-          filteredOrders.slice().reverse().map(order => {
+          filteredOrders.slice().sort((a, b) => {
+            // Mais recente primeiro pela numeração (PED-2026-0041 > PED-2026-0007);
+            // a ordem de gravação no banco não segue a sequência.
+            const seq = (ref?: string) => {
+              const m = String(ref || '').match(/(\d{4})\D+(\d+)\s*$/);
+              return m ? Number(m[1]) * 1e6 + Number(m[2]) : -1;
+            };
+            const diff = seq(b.reference) - seq(a.reference);
+            if (diff !== 0) return diff;
+            return String(b.date || '').localeCompare(String(a.date || ''));
+          }).map(order => {
             const customer = customers.find(c => c.id === order.customerId);
             const totalQty = order.items.reduce((s, it) => s + (it.quantity || 0), 0);
             
@@ -1021,17 +1138,75 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             const remainingWithdraw = Math.max(0, totalQty - totalWithdrawn);
             const withdrawalProgress = totalQty > 0 ? Math.min(100, (totalWithdrawn / totalQty) * 100) : 0;
 
+            const isExpanded = expandedOrderIds.has(order.id);
+            const isCancelled = order.status === OrderStatus.CANCELLED;
+            const isBudget = order.status === OrderStatus.BUDGET;
+            const firstItem = order.items[0];
+            const statusChip = isCancelled
+              ? { label: 'Inabilitado', cls: 'bg-slate-100 text-slate-500 border-slate-300', dot: 'bg-slate-400', sub: 'Pedido cancelado', subCls: 'text-slate-400' }
+              : isBudget
+              ? { label: 'Orçamento', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', sub: 'Aguardando aprovação', subCls: 'text-slate-500' }
+              : paymentStatus === 'PAGO'
+              ? { label: 'Quitado', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', sub: '100% Pago', subCls: 'text-emerald-700' }
+              : paymentStatus === 'PARCIAL'
+              ? { label: `Parcial (${Math.round(financialProgress)}%)`, cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500', sub: `${formatBRL(totalPaid)} recebido`, subCls: 'text-orange-600' }
+              : { label: 'Débito pendente', cls: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500', sub: `${Math.round(financialProgress)}% pago (${formatBRL(totalPaid)})`, subCls: 'text-rose-600' };
+            const accent = isCancelled ? 'border-l-slate-400' : isBudget ? 'border-l-slate-300' : paymentStatus === 'PAGO' ? 'border-l-emerald-500' : paymentStatus === 'PARCIAL' ? 'border-l-amber-400' : 'border-l-rose-500';
+
             return (
-              <div 
-                key={order.id} 
-                className="bg-white rounded-2xl md:rounded-3xl border border-slate-200/90 p-4 md:p-7 shadow-sm hover:shadow-md hover:border-slate-300 transition-all space-y-4 md:space-y-5"
-              >
+              <div key={order.id} className={`border-b border-slate-100 last:border-0 ${isCancelled ? 'opacity-70 bg-slate-50/50' : isExpanded ? 'bg-slate-50/60' : ''}`}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleOrderExpanded(order.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOrderExpanded(order.id); } }}
+                  className={`grid grid-cols-[40px_1fr_auto] lg:grid-cols-[48px_1.1fr_2fr_1.6fr_1.3fr_1.3fr_1.3fr] gap-x-4 gap-y-2 items-center px-4 py-4 cursor-pointer hover:bg-slate-50 transition-colors border-l-4 ${isExpanded ? accent : isCancelled ? 'border-l-slate-300' : 'border-l-transparent'}`}
+                >
+                  <span className={`w-8 h-8 grid place-items-center rounded-lg text-slate-500 ${isExpanded ? 'bg-slate-200/70' : ''}`}>
+                    <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </span>
+                  <div className="min-w-0 lg:order-none">
+                    <p className={`font-mono text-sm font-medium ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{order.reference}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Calendar size={11} /> {order.date}</p>
+                  </div>
+                  <div className="lg:hidden text-right">
+                    <p className={`font-mono text-sm font-semibold ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{formatBRL(order.total)}</p>
+                    <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase border ${statusChip.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${statusChip.dot}`} />{statusChip.label}</span>
+                  </div>
+                  <div className="min-w-0 col-span-3 lg:col-span-1 pl-12 lg:pl-0">
+                    <p className={`font-bold text-sm uppercase truncate ${isCancelled ? 'text-slate-500' : 'text-slate-900'}`}>{customer?.name || 'Cliente Geral'}</p>
+                    <p className="font-mono text-xs text-slate-500 truncate">DOC: {customer?.document || '—'}{order.sellerName ? ` · Vendedor: ${order.sellerName}` : ''}</p>
+                  </div>
+                  <div className="hidden lg:block min-w-0">
+                    <p className="text-sm text-slate-800 truncate">{firstItem?.productName || '—'}{order.items.length > 1 ? ` +${order.items.length - 1}` : ''}</p>
+                    <p className="font-mono text-xs text-slate-500">{formatTons(totalQty)} t{firstItem ? ` @ ${formatBRL(firstItem.unitPrice)}/t` : ''}</p>
+                  </div>
+                  <div className="hidden lg:block">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold uppercase border ${statusChip.cls}`}><span className={`w-1.5 h-1.5 rounded-full ${statusChip.dot}`} />{statusChip.label}</span>
+                    <p className={`text-xs mt-1 ${statusChip.subCls}`}>{statusChip.sub}</p>
+                  </div>
+                  <div className="hidden lg:block">
+                    <div className="flex justify-between text-xs text-slate-600"><span>{formatTons(totalWithdrawn)} de {formatTons(totalQty)} t</span><span className={`font-mono ${withdrawalProgress >= 100 ? 'text-emerald-700' : withdrawalProgress > 0 ? 'text-blue-600' : 'text-slate-400'}`}>{Math.round(withdrawalProgress)}%</span></div>
+                    <div className="h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden"><div className={`h-full rounded-full ${withdrawalProgress >= 100 ? 'bg-emerald-600' : 'bg-blue-600'}`} style={{ width: `${withdrawalProgress}%` }} /></div>
+                    <p className="text-[11px] text-slate-400 mt-1">{isCancelled ? 'Cancelado' : isBudget ? 'Liberação pendente' : `${(order.withdrawals || []).length} viagem(ns)`}</p>
+                  </div>
+                  <div className="hidden lg:block text-right">
+                    <p className={`font-mono text-sm font-semibold ${isCancelled ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{formatBRL(order.total)}</p>
+                    <p className={`font-mono text-xs ${isCancelled ? 'text-slate-400' : isBudget ? 'text-slate-400' : remainingDebt > 0.01 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {isCancelled ? 'Cancelado' : isBudget ? (order.validUntil ? `Válido até ${order.validUntil}` : 'Proposta') : `Saldo: ${formatBRL(remainingDebt)}`}
+                    </p>
+                  </div>
+                </div>
+                {isExpanded && (
+              <div className="mx-3 md:mx-6 mb-5 bg-white rounded-2xl border border-slate-200 p-4 md:p-6 shadow-sm space-y-4 md:space-y-5">
                 
                 {/* Linha Superior: Cabeçalho do Pedido, Cliente e Badges de Pagamento */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
                   <div className="flex items-center gap-3.5">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                      order.status === OrderStatus.BUDGET
+                      isCancelled
+                        ? 'bg-slate-100 text-slate-500 border border-slate-300'
+                        : order.status === OrderStatus.BUDGET
                         ? 'bg-amber-50 text-amber-600 border border-amber-200/60'
                         : paymentStatus === 'PAGO'
                         ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60'
@@ -1039,35 +1214,47 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
                         : 'bg-rose-50 text-rose-600 border border-rose-200/60'
                     }`}>
-                      <ShoppingCart size={22} />
+                      {isCancelled ? <Ban size={22} /> : <ShoppingCart size={22} />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-black text-base md:text-lg text-slate-900 tracking-tight">
                           {customer?.name || 'Cliente Geral'}
                         </h3>
-                        <span className="text-[10px] font-mono font-black uppercase px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="text-[11px] font-mono font-black uppercase px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
                           {order.reference}
                         </span>
+
+                        {isCancelled && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
+                            <Ban size={10} /> Inabilitado / Cancelado
+                          </span>
+                        )}
+
+                        {order.status === OrderStatus.FINALIZED && order.withoutFinance && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                            <DollarSign size={10} /> Sem lançamento financeiro
+                          </span>
+                        )}
 
                         {/* Tag de Alerta de Débito junto ao nome do cliente */}
                         {order.status === OrderStatus.FINALIZED && (
                           paymentStatus === 'PENDENTE' ? (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
                               <AlertTriangle size={10} /> Débito ({formatBRL(remainingDebt)})
                             </span>
                           ) : paymentStatus === 'PARCIAL' ? (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
                               <Clock size={10} /> Restante: {formatBRL(remainingDebt)}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
                               <CheckCircle2 size={10} /> Quitado
                             </span>
                           )
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider text-[10px] pt-0.5">
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider text-[11px] pt-0.5">
                         Doc: {customer?.document || 'Não informado'} • Data: {order.date} {order.sellerName ? `• Vendedor: ${order.sellerName}` : ''}
                       </p>
                     </div>
@@ -1075,24 +1262,29 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                   {/* Status Badges: Badge de Pagamento Colorido e NF-e */}
                   <div className="hidden sm:flex items-center gap-2 flex-wrap">
-                    {order.status === OrderStatus.BUDGET ? (
-                      <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+                    {isCancelled ? (
+                      <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5">
+                        <Ban size={13} className="text-slate-500" />
+                        <span>Cancelado</span>
+                      </span>
+                    ) : order.status === OrderStatus.BUDGET ? (
+                      <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
                         <FileText size={13} /> Orçamento
                       </span>
                     ) : (
                       /* Badge Colorido de Status de Pagamento */
                       paymentStatus === 'PAGO' ? (
-                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                        <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
                           <CheckCircle2 size={13} className="text-emerald-600" />
                           <span>Pago / Quitado</span>
                         </span>
                       ) : paymentStatus === 'PARCIAL' ? (
-                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1.5">
+                        <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1.5">
                           <Clock size={13} className="text-amber-600" />
                           <span>Pagamento Parcial</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase bg-rose-50 text-rose-800 border border-rose-200 flex items-center gap-1.5">
+                        <span className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase bg-rose-50 text-rose-800 border border-rose-200 flex items-center gap-1.5">
                           <AlertTriangle size={13} className="text-rose-600" />
                           <span>Pagamento Pendente</span>
                         </span>
@@ -1130,7 +1322,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 draft,
                                 step: 'preview',
                               })}
-                              className="text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+                              className="text-[11px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
                               title="Revisar prévia e emitir a partir do rascunho"
                             >
                               <FileText size={12} /> Rascunho {draft.tipo === 'avulsa' ? 'avulsa' : draft.tipo === 'transferencia' ? 'transf.' : 'NF-e'}
@@ -1138,7 +1330,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           ))}
                           {pedidoNfe && pedidoNfe.nfeStatus && pedidoNfe.nfeStatus !== 'nao_emitida' && !pedidoIsDraft && (
                             <>
-                              <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 ${
+                              <span className={`text-[11px] font-black px-3 py-1.5 rounded-xl uppercase border flex items-center gap-1 ${
                                 pedidoNfe.nfeStatus === 'autorizada' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                                 pedidoNfe.nfeStatus === 'rejeitada' ? 'bg-rose-50 text-rose-800 border-rose-200' :
                                 pedidoNfe.nfeStatus === 'cancelada' ? 'bg-slate-50 text-slate-700 border-slate-200' :
@@ -1151,7 +1343,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                   setDanfeLinkedNfeId(pedidoNfe.id);
                                   setOrderToViewDanfe(order);
                                 }}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-all flex items-center gap-1"
                               >
                                 <Eye size={12} /> DANFE
                               </button>
@@ -1160,7 +1352,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                   const linked = listOrderNfes(order).find((n) => n.id === pedidoNfe.id);
                                   setDuplicateDraft(buildNfeDuplicateDraft(order, linked));
                                 }}
-                                className="px-2.5 py-1.5 bg-white hover:bg-purple-50 text-purple-800 border border-purple-200 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                                className="px-2.5 py-1.5 bg-white hover:bg-purple-50 text-purple-800 border border-purple-200 rounded-xl text-xs font-black transition-all flex items-center gap-1"
                                 title="Emitir uma nota nova com os mesmos dados"
                               >
                                 <Copy size={12} /> Duplicar
@@ -1168,7 +1360,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               {pedidoNfe.nfeStatus === 'autorizada' && pedidoNfe.nfeChave && (
                                 <button
                                   onClick={() => openEmitNfe(order, { devolution: pedidoNfe.nfeChave || '' })}
-                                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[10px] font-black transition-all flex items-center gap-1"
+                                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-black transition-all flex items-center gap-1"
                                   title="Emitir NF-e de devolução"
                                 >
                                   <Undo2 size={12} /> Devolver
@@ -1177,7 +1369,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               {pedidoNfe.nfeStatus === 'rejeitada' && (
                                 <button
                                   onClick={() => openEmitNfe(order)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-sm"
                                 >
                                   <Send size={12} /> Reenviar
                                 </button>
@@ -1192,7 +1384,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 setDanfeLinkedNfeId(nfe.id);
                                 setOrderToViewDanfe(order);
                               }}
-                              className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black border flex items-center gap-1 ${
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-black border flex items-center gap-1 ${
                                 nfe.nfeStatus === 'autorizada'
                                   ? 'bg-purple-50 text-purple-800 border-purple-200'
                                   : nfe.nfeStatus === 'rejeitada'
@@ -1211,13 +1403,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 <>
                                   <button
                                     onClick={() => openEmitNfe(order)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-[10px] font-black shadow-sm transition-all"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-sm transition-all"
                                   >
                                     <Send size={12} /> Emitir NF-e
                                   </button>
                                   <button
                                     onClick={() => openEmitNfe(order, { transferencia: true })}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-[10px] font-black transition-all"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-xl text-xs font-black transition-all"
                                     title="NF-e de transferência de estoque (CFOP 5152/6152)"
                                   >
                                     <ArrowRightLeft size={12} /> Transferência
@@ -1226,7 +1418,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               )}
                               <button
                                 onClick={() => openEmitNfe(order, { avulsa: true })}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-purple-800 border border-purple-300 rounded-xl text-[10px] font-black transition-all"
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-purple-50 text-purple-800 border border-purple-300 rounded-xl text-xs font-black transition-all"
                                 title="Emitir NF-e avulsa com quantidade parcial desta venda"
                               >
                                 <Files size={12} /> NF avulsa
@@ -1250,9 +1442,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <span>{item.productName}:</span>
                       <span className="font-black text-slate-900">{item.quantity} {item.unit || 'Ton'}</span>
                       {order.status === OrderStatus.FINALIZED && rem != null && rem < item.quantity && (
-                        <span className="text-[10px] font-black text-purple-700">saldo NF {rem.toLocaleString('pt-BR')} {item.unit || 'Ton'}</span>
+                        <span className="text-xs font-black text-purple-700">saldo NF {rem.toLocaleString('pt-BR')} {item.unit || 'Ton'}</span>
                       )}
-                      <span className="text-slate-400 font-mono text-[11px]">(@ {formatBRL(item.unitPrice)}/{item.unit || 'Ton'})</span>
+                      <span className="text-slate-500 font-mono text-xs">(@ {formatBRL(item.unitPrice)}/{item.unit || 'Ton'})</span>
                       <span className="text-purple-700 font-mono font-black">={formatBRL(item.total)}</span>
                     </span>
                     );
@@ -1279,16 +1471,33 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         {order.cornPricePerTon ? ` (@ ${formatBRL(order.cornPricePerTon)}/TON)` : ''}
                       </span>
                     </div>
-                    <span className="text-[10px] font-mono font-black uppercase px-2.5 py-1 rounded-lg bg-amber-200/70 text-amber-900">
+                    <span className="text-[11px] font-mono font-black uppercase px-2.5 py-1 rounded-lg bg-amber-200/70 text-amber-900">
                       Permuta Grãos
                     </span>
                   </div>
                 )}
 
-                {order.status === OrderStatus.BUDGET ? (
+                {isCancelled ? (
+                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center gap-3">
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <Ban size={14} className="text-slate-500" /> Pedido Inabilitado / Cancelado
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 font-mono">Ref: {order.reference}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                      Este pedido foi inabilitado e cancelado. A numeração permanece preservada na sequência cronológica para não causar descompasso de numeração ou registros vazios. Ele não gera débitos no contas a receber nem movimenta estoque.
+                    </p>
+                    {order.notes && (
+                      <div className="mt-2 p-2.5 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-600">
+                        {order.notes}
+                      </div>
+                    )}
+                  </div>
+                ) : order.status === OrderStatus.BUDGET ? (
                   <div className="bg-amber-50/70 p-5 rounded-3xl border border-amber-200 space-y-2">
                     <div className="flex justify-between items-center gap-3">
-                      <span className="text-[10px] font-black text-amber-900 uppercase tracking-widest">Proposta comercial</span>
+                      <span className="text-[11px] font-black text-amber-900 uppercase tracking-widest">Proposta comercial</span>
                       <span className="text-xs font-black text-amber-900">Válido até {order.validUntil || 'não informado'}</span>
                     </div>
                     <p className="text-xs text-amber-900/80 font-medium">
@@ -1301,7 +1510,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Painel 1: Financeiro (Entradas, Abatimentos e Saldo Devedor) */}
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/70 space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                         <DollarSign size={14} className="text-emerald-600" /> Controle Financeiro & Pagamentos
                       </span>
                       <span className="text-xs font-black text-slate-800">
@@ -1311,11 +1520,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                     <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                       <div>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase">Total Pago/Abatido</span>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">Total Pago/Abatido</span>
                         <p className="font-black text-emerald-600 text-sm">{formatBRL(totalPaid)}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-[9px] text-slate-400 font-bold uppercase">Saldo Devedor</span>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">Saldo Devedor</span>
                         <p className={`font-black text-sm ${remainingDebt === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {formatBRL(remainingDebt)}
                         </p>
@@ -1330,7 +1539,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           style={{ width: `${financialProgress}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
                         <span>{financialProgress.toFixed(0)}% Quitado</span>
                         <span>{order.receipts?.length || 0} Recibos emitidos</span>
                       </div>
@@ -1340,23 +1549,23 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Painel 2: Retiradas de Calcário (Romaneios e Saldo de Carga) */}
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/70 space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                         <Truck size={14} className="text-blue-600" /> Expedição & Retiradas de Carga
                       </span>
                       <span className="text-xs font-black text-slate-800">
-                        {totalQty.toFixed(1)} TON
+                        {formatTons(totalQty)} t
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                       <div>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase">Já Retirado</span>
-                        <p className="font-black text-blue-600 text-sm">{totalWithdrawn.toFixed(1)} TON</p>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">Já Retirado</span>
+                        <p className="font-black text-blue-600 text-sm">{formatTons(totalWithdrawn)} t</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-[9px] text-slate-400 font-bold uppercase">Saldo a Retirar</span>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">Saldo a Retirar</span>
                         <p className={`font-black text-sm ${remainingWithdraw === 0 ? 'text-emerald-600' : 'text-purple-600'}`}>
-                          {remainingWithdraw.toFixed(1)} TON
+                          {formatTons(remainingWithdraw)} t
                         </p>
                       </div>
                     </div>
@@ -1369,7 +1578,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           style={{ width: `${withdrawalProgress}%` }}
                         />
                       </div>
-                      <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+                      <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
                         <span>{withdrawalProgress.toFixed(0)}% Carregado</span>
                         <span>{order.withdrawals?.length || 0} Viagens / Caminhões</span>
                       </div>
@@ -1384,7 +1593,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   
                   {/* Botões Operacionais Primários */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {order.status === OrderStatus.BUDGET ? (
+                    {isCancelled ? (
+                      onReactivateOrder && (
+                        <button
+                          onClick={() => handleReactivateOrderClick(order)}
+                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                          title="Reativar este pedido como Orçamento para revisão"
+                        >
+                          <RotateCcw size={14} /> Reativar Pedido
+                        </button>
+                      )
+                    ) : order.status === OrderStatus.BUDGET ? (
                       <button
                         onClick={() => handleConvertToSale(order)}
                         className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-amber-100 hover:scale-105"
@@ -1394,6 +1613,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </button>
                     ) : (
                       <>
+                        {order.withoutFinance && onPostFinance && (
+                          <button
+                            onClick={() => onPostFinance(order)}
+                            className="px-3.5 py-2.5 min-h-11 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-amber-100"
+                            title="Esta venda ainda não tem parcela no Contas a Receber — clique pra lançar agora"
+                          >
+                            <DollarSign size={14} /> Fazer lançamento financeiro
+                          </button>
+                        )}
                         <button
                           onClick={() => setOrderForPayment(order)}
                           className="px-3.5 py-2.5 min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
@@ -1422,7 +1650,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     ) : null}
                   </div>
 
-                  {/* Ações Secundárias (Imprimir, Editar, Excluir) */}
+                  {/* Ações Secundárias (Imprimir, Editar, Inabilitar, Excluir) */}
                   <div className="flex items-center gap-1.5">
                     <button 
                       onClick={() => handlePrint(order)} 
@@ -1431,17 +1659,28 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     >
                       <Printer size={18} />
                     </button>
-                    <button 
-                      onClick={() => setEditingOrder(order)} 
-                      className="p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" 
-                      title="Editar Pedido"
-                    >
-                      <Pencil size={18} />
-                    </button>
+                    {!isCancelled && (
+                      <button 
+                        onClick={() => setEditingOrder(order)} 
+                        className="p-2.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all" 
+                        title="Editar Pedido"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                    )}
+                    {!isCancelled && onCancelOrder && (
+                      <button 
+                        onClick={() => handleCancelOrderClick(order)} 
+                        className="p-2.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-2xl transition-all" 
+                        title="Inabilitar / Cancelar Pedido (mantém numeração sem quebrar a sequência)"
+                      >
+                        <Ban size={18} />
+                      </button>
+                    )}
                     <button 
                       onClick={() => { setSelectedOrderToDelete(order); setIsDeleteModalOpen(true); }} 
-                      className="p-2.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all" 
-                      title="Excluir"
+                      className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all" 
+                      title="Excluir Definitivamente (Admin)"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -1449,6 +1688,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                 </div>
 
+              </div>
+                )}
               </div>
             );
           })
@@ -1516,7 +1757,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
                       : currentStep > 1
                       ? 'text-emerald-700 hover:bg-white/50'
-                      : 'text-slate-400 opacity-60'
+                      : 'text-slate-500 opacity-60'
                   }`}
                 >
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -1529,8 +1770,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {currentStep > 1 ? <Check size={13} /> : '1'}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Cliente</p>
-                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Dados da carga</p>
+                    <p className="text-xs sm:text-xs font-bold leading-tight truncate">Cliente</p>
+                    <p className="hidden sm:block text-xs text-slate-400 leading-none">Dados da carga</p>
                   </div>
                 </button>
 
@@ -1547,7 +1788,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
                       : currentStep > 2
                       ? 'text-emerald-700 hover:bg-white/50'
-                      : 'text-slate-400 opacity-60'
+                      : 'text-slate-500 opacity-60'
                   }`}
                 >
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -1560,8 +1801,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {currentStep > 2 ? <Check size={13} /> : '2'}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Pagamento</p>
-                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Entrada & Prazos</p>
+                    <p className="text-xs sm:text-xs font-bold leading-tight truncate">Pagamento</p>
+                    <p className="hidden sm:block text-xs text-slate-400 leading-none">Entrada & Prazos</p>
                   </div>
                 </button>
 
@@ -1576,7 +1817,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   className={`flex items-center gap-2 text-left p-1.5 rounded-lg transition-all ${
                     currentStep === 3
                       ? 'bg-white shadow-sm border border-slate-200/80 text-slate-900'
-                      : 'text-slate-400 opacity-60'
+                      : 'text-slate-500 opacity-60'
                   }`}
                 >
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -1587,8 +1828,8 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     3
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[10px] sm:text-xs font-bold leading-tight truncate">Revisar</p>
-                    <p className="hidden sm:block text-[10px] text-slate-400 leading-none">Confirmação final</p>
+                    <p className="text-xs sm:text-xs font-bold leading-tight truncate">Revisar</p>
+                    <p className="hidden sm:block text-xs text-slate-400 leading-none">Confirmação final</p>
                   </div>
                 </button>
 
@@ -1632,14 +1873,14 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <span className="flex items-center gap-1.5"><User size={13} /> Cliente Destinatário / Produtor *</span>
                       <div className="flex items-center gap-2">
                         {selectedCustomerId && (
-                          <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
                             <Check size={12} /> Cliente Selecionado
                           </span>
                         )}
                         <button
                           type="button"
                           onClick={() => setIsQuickCustomerModalOpen(true)}
-                          className="text-[11px] text-purple-700 hover:text-purple-900 font-black flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-all active:scale-95"
+                          className="text-xs text-purple-700 hover:text-purple-900 font-black flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-all active:scale-95"
                           title="Cadastrar novo cliente rapidamente com busca de endereço via CEP"
                         >
                           <UserPlus size={13} /> + Cadastrar Cliente Rápido
@@ -1664,7 +1905,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <button 
                           type="button" 
                           onClick={() => { setCustomerSearch(''); setSelectedCustomerId(''); }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 p-1"
                         >
                           <X size={14} />
                         </button>
@@ -1681,13 +1922,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               setIsQuickCustomerModalOpen(true);
                               setIsCustomerDropdownOpen(false);
                             }}
-                            className="w-full text-left px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-between transition-all shadow-sm"
+                            className="w-full text-left px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-between transition-all shadow-sm"
                           >
                             <span className="flex items-center gap-2">
                               <UserPlus size={14} />
                               <span>Cadastrar {customerSearch ? <strong>"{customerSearch}"</strong> : 'Novo Cliente'} Rápido</span>
                             </span>
-                            <span className="text-[10px] bg-purple-500 text-purple-100 px-2 py-0.5 rounded uppercase tracking-wider font-extrabold">ViaCEP</span>
+                            <span className="text-[11px] bg-purple-500 text-purple-100 px-2 py-0.5 rounded uppercase tracking-wider font-extrabold">ViaCEP</span>
                           </button>
                         </div>
 
@@ -1711,7 +1952,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             >
                               <div>
                                 <p className="text-xs font-bold">{c.name}</p>
-                                <p className="text-[11px] text-slate-400">
+                                <p className="text-xs text-slate-500">
                                   Doc: {c.document} {c.phone ? `• Tel: ${c.phone}` : ''} {c.city ? `• ${c.city}/${c.state}` : ''}
                                 </p>
                               </div>
@@ -1732,7 +1973,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <button
                         type="button"
                         onClick={addLineItem}
-                        className="text-[11px] font-black text-purple-700 hover:text-purple-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200"
+                        className="text-xs font-black text-purple-700 hover:text-purple-900 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200"
                       >
                         <Plus size={14} /> Adicionar produto
                       </button>
@@ -1748,7 +1989,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-sm"
                           >
                             <div className="flex justify-between items-center gap-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
                                 Item {String(lineIndex + 1).padStart(2, '0')}
                               </span>
                               <div className="flex items-center gap-2">
@@ -1757,7 +1998,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => removeLineItem(line.lineId)}
-                                    className="p-1 text-slate-400 hover:text-rose-600"
+                                    className="p-1 text-slate-500 hover:text-rose-600"
                                     title="Remover item"
                                   >
                                     <Trash2 size={14} />
@@ -1767,7 +2008,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             </div>
 
                             <div>
-                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Produto *</label>
+                              <label className="text-xs font-bold text-slate-500 block mb-1">Produto *</label>
                               <select
                                 value={line.productId}
                                 onChange={e => handleLineProductChange(line.lineId, e.target.value)}
@@ -1784,15 +2025,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 )}
                               </select>
                               {lineProd && (
-                                <p className="text-[10px] text-slate-400 mt-1">
+                                <p className="text-xs text-slate-500 mt-1">
                                   Estoque: {Number(lineProd.quantity).toLocaleString('pt-BR')} {lineProd.unit || 'TON'}
                                 </p>
                               )}
                             </div>
 
                             <details className="group/desc">
-                              <summary className="text-[11px] font-bold text-slate-500 cursor-pointer list-none [&::-webkit-details-marker]:hidden py-1">
-                                Descrição no PDF <span className="text-slate-400 font-medium group-open/desc:hidden">· opcional</span>
+                              <summary className="text-xs font-bold text-slate-500 cursor-pointer list-none [&::-webkit-details-marker]:hidden py-1">
+                                Descrição no PDF <span className="text-slate-500 font-medium group-open/desc:hidden">· opcional</span>
                               </summary>
                               <input
                                 type="text"
@@ -1805,7 +2046,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">
                                   Qtd. ({lineProd?.unit || 'TON'})
                                 </label>
                                 <input
@@ -1818,7 +2059,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 />
                               </div>
                               <div>
-                                <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">
                                   Preço / {lineProd?.unit || 'TON'}
                                 </label>
                                 <input
@@ -1830,18 +2071,45 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 />
                               </div>
                             </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">PRNT mínimo (%)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.prntMinimo}
+                                  onChange={e => updateLineItem(line.lineId, { prntMinimo: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="—"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">MgO mínimo (%)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.mgoMinimo}
+                                  onChange={e => updateLineItem(line.lineId, { mgoMinimo: e.target.value })}
+                                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-sm"
+                                  placeholder="—"
+                                />
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
 
                     <details className="p-3 bg-white border border-slate-200 rounded-xl">
-                      <summary className="text-[11px] font-bold text-slate-700 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                      <summary className="text-xs font-bold text-slate-700 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                         Ficha técnica do PDF · opcional
                       </summary>
                       <div className="pt-3 space-y-2">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Título</label>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Título</label>
                         <input
                           type="text"
                           value={productSheetTitle}
@@ -1850,7 +2118,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 block mb-1">Especificações (uma linha por parágrafo)</label>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Especificações (uma linha por parágrafo)</label>
                         <textarea
                           value={productSheetBody}
                           onChange={e => setProductSheetBody(e.target.value)}
@@ -1862,9 +2130,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         <button
                           type="button"
                           onClick={() => applyProductSheetFromLine(lineItems[0].lineId)}
-                          className="text-[10px] font-bold text-purple-700 hover:text-purple-900"
+                          className="text-xs font-bold text-purple-700 hover:text-purple-900"
                         >
-                          Usar ficha padrão do 1º item
+                          Usar nome do 1º item
                         </button>
                       )}
                       </div>
@@ -1872,7 +2140,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Desconto Comercial (R$)</label>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">Desconto Comercial (R$)</label>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -1883,7 +2151,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-600 block mb-1">Frete / Entrega (R$)</label>
+                        <label className="text-xs font-bold text-slate-600 block mb-1">Frete / Entrega (R$)</label>
                         <input 
                           type="number" 
                           step="0.01" 
@@ -1914,7 +2182,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     {isBarter && (
                       <div className="pt-2 border-t border-amber-200/80 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div>
-                          <label className="text-[10px] font-bold text-amber-900 block mb-1">Grão da Permuta</label>
+                          <label className="text-xs font-bold text-amber-900 block mb-1">Grão da Permuta</label>
                           <select 
                             value={barterCommodityType} 
                             onChange={e => setBarterCommodityType(e.target.value as 'MILHO' | 'SOJA')}
@@ -1925,7 +2193,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-amber-900 block mb-1">Cotação (R$ / Tonelada)</label>
+                          <label className="text-xs font-bold text-amber-900 block mb-1">Cotação (R$ / Tonelada)</label>
                           <input 
                             type="number" 
                             step="1" 
@@ -1935,7 +2203,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             placeholder="1100"
                           />
                         </div>
-                        <div className="sm:col-span-2 p-2 bg-white rounded-lg border border-amber-200 flex justify-between items-center text-[11px] font-bold text-amber-900">
+                        <div className="sm:col-span-2 p-2 bg-white rounded-lg border border-amber-200 flex justify-between items-center text-xs font-bold text-amber-900">
                           <span>Equivalência Estimada:</span>
                           <span>{grainTonsEquivalent.toFixed(2)} TON (~{grainBagsEquivalent.toFixed(0)} sacas de 60kg)</span>
                         </div>
@@ -1958,11 +2226,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Resumo Rápido da Etapa 1 */}
                   <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center text-xs">
                     <div className="space-y-0.5">
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Subtotal Líquido</p>
+                      <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Subtotal Líquido</p>
                       <p className="font-bold">{lineItems.length} item(ns) • Subtotal {formatBRL(subtotalValue)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Total do Documento</p>
+                      <p className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Total do Documento</p>
                       <p className="text-base font-black text-emerald-400">{formatBRL(totalOrderValue)}</p>
                     </div>
                   </div>
@@ -1981,7 +2249,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
                         Este documento é apenas uma proposta de venda. Ele não gerará títulos no Contas a Receber nem movimentará estoque até ser formalmente aprovado e convertido em Venda Confirmada.
                       </p>
-                      <p className="text-[11px] text-slate-400 pt-2 font-medium">
+                      <p className="text-xs text-slate-500 pt-2 font-medium">
                         Validade da proposta: 15 dias a partir da data de emissão.
                       </p>
                     </div>
@@ -1991,16 +2259,34 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       {/* Resumo do Total */}
                       <div className="p-4 bg-slate-100 rounded-xl flex justify-between items-center border border-slate-200">
                         <div>
-                          <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Total da Venda</p>
+                          <p className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Total da Venda</p>
                           <p className="text-lg font-black text-slate-900">{formatBRL(totalOrderValue)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Saldo a Programar</p>
+                          <p className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">Saldo a Programar</p>
                           <p className={`text-base font-black ${remainingToProgram === 0 ? 'text-emerald-700' : 'text-slate-800'}`}>
                             {formatBRL(remainingToProgram)}
                           </p>
                         </div>
                       </div>
+
+                      {/* Vínculo com o financeiro — opcional, opt-in */}
+                      <label className="flex items-start gap-3 p-4 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-emerald-300">
+                        <input
+                          type="checkbox"
+                          checked={postFinanceNow}
+                          onChange={(e) => setPostFinanceNow(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 accent-emerald-600"
+                        />
+                        <span>
+                          <span className="text-xs font-bold text-slate-800 block">Fazer lançamento financeiro agora</span>
+                          <span className="text-xs text-slate-500">
+                            {postFinanceNow
+                              ? 'As parcelas abaixo já entram no Contas a Receber junto com esta venda.'
+                              : 'Estoque baixa normalmente. As parcelas ficam guardadas no pedido, mas só entram no Financeiro quando você clicar em "Fazer lançamento financeiro" nele — útil pra carregamento avulso, aterro, balsa e outros custos/vendas fracionados.'}
+                          </span>
+                        </span>
+                      </label>
 
                       {/* Entrada / Sinal no Ato */}
                       {!editingOrder && (
@@ -2010,7 +2296,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           </label>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Valor da Entrada (R$)</label>
+                              <label className="text-xs font-bold text-slate-500 block mb-1">Valor da Entrada (R$)</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -2021,7 +2307,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Forma de Pagamento</label>
+                              <label className="text-xs font-bold text-slate-500 block mb-1">Forma de Pagamento</label>
                               <select
                                 value={downPaymentMethod}
                                 onChange={e => setDownPaymentMethod(e.target.value)}
@@ -2037,7 +2323,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               </select>
                             </div>
                             <div>
-                              <label className="text-[10px] font-bold text-slate-500 block mb-1">Conta de Destino</label>
+                              <label className="text-xs font-bold text-slate-500 block mb-1">Conta de Destino</label>
                               <select
                                 value={downPaymentAccount}
                                 onChange={e => setDownPaymentAccount(e.target.value)}
@@ -2050,7 +2336,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             </div>
                           </div>
                           {downPaymentNum > 0 && (
-                            <p className="text-[11px] text-emerald-800 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                            <p className="text-xs text-emerald-800 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-200">
                               ✓ Um recibo de entrada oficial será gerado e vinculado a esta venda.
                             </p>
                           )}
@@ -2064,32 +2350,32 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                             <CreditCard size={14} /> Parcelas & Vencimentos
                           </label>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Preenchimento Rápido:</span>
+                            <span className="text-[11px] text-slate-500 font-bold uppercase mr-1">Preenchimento Rápido:</span>
                             <button
                               type="button"
                               onClick={() => generateQuickInstallments(1)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-bold transition-colors"
                             >
                               1x (30 dias)
                             </button>
                             <button
                               type="button"
                               onClick={() => generateQuickInstallments(2)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-bold transition-colors"
                             >
                               2x (30/60d)
                             </button>
                             <button
                               type="button"
                               onClick={() => generateQuickInstallments(3)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[11px] font-bold transition-colors"
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-bold transition-colors"
                             >
                               3x (30/60/90d)
                             </button>
                             <button
                               type="button"
                               onClick={addPaymentRow}
-                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-[11px] font-bold transition-colors flex items-center gap-1"
+                              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-bold transition-colors flex items-center gap-1"
                             >
                               <Plus size={12} /> + Parcela
                             </button>
@@ -2104,7 +2390,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                             {payments.filter(p => p && p.id).map((p, idx) => (
                               <div key={p.id} className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center gap-3 shadow-sm">
-                                <span className="text-[11px] font-bold text-slate-400 w-6 text-center">#{idx + 1}</span>
+                                <span className="text-xs font-bold text-slate-500 w-6 text-center">#{idx + 1}</span>
                                 <div className="flex-1 grid grid-cols-2 gap-2">
                                   <div>
                                     <input
@@ -2128,7 +2414,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => removePaymentRow(p.id)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                                  className="text-slate-500 hover:text-rose-600 p-1 transition-colors"
                                   title="Remover parcela"
                                 >
                                   <Trash2 size={14} />
@@ -2152,11 +2438,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Resumo do Cliente */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Destinatário</span>
+                      <span className="font-bold text-slate-700 uppercase text-[11px] tracking-wider">Destinatário</span>
                       <button 
                         type="button" 
                         onClick={() => setCurrentStep(1)} 
-                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                        className="text-xs text-slate-600 hover:text-slate-900 font-bold underline"
                       >
                         Alterar
                       </button>
@@ -2170,24 +2456,24 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Resumo dos Itens e Valores */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Carga & Valores</span>
+                      <span className="font-bold text-slate-700 uppercase text-[11px] tracking-wider">Carga & Valores</span>
                       <button 
                         type="button" 
                         onClick={() => setCurrentStep(1)} 
-                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                        className="text-xs text-slate-600 hover:text-slate-900 font-bold underline"
                       >
                         Alterar
                       </button>
                     </div>
                     <div className="space-y-2 pt-1">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Itens</span>
+                      <span className="text-[11px] text-slate-500 font-bold uppercase">Itens</span>
                       <ul className="space-y-1.5">
                         {lineItems.map((line, idx) => {
                           const prod = resolveInventoryProduct(line.productId, sellableProducts, inventory);
                           const qty = parseFloat(line.quantity) || 0;
                           if (qty <= 0) return null;
                           return (
-                            <li key={line.lineId} className="flex justify-between gap-2 text-[11px] border-b border-slate-100 pb-1">
+                            <li key={line.lineId} className="flex justify-between gap-2 text-xs border-b border-slate-100 pb-1">
                               <span className="font-medium text-slate-800">
                                 {String(idx + 1).padStart(2, '0')} — {line.productDescription || prod?.name || 'Produto'}{' '}
                                 <span className="text-slate-500">
@@ -2201,15 +2487,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </ul>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200">
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold">SUBTOTAL</span>
+                          <span className="text-xs text-slate-500 font-bold">SUBTOTAL</span>
                           <p className="font-bold text-slate-900">{formatBRL(subtotalValue)}</p>
                         </div>
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold">DESCONTO / FRETE</span>
+                          <span className="text-xs text-slate-500 font-bold">DESCONTO / FRETE</span>
                           <p className="font-medium text-slate-700">-{formatBRL(parseFloat(discount) || 0)} / +{formatBRL(parseFloat(shipping) || 0)}</p>
                         </div>
                         <div>
-                          <span className="text-[10px] text-slate-400 font-bold">TOTAL GERAL</span>
+                          <span className="text-xs text-slate-500 font-bold">TOTAL GERAL</span>
                           <p className="font-black text-slate-900 text-sm">{formatBRL(totalOrderValue)}</p>
                         </div>
                       </div>
@@ -2221,7 +2507,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 flex justify-between items-center">
                       <div>
                         <p className="font-bold text-xs">Operação Barter ({barterCommodityType})</p>
-                        <p className="text-[11px]">Cotação: {formatBRL(parseFloat(cornPricePerTon) || 0)}/TON</p>
+                        <p className="text-xs">Cotação: {formatBRL(parseFloat(cornPricePerTon) || 0)}/TON</p>
                       </div>
                       <p className="font-bold text-xs">
                         {grainTonsEquivalent.toFixed(2)} TON (~{grainBagsEquivalent.toFixed(0)} SC)
@@ -2232,11 +2518,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Resumo Financeiro / Condições */}
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">Condições de Pagamento</span>
+                      <span className="font-bold text-slate-700 uppercase text-[11px] tracking-wider">Condições de Pagamento</span>
                       <button 
                         type="button" 
                         onClick={() => setCurrentStep(2)} 
-                        className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                        className="text-xs text-slate-600 hover:text-slate-900 font-bold underline"
                       >
                         Alterar
                       </button>
@@ -2299,6 +2585,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           >
             <div className="space-y-5">
 
+            <div className="space-y-3">
+              <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-500">Linha do tempo</h4>
+              <OrderTimeline order={selectedOrderDetails} />
+            </div>
+
             {/* Recibos de Pagamento */}
             <div className="space-y-3">
               <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -2309,11 +2600,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               ) : (
                 <div className="space-y-2">
                   {selectedOrderDetails.receipts?.map(r => (
-                    <div key={r.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                    <div key={r.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:flex-wrap sm:justify-between sm:items-center gap-2">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-800">{r.id}</span>
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">
+                          <span className="text-[11px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">
                             {r.type}
                           </span>
                         </div>
@@ -2321,17 +2612,112 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           {r.date} • {r.paymentMethod} • Recebido por: {r.receivedBy || 'Financeiro'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-emerald-600 text-base">{formatBRL(r.amount)}</span>
                         <button
                           onClick={() => {
                             setViewingReceipt(r);
                           }}
-                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1"
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1"
                         >
                           <Printer size={12} /> Ver Recibo
                         </button>
+                        {onReviseReceipt && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReceiptId(r.id);
+                                setReceiptDraft({
+                                  amount: (Number(r.amount) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                                  date: r.date || '',
+                                  paymentMethod: r.paymentMethod || 'PIX',
+                                  accountId: r.accountId || accounts[0]?.id || '',
+                                  notes: r.notes || ''
+                                });
+                              }}
+                              className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1"
+                            >
+                              <Pencil size={12} /> Corrigir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const ok = await confirmDialog({
+                                  title: 'Excluir recibo?',
+                                  description: `O recibo de ${formatBRL(r.amount)} sai do pedido e do caixa, e o valor volta para o saldo devedor do cliente.`,
+                                  confirmLabel: 'Excluir recibo',
+                                  danger: true
+                                });
+                                if (ok) onReviseReceipt(selectedOrderDetails, r.id, null);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                              title="Excluir recibo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
+                      {editingReceiptId === r.id && (() => {
+                        const raw = String(receiptDraft.amount).trim();
+                        // "50.000,00" / "50000,5" → vírgula é centavo; "50.000" → milhar; "50.5" → decimal.
+                        const amount = raw.includes(',')
+                          ? Number(raw.replace(/\./g, '').replace(',', '.'))
+                          : /^\d{1,3}(\.\d{3})+$/.test(raw) ? Number(raw.replace(/\./g, '')) : Number(raw);
+                        const othersPaid = (selectedOrderDetails.receipts || []).filter(x => x.id !== r.id).reduce((sum, x) => sum + Number(x.amount || 0), 0);
+                        const maxAllowed = Math.max(0, Number(selectedOrderDetails.total || 0) - othersPaid);
+                        const invalid = !Number.isFinite(amount) || amount <= 0 ? 'Informe um valor maior que zero.'
+                          : amount > maxAllowed + 0.01 ? `Passa do saldo do pedido. Máximo: ${formatBRL(maxAllowed)}.`
+                          : !receiptDraft.date ? 'Informe a data.' : '';
+                        return (
+                          <div className="w-full sm:basis-full mt-2 p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Valor (R$)
+                                <input inputMode="decimal" value={receiptDraft.amount} onChange={e => setReceiptDraft(d => ({ ...d, amount: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm font-mono text-slate-800" placeholder="50000,00" />
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Data
+                                <input type="date" value={receiptDraft.date} onChange={e => setReceiptDraft(d => ({ ...d, date: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800" />
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Forma
+                                <select value={receiptDraft.paymentMethod} onChange={e => setReceiptDraft(d => ({ ...d, paymentMethod: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800">
+                                  {Array.from(new Set(['PIX', 'Dinheiro', 'Boleto', 'Transferência', 'Cartão', 'Cheque', receiptDraft.paymentMethod].filter(Boolean))).map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">Caixa
+                                <select value={receiptDraft.accountId} onChange={e => setReceiptDraft(d => ({ ...d, accountId: e.target.value }))} className="mt-1 w-full px-2.5 py-2 border border-slate-200 rounded-lg text-sm text-slate-800">
+                                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </label>
+                            </div>
+                            <p className="text-xs text-slate-500">Use vírgula para centavos. Ex.: 50 mil = <span className="font-mono">50000</span> ou <span className="font-mono">50.000,00</span>.</p>
+                            {invalid && receiptDraft.amount !== '' && <p className="text-xs font-bold text-rose-600">{invalid}</p>}
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setEditingReceiptId(null)} className="px-3 py-1.5 text-xs font-bold text-slate-600 rounded-lg hover:bg-slate-100">Cancelar</button>
+                              <button
+                                type="button"
+                                disabled={Boolean(invalid)}
+                                onClick={() => {
+                                  const account = accounts.find(a => a.id === receiptDraft.accountId);
+                                  onReviseReceipt?.(selectedOrderDetails, r.id, {
+                                    ...r,
+                                    amount: Math.round(amount * 100) / 100,
+                                    date: receiptDraft.date,
+                                    paymentMethod: receiptDraft.paymentMethod,
+                                    accountId: receiptDraft.accountId || r.accountId,
+                                    accountName: account?.name || r.accountName,
+                                    notes: receiptDraft.notes || r.notes
+                                  });
+                                  setEditingReceiptId(null);
+                                }}
+                                className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 rounded-lg"
+                              >
+                                Salvar correção
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -2340,11 +2726,11 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
 
             {/* Notas fiscais da venda */}
             <div className="space-y-3 pt-4 border-t border-slate-100">
-              <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
                 <FileCheck size={14} className="text-purple-600" /> Notas fiscais desta venda
               </h4>
               {listOrderNfes(selectedOrderDetails).length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Nenhuma NF-e emitida ainda. Use “NF avulsa” para faturar só parte do pedido.</p>
+                <p className="text-xs text-slate-500 italic">Nenhuma NF-e emitida ainda. Use “NF avulsa” para faturar só parte do pedido.</p>
               ) : (
                 <div className="space-y-2">
                   {listOrderNfes(selectedOrderDetails).map((nfe) => (
@@ -2354,12 +2740,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           <span className="font-black text-sm text-slate-800">
                             {nfe.nfeNumero ? `NF-e Nº ${nfe.nfeNumero}` : nfe.reference}
                           </span>
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                          <span className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-md ${
                             nfe.tipo === 'avulsa' ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-700'
                           }`}>
                             {nfe.tipo === 'avulsa' ? 'Avulsa / parcial' : nfe.tipo}
                           </span>
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-md">
+                          <span className="text-[11px] font-black uppercase px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-md">
                             {nfe.nfeStatus}
                           </span>
                         </div>
@@ -2400,15 +2786,15 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-slate-800">{w.plateNumber}</span>
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md">
+                          <span className="text-[11px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md">
                             Ticket {w.weighTicketNumber}
                           </span>
                           {w.nfeNumero ? (
-                            <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">
+                            <span className="text-[11px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md">
                               NF-e {w.nfeNumero}
                             </span>
                           ) : (
-                            <span className="text-[9px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md">
+                            <span className="text-xs text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded-md">
                               Sem NF-e
                             </span>
                           )}
@@ -2422,7 +2808,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                               href={w.nfeDanfeUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-0.5"
+                              className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-0.5"
                             >
                               <FileText size={11} /> Abrir DANFE
                             </a>
@@ -2431,7 +2817,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       </div>
                       <div className="text-right">
                         <span className="font-black text-blue-700 text-base">{w.quantityWithdrawn} TON</span>
-                        <p className="text-[9px] text-slate-400 font-bold">Saldo restante: {w.remainingBalanceQuantity} TON</p>
+                        <p className="text-xs text-slate-500 font-bold">Saldo restante: {w.remainingBalanceQuantity} TON</p>
                       </div>
                     </div>
                   ))}
@@ -2461,6 +2847,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderForPayment.customerId)}
           accounts={accounts}
           company={company}
+          currentUser={currentUser}
           onSavePayment={handleSavePayment}
           onClose={() => setOrderForPayment(null)}
         />
@@ -2473,6 +2860,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           customer={customers.find(c => c.id === orderForWithdrawal.customerId)}
           company={company}
           fiscalConfig={fiscalConfig}
+          transportadores={transportadores}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setOrderForWithdrawal(null)}
         />
@@ -2522,7 +2910,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 setOrderToViewDanfe(updatedOrder);
               }
             } catch (err) {
-              window.alert('A NF-e foi transmitida, mas o banco ainda não confirmou. Não limpe o navegador e toque em Reenviar agora.');
+              toast.push('A NF-e foi transmitida, mas o banco ainda não confirmou. Não limpe o navegador e toque em Reenviar agora.', 'danger');
             }
           }}
         />

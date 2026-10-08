@@ -215,7 +215,7 @@ export const NfImportModal: React.FC<Props> = ({
           <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#1B6B58]/30 rounded-xl py-7 cursor-pointer hover:border-[#0F5948] bg-[#F7F8F3]">
             {loading ? <Loader2 className="animate-spin text-[#0F5948]" /> : <FileUp className="text-[#0F5948]" />}
             <span className="text-sm font-semibold text-[#0F5948]">Enviar XML da NF-e</span>
-            <span className="text-[11px] text-slate-500">{fileName || 'Preferir .xml · PDF só se o XML não estiver disponível'}</span>
+            <span className="text-xs text-slate-500">{fileName || 'Preferir .xml · PDF só se o XML não estiver disponível'}</span>
             <input
               type="file"
               accept=".xml,.pdf,application/xml,application/pdf,text/xml"
@@ -270,11 +270,11 @@ export const NfImportModal: React.FC<Props> = ({
                         </td>
                         <td className="p-2">
                           <p className="font-medium text-slate-800">{row.productName}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">
+                          <p className="text-xs text-slate-500 font-mono">
                             {row.cProd ? `cProd ${row.cProd}` : ''}{row.ncm ? ` · NCM ${row.ncm}` : ''}
                           </p>
                           {row.mineral && (
-                            <p className="text-[10px] text-amber-800 mt-1">NCM de minério. Esta compra Santarém → fazenda segue como suprimento, não como calcário de venda.</p>
+                            <p className="text-xs text-amber-800 mt-1">NCM de minério. Esta compra Santarém → fazenda segue como suprimento, não como calcário de venda.</p>
                           )}
                         </td>
                         <td className="p-2 w-20">
@@ -314,7 +314,7 @@ export const NfImportModal: React.FC<Props> = ({
                               <option key={item.id} value={item.id}>{item.name}</option>
                             ))}
                           </select>
-                          <p className="text-[10px] text-slate-500 mt-1">{row.matchLabel}</p>
+                          <p className="text-xs text-slate-500 mt-1">{row.matchLabel}</p>
                         </td>
                       </tr>
                     ))}
@@ -324,7 +324,7 @@ export const NfImportModal: React.FC<Props> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Motorista *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Motorista *</label>
                   <input
                     value={driver}
                     onChange={(e) => setDriver(e.target.value)}
@@ -333,7 +333,7 @@ export const NfImportModal: React.FC<Props> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Placa *</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Placa *</label>
                   <input
                     value={plate}
                     onChange={(e) => setPlate(e.target.value.toUpperCase())}
@@ -342,7 +342,7 @@ export const NfImportModal: React.FC<Props> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Saída de Santarém</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block mb-1">Saída de Santarém</label>
                   <input
                     type="date"
                     value={dateSent}

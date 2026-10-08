@@ -1,6 +1,6 @@
 import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
-import { db, resolveCompanyKey } from './dataService';
+import { db, resolveCompanyKey, isDemoCompany } from './dataService';
 import { firebaseFunctions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
@@ -14,6 +14,24 @@ export { mapRemoteNfeStatus } from './nfeRemoteStatus';
  * Documentação: https://docs.notaas.com.br/docs/nfe/endpoints
  */
 export const NOTAAS_API_BASE_URL = 'https://platform.notaas.com.br/api/v1';
+
+/**
+ * Empresa real (matriz ou filial) só emite com emitente próprio preenchido.
+ * Filial nova nasce com esses campos vazios — sem isso a nota sairia com o
+ * CNPJ de exemplo do DEFAULT_FISCAL_CONFIG.
+ */
+export function emitenteConfigError(config: FiscalConfig, companyId?: string | null): string | null {
+  if (isDemoCompany(companyId || config.companyId)) return null;
+  const cnpj = String(config.cnpjEmitente || '').replace(/\D/g, '');
+  const demoCnpj = String(DEFAULT_FISCAL_CONFIG.cnpjEmitente || '').replace(/\D/g, '');
+  if (cnpj.length !== 14 || cnpj === demoCnpj) {
+    return 'CNPJ do emitente não configurado para esta empresa. Preencha CNPJ, inscrição estadual, endereço e a Project Key da NotaAs em Configurações Fiscais antes de emitir.';
+  }
+  if (!String(config.inscricaoEstadual || '').trim()) {
+    return 'Inscrição estadual do emitente não configurada para esta empresa (Configurações Fiscais).';
+  }
+  return null;
+}
 
 /**
  * Tipagens oficiais do payload NotaAs NF-e 55
@@ -119,6 +137,46 @@ export function nfeQVol(raw?: number | string | null): number {
   const n = Math.trunc(Number(raw));
   if (!Number.isFinite(n) || n < 1) return 1;
   return n;
+}
+
+/**
+ * Grupo transporta na NF-e:
+ * - CIF (0) e terceiros (2): CNPJ/CPF da transportadora contratada.
+ * - FOB (1) e transporte próprio destinatário (4): só motorista (CPF), padrão eFácil/SEFAZ PA.
+ * - CNPJ de transportadora em FOB costuma gerar rejeição na NotaAs.
+ */
+export function modFreteAllowsGrupoTransportador(mod: number, documentoDigits?: string): boolean {
+  const d = (documentoDigits || '').replace(/\D/g, '');
+  if (mod === 0 || mod === 2) return true;
+  if (mod === 1 || mod === 4) return d.length === 11;
+  return false;
+}
+
+/** FOB (1) e transporte próprio destinatário (4): motorista/placa sim, valor de frete não compõe a NF-e. */
+export function freteValorCompoeTotalNota(mod: number, valor?: number): boolean {
+  const v = Math.max(0, Number(valor) || 0);
+  if (v <= 0) return false;
+  return mod === 0 || mod === 2 || mod === 3;
+}
+
+type FreteMod = 0 | 1 | 2 | 3 | 4 | 9;
+
+/** modFrete explícito no pedido; senão FOB se houver motorista/placa; nunca confundir “sem valor” com mod 9. */
+export function resolveFreteModalidade(order: Pick<SaleOrder, 'frete' | 'shipping'>): FreteMod {
+  const raw = order.frete?.modalidade;
+  const doc = onlyDigits(order.frete?.transportadora?.documento);
+  const hasMotorista = doc.length === 11 || Boolean(order.frete?.veiculo?.placa?.trim());
+
+  if (raw != null && Number.isFinite(Number(raw))) {
+    const n = Number(raw);
+    if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4) return n as FreteMod;
+    if (n === 9 && hasMotorista) return 1;
+    if (n === 9) return 9;
+  }
+  if (hasMotorista) return 1;
+  const ship = Math.max(0, Number(order.shipping) || Number(order.frete?.valor) || 0);
+  if (ship > 0) return 0;
+  return 9;
 }
 
 /**
@@ -451,8 +509,10 @@ export const fiscalService = {
     }
 
     const docClean = onlyDigits(customer.document);
-    if (!docClean || (docClean.length !== 11 && docClean.length !== 14)) {
+    if (!docClean) {
       errors.push('CPF (11 dígitos) ou CNPJ (14 dígitos) do destinatário é obrigatório para emissão de NF-e.');
+    } else if (docClean.length !== 11 && docClean.length !== 14) {
+      errors.push(`Documento do destinatário "${customer.document}" tem ${docClean.length} dígitos — CPF precisa de 11 e CNPJ de 14. Corrija no cadastro do cliente.`);
     }
 
     if (!customer.name || customer.name.trim().length < 2) {
@@ -512,7 +572,7 @@ export const fiscalService = {
     });
 
     // Validação leve do frete (nunca bloqueia, só orienta)
-    const freteMod = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteMod = resolveFreteModalidade(order);
     const freteVal = Number(order.frete?.valor ?? order.shipping ?? 0) || 0;
     if (![0, 1, 2, 3, 4, 9].includes(freteMod)) {
       errors.push('Modalidade de frete inválida. Use 9 (sem frete), 0 (CIF), 1 (FOB), 2, 3 ou 4.');
@@ -522,6 +582,15 @@ export const fiscalService = {
     }
     if (freteMod !== 9 && freteVal > 0 && freteMod === 1) {
       warnings.push('Frete FOB: o valor do frete é por conta do destinatário — confira se deve compor o total da nota.');
+    }
+    const transpDocVal = onlyDigits(order.frete?.transportadora?.documento);
+    if (freteMod === 1 && transpDocVal.length === 14) {
+      warnings.push(
+        'FOB: informe o CPF do motorista no transportador (como no eFácil). CNPJ de transportadora nesta modalidade costuma ser rejeitado pela SEFAZ/NotaAs.'
+      );
+    }
+    if (freteMod === 1 && !transpDocVal && order.frete?.transportadora?.nome?.trim()) {
+      warnings.push('FOB: informe o CPF do motorista para ele constar no bloco transportador da NF-e (sem valor de frete).');
     }
 
     return {
@@ -641,15 +710,20 @@ export const fiscalService = {
       : (order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01');
 
     // ---- Frete / transporte (modFrete SEFAZ: 9 sem frete · 0 CIF remetente · 1 FOB destinatário · 2 terceiros · 3/4 próprio) ----
-    const freteModalidadeRaw = order.frete?.modalidade ?? (order.shipping && !semPagamento ? 0 : 9);
-    const freteModalidade = Number(freteModalidadeRaw) as 0 | 1 | 2 | 3 | 4 | 9;
+    const freteModalidade = resolveFreteModalidade(order);
     const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
-    const hasFreteCobrado = freteValor > 0 && !semPagamento && freteModalidade !== 9;
+    const hasFreteCobrado = freteValorCompoeTotalNota(freteModalidade, freteValor);
 
-    const transporte: NotaAsTransporte = { modalidadeFrete: semPagamento ? 9 : freteModalidade };
+    const transporte: NotaAsTransporte = { modalidadeFrete: freteModalidade };
     const transp = order.frete?.transportadora;
-    if (transp && (transp.documento || transp.nome || transp.rntrc)) {
+    const effectiveModFrete = freteModalidade;
+    const transpDocDigits = onlyDigits(transp?.documento);
+    if (
+      modFreteAllowsGrupoTransportador(effectiveModFrete, transpDocDigits) &&
+      transp &&
+      (transp.documento || transp.nome || transp.rntrc)
+    ) {
       transporte.transportadora = {
         ...(transp.documento ? { documento: onlyDigits(transp.documento) } : {}),
         ...(transp.nome?.trim() ? { nome: transp.nome.trim() } : {}),
@@ -684,7 +758,7 @@ export const fiscalService = {
 
     // Montar observações fiscais e complementares da nota
     const freteInfParts: string[] = [];
-    if (!semPagamento && freteModalidade !== 9) {
+    if (freteModalidade !== 9) {
       const modLabel = freteModalidade === 0 ? 'CIF' : freteModalidade === 1 ? 'FOB' : `modFrete ${freteModalidade}`;
       freteInfParts.push(
         hasFreteCobrado
@@ -816,6 +890,16 @@ export const fiscalService = {
     console.info('📄 [PAYLOAD COMPLETO EM JSON]:', JSON.stringify(payload, null, 2));
     console.groupEnd();
     console.groupEnd();
+
+    const emitenteError = emitenteConfigError(config, resolvedCompanyId);
+    if (emitenteError) {
+      return {
+        success: false,
+        nfeStatus: 'rejeitada',
+        nfeErro: emitenteError,
+        rawResponse: { invoiceRequestId, error: 'Emitente not configured' }
+      };
+    }
 
     if (!apiKey) {
       console.error(`❌ [EMISSÃO NF-e API] [${invoiceRequestId}] Chave de API não configurada!`);
@@ -1212,6 +1296,81 @@ export const fiscalService = {
   },
 
   /**
+   * Envia uma Carta de Correção Eletrônica (CC-e) para a SEFAZ.
+   * Exigência legal: Mínimo 15 e máximo 1000 caracteres.
+   * Não pode alterar valores de impostos, dados de destinatário/emitente ou datas.
+   */
+  async enviarCartaCorrecao(
+    chaveOuId: string,
+    correcao: string,
+    overrideConfig?: FiscalConfig
+  ): Promise<{ success: boolean; error?: string; protocolo?: string; dataEvento?: string; rawResponse?: any }> {
+    const texto = (correcao || '').trim();
+    if (texto.length < 15) {
+      return {
+        success: false,
+        error: 'A carta de correção deve ter no mínimo 15 caracteres (Exigência legal SEFAZ).'
+      };
+    }
+    if (texto.length > 1000) {
+      return {
+        success: false,
+        error: 'A carta de correção deve ter no máximo 1000 caracteres (Exigência legal SEFAZ).'
+      };
+    }
+
+    const config = overrideConfig || (await this.getConfig(overrideConfig?.companyId));
+    const apiKey = (config.apiKey || '').trim();
+
+    if (apiKey) {
+      try {
+        const proxied = await fiscalApiFetch('/api/nfe/correcao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoiceId: chaveOuId,
+            chaveOuId,
+            correcao: texto,
+            apiKey,
+            apiBaseUrl: config.apiBaseUrl || NOTAAS_API_BASE_URL,
+            provider: config.apiProvider || 'notaas',
+            companyId: config.companyId
+          })
+        });
+
+        if (proxied.ok && proxied.isJson) {
+          const resp = proxied.data || {};
+          const statusRetornado = (resp.status || resp.eventStatus || '').toLowerCase();
+          const rejeitada = statusRetornado.includes('rejeit') || resp.rejected || Boolean(resp.error && !resp.protocol);
+          if (rejeitada) {
+            return {
+              success: false,
+              error: resp.motivo || resp.message || resp.error || 'Carta de correção rejeitada pela SEFAZ.',
+              rawResponse: resp
+            };
+          }
+          return {
+            success: true,
+            protocolo: resp.protocolo || resp.protocol || resp.nfeProtocolo,
+            dataEvento: resp.dataEvento || resp.eventDate || new Date().toISOString(),
+            rawResponse: resp
+          };
+        }
+
+        return {
+          success: false,
+          error: proxied.data?.error || proxied.data?.message || proxied.data?.erro || 'Erro ao enviar carta de correção para a SEFAZ.',
+          rawResponse: proxied.data
+        };
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Erro de comunicação com o proxy fiscal' };
+      }
+    }
+
+    return { success: false, error: 'A emissão de Carta de Correção requer chave de API configurada.' };
+  },
+
+  /**
    * Consulta a NotaAs/SEFAZ e devolve o pedido com status, chave, protocolo e links reais.
    */
   async sincronizarPedidoComSefaz(order: SaleOrder, overrideConfig?: FiscalConfig): Promise<SaleOrder> {
@@ -1318,13 +1477,14 @@ export const fiscalService = {
    */
   gerarXml(order: SaleOrder, customer: Customer, config: FiscalConfig): string {
     const chave = order.nfeChave || this.generateMockChaveAcesso(config.cnpjEmitente, '15', order.nfeSerie || '1', order.nfeNumero || '1041');
-    const freteModXml = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9));
+    const freteModXml = resolveFreteModalidade(order);
     const freteValXml = freteModXml === 9 ? 0 : (Number(order.frete?.valor ?? order.shipping) || 0);
     const transpDoc = (order.frete?.transportadora?.documento || '').replace(/\D/g, '');
     const transpNome = order.frete?.transportadora?.nome || '';
-    const transpBloco = transpDoc || transpNome
-      ? `<transporta><CNPJ>${transpDoc}</CNPJ><xNome>${transpNome}</xNome></transporta>`
-      : '';
+    const transpBloco =
+      modFreteAllowsGrupoTransportador(freteModXml, transpDoc) && (transpDoc || transpNome)
+        ? `<transporta>${transpDoc.length === 11 ? `<CPF>${transpDoc}</CPF>` : `<CNPJ>${transpDoc}</CNPJ>`}<xNome>${transpNome}</xNome></transporta>`
+        : '';
     const vol = order.frete?.volumes;
     const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)
       ? `<vol><qVol>${nfeQVol(vol.quantidade)}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`

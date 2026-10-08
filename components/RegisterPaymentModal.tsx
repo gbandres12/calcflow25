@@ -9,6 +9,7 @@ interface RegisterPaymentModalProps {
   customer?: Customer;
   accounts: FinancialAccount[];
   company: Company;
+  currentUser?: { id: string; name?: string; email?: string } | null;
   onSavePayment: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
   onClose: () => void;
 }
@@ -18,6 +19,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   customer,
   accounts,
   company,
+  currentUser,
   onSavePayment,
   onClose
 }) => {
@@ -74,7 +76,10 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       totalOrderAmount: order.total,
       totalPaidSoFar: totalPaidSoFar + amountNum,
       remainingDebt: remainingDebtAfter,
-      notes: notes.trim()
+      notes: notes.trim(),
+      createdById: currentUser?.id,
+      createdByName: currentUser?.name || currentUser?.email,
+      createdAt: new Date().toISOString()
     };
 
     const updatedReceipts = [...(order.receipts || []), newReceipt];
@@ -116,22 +121,22 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
           {/* Card Resumo do Pedido */}
           <div className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl text-center">
             <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valor Total Venda</span>
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Valor Total Venda</span>
               <p className="text-sm font-black text-slate-800">{formatBRL(order.total)}</p>
             </div>
             <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Já Pago/Abatido</span>
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Já Pago/Abatido</span>
               <p className="text-sm font-black text-emerald-600">{formatBRL(totalPaidSoFar)}</p>
             </div>
             <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo Devedor Atual</span>
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Saldo Devedor Atual</span>
               <p className="text-sm font-black text-rose-600">{formatBRL(currentDebt)}</p>
             </div>
           </div>
 
           {/* Tipo de Transação */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Lançamento</label>
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Tipo de Lançamento</label>
             <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100 rounded-2xl">
               <button
                 type="button"
@@ -159,7 +164,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
 
           {/* Valor do Pagamento */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor do Recebimento (R$)</label>
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Valor do Recebimento (R$)</label>
             <input
               required
               type="number"
@@ -182,7 +187,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
           {/* Forma de Pagamento e Conta de Destino */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Forma de Pagamento</label>
               <select
                 value={paymentMethod}
                 onChange={e => setPaymentMethod(e.target.value)}
@@ -199,7 +204,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Conta Bancária / Caixa Destino</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Conta Bancária / Caixa Destino</label>
               <select
                 value={accountId}
                 onChange={e => setAccountId(e.target.value)}
@@ -216,7 +221,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data do Pagamento</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Data do Pagamento</label>
               <input
                 required
                 type="date"
@@ -227,7 +232,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recebido Por</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Recebido Por</label>
               <input
                 type="text"
                 value={receivedBy}
@@ -238,7 +243,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observações do Recibo (Opcional)</label>
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Observações do Recibo (Opcional)</label>
             <input
               type="text"
               value={notes}

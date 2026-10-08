@@ -42,14 +42,14 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
           </h3>
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Categoria</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Nome da Categoria</label>
               <input required type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-bold text-sm" placeholder="Ex: Aluguel de Galpão" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Fluxo</label>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Tipo de Fluxo</label>
               <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl">
-                <button type="button" onClick={() => setNewType('INFLOW')} className={`py-2 rounded-xl text-[10px] font-black uppercase transition-all ${newType === 'INFLOW' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Entrada</button>
-                <button type="button" onClick={() => setNewType('OUTFLOW')} className={`py-2 rounded-xl text-[10px] font-black uppercase transition-all ${newType === 'OUTFLOW' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>Saída</button>
+                <button type="button" onClick={() => setNewType('INFLOW')} className={`py-2 rounded-xl text-[11px] font-black uppercase transition-all ${newType === 'INFLOW' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Entrada</button>
+                <button type="button" onClick={() => setNewType('OUTFLOW')} className={`py-2 rounded-xl text-[11px] font-black uppercase transition-all ${newType === 'OUTFLOW' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>Saída</button>
               </div>
             </div>
             <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
@@ -67,7 +67,7 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
               <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-6 bg-emerald-50/30 border-b border-emerald-50 flex items-center gap-2">
                     <TrendingUp size={18} className="text-emerald-600" />
-                    <h4 className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Entradas (Receitas)</h4>
+                    <h4 className="text-[11px] font-black text-emerald-700 uppercase tracking-widest">Entradas (Receitas)</h4>
                  </div>
                  <div className="p-2 space-y-1">
                     {inflows.map(c => (
@@ -81,13 +81,13 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
                          </button>
                       </div>
                     ))}
-                    {inflows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-400 italic">Nenhuma categoria de entrada.</p>}
+                    {inflows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-500 italic">Nenhuma categoria de entrada.</p>}
                  </div>
               </div>
               <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-6 bg-rose-50/30 border-b border-rose-50 flex items-center gap-2">
                     <TrendingDown size={18} className="text-rose-600" />
-                    <h4 className="text-[10px] font-black text-rose-700 uppercase tracking-widest">Saídas (Despesas)</h4>
+                    <h4 className="text-[11px] font-black text-rose-700 uppercase tracking-widest">Saídas (Despesas)</h4>
                  </div>
                  <div className="p-2 space-y-1">
                     {outflows.map(c => (
@@ -101,7 +101,7 @@ const CategorySettings: React.FC<CategorySettingsProps> = ({ categories, onAddCa
                          </button>
                       </div>
                     ))}
-                    {outflows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-400 italic">Nenhuma categoria de saída.</p>}
+                    {outflows.length === 0 && <p className="p-8 text-center text-xs font-bold text-slate-500 italic">Nenhuma categoria de saída.</p>}
                  </div>
               </div>
            </div>

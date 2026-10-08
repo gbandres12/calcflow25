@@ -170,19 +170,19 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
           {/* Valor a Baixar */}
           <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
                 Valor Desta Baixa (R$) *
               </label>
               <button
                 type="button"
                 onClick={() => setPayAmountStr(remainingBalance.toString())}
-                className="text-[10px] font-bold text-amber-600 hover:underline uppercase"
+                className="text-[11px] font-bold text-amber-600 hover:underline uppercase"
               >
                 Quitar Tudo ({formatBRL(remainingBalance)})
               </button>
             </div>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">R$</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-500 text-sm">R$</span>
               <input
                 required
                 type="number"
@@ -199,7 +199,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
           {/* Data e Conta Financeira */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Data do Pagamento
               </label>
               <input
@@ -211,7 +211,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Conta Financeira
               </label>
               <select
@@ -229,7 +229,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
           {/* Meio de Pagamento (se não for abatimento) */}
           {!isDeduction && (
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Forma de Pagamento
               </label>
               <select
@@ -250,7 +250,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
 
           {/* Observações */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Observações / Motivo
             </label>
             <input

@@ -14,7 +14,7 @@ import {
   OUTFLOW_CATEGORIES,
   DEFAULT_FISCAL_CONFIG
 } from '../constants';
-import { User, UserRole } from '../types';
+import { User, UserRole, CompanyMembership } from '../types';
 import { getSupabase } from './supabaseClient';
 import { isDemoEmail, isLocalDevHost } from './authLogic';
 import {
@@ -22,6 +22,7 @@ import {
   hasSeedMeta,
   mapSupabaseRows,
   mergeRecordsById,
+  recordUpdatedAtMs,
   remainingPendingAfterConfirm,
   remainingPendingDeletes,
   reconcileVisibleRecords,
@@ -30,6 +31,10 @@ import {
   stripSeedDocs
 } from './persistSeed';
 import { pickMembershipCompanyId } from './membershipCompany';
+import { getFinanceAccountScope, isInFinanceScope } from './companyPermissions';
+import { decideEmptyCloudRead } from './cloudRead';
+import { triggerShadowComparison } from './repo/shadowComparison';
+import { tryReadFromErp, tryWriteToErp, tryDeleteFromErp } from './repo/erpRouter';
 
 // Cache local e fila de reenvio. A fonte da verdade é o Supabase.
 const storage = {
@@ -103,10 +108,30 @@ const removePendingDelete = (tableStorageKey: string, id: string) => {
   );
 };
 
-let lastPersistError: string | null = null;
+// Erro de sync por tabela+empresa. Antes era uma única variável global: duas
+// tabelas sincronizando ao mesmo tempo podiam apagar o erro uma da outra e
+// mostrar "tudo ok" no banner do App.tsx quando uma delas tinha, sim, falhado.
+const persistErrorsByKey = new Map<string, { message: string; at: number }>();
 
-const setPersistError = (message: string | null) => {
-  lastPersistError = message;
+const persistErrorKey = (tableName: string, companyId: string) => `${tableName}::${companyId}`;
+
+const setPersistError = (tableName: string, companyId: string, message: string | null) => {
+  const key = persistErrorKey(tableName, companyId);
+  if (message) {
+    persistErrorsByKey.set(key, { message, at: Date.now() });
+  } else {
+    persistErrorsByKey.delete(key);
+  }
+};
+
+const getLatestPersistError = (companyId: string): string | null => {
+  const suffix = `::${companyId}`;
+  let latest: { message: string; at: number } | null = null;
+  for (const [key, entry] of persistErrorsByKey) {
+    if (!key.endsWith(suffix)) continue;
+    if (!latest || entry.at > latest.at) latest = entry;
+  }
+  return latest?.message ?? null;
 };
 
 const composeVisibleRows = (
@@ -140,6 +165,8 @@ const DEMO_TABLE_DATA: Record<string, any[]> = {
   ]
 };
 
+// Coleções lógicas no JSONB public.app_records. Não dual-write nas tabelas
+// relacionais travadas (customers/products/orders/…) da migration 004.
 export const ALL_TABLES = [
   'customers',
   'sales_orders',
@@ -206,6 +233,60 @@ const createSupabaseRows = (tableName: string, companyId: string, records: any[]
     updated_at: new Date().toISOString()
   }));
 
+// Caixas liberados pro usuário logado nesta empresa (null = todos). A RLS já
+// filtra o que vem do banco; isto limpa o cache local do aparelho, que pode
+// ter lançamentos de outros caixas de um login anterior — sem isso eles
+// apareceriam na tela e o app tentaria reenviá-los.
+const FINANCE_SCOPED_TABLES = new Set(['transactions', 'financial_accounts']);
+const financeScopeCache = new Map<string, { at: number; scope: Promise<string[] | null> }>();
+
+const getFinanceScope = (compKey: string): Promise<string[] | null> => {
+  const hit = financeScopeCache.get(compKey);
+  if (hit && Date.now() - hit.at < 60_000) return hit.scope;
+  const scope = (async () => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return null;
+    const { data } = await supabase
+      .from('company_memberships')
+      .select('permissions')
+      .eq('company_id', compKey)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    return getFinanceAccountScope(data?.permissions);
+  })().catch(() => null);
+  financeScopeCache.set(compKey, { at: Date.now(), scope });
+  return scope;
+};
+
+export const waitForAuthUser = async (timeoutMs = 2500): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  try {
+    const first = await supabase.auth.getSession();
+    if (first.data.session?.user) return true;
+  } catch {
+    return false;
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    let subscription: { unsubscribe: () => void } | null = null;
+    const finish = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      try { subscription?.unsubscribe(); } catch {}
+      resolve(value);
+    };
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) finish(true);
+    });
+    subscription = data.subscription;
+    setTimeout(() => finish(false), timeoutMs);
+  });
+};
+
 const persistPendingUpserts = async (
   tableName: string,
   companyId: string,
@@ -217,7 +298,7 @@ const persistPendingUpserts = async (
   if (operational.length === 0) return;
 
   try {
-    await supabase.auth.getSession();
+    await waitForAuthUser(1500);
   } catch {}
 
   const { error } = await supabase
@@ -227,10 +308,10 @@ const persistPendingUpserts = async (
     });
 
   if (error) {
-    setPersistError(`Falha ao gravar ${tableName} no Supabase: ${error.message}`);
+    setPersistError(tableName, companyId, `Falha ao gravar ${tableName} no Supabase: ${error.message}`);
     throw new Error(error.message);
   }
-  setPersistError(null);
+  setPersistError(tableName, companyId, null);
 };
 
 const persistPendingDeletes = async (
@@ -242,7 +323,7 @@ const persistPendingDeletes = async (
   if (!supabase || ids.length === 0) return;
 
   try {
-    await supabase.auth.getSession();
+    await waitForAuthUser(1500);
   } catch {}
 
   for (const id of ids) {
@@ -253,7 +334,7 @@ const persistPendingDeletes = async (
       .eq('company_id', companyId)
       .eq('id', String(id));
     if (error) {
-      setPersistError(`Falha ao excluir ${tableName} no Supabase: ${error.message}`);
+      setPersistError(tableName, companyId, `Falha ao excluir ${tableName} no Supabase: ${error.message}`);
       throw new Error(error.message);
     }
   }
@@ -270,6 +351,26 @@ const writeSeedMeta = async (tableName: string, companyId: string) => {
   if (error) {
     console.warn(`[Supabase] Não foi possível marcar '${tableName}' como inicializada:`, error.message);
   }
+};
+
+// Pendências cuja versão no banco é mais nova (outro usuário salvou depois).
+// Reenviar essas cópias velhas desfazia o trabalho dos outros.
+const findStalePending = async (tableName: string, companyId: string, pending: any[]): Promise<any[]> => {
+  const supabase = getSupabase();
+  if (!supabase || pending.length === 0) return [];
+  const ids = pending.map((row) => String(row.id));
+  const { data, error } = await supabase
+    .from('app_records')
+    .select('id, data, updated_at')
+    .eq('table_name', tableName)
+    .eq('company_id', companyId)
+    .in('id', ids);
+  if (error || !Array.isArray(data)) return [];
+  const remoteById = new Map(mapSupabaseRows(data).map((row: any) => [String(row.id), row]));
+  return pending.filter((row) => {
+    const remote = remoteById.get(String(row.id));
+    return Boolean(remote) && recordUpdatedAtMs(remote) > recordUpdatedAtMs(row);
+  });
 };
 
 const snapshotPending = (storageKey: string) => ({
@@ -320,12 +421,37 @@ const parsePendingStorageKey = (fullKey: string): { tableName: string; companyId
   return { tableName, companyId };
 };
 
+// Empresas em que o usuário logado tem vínculo. Fila de outra empresa no
+// cache do aparelho (login anterior, demo) é sempre recusada pela RLS — não
+// entra no reenvio nem na contagem do aviso. null = ainda não consultado.
+let memberCompanyIds: Set<string> | null = null;
+
+const loadMemberCompanyIds = async (): Promise<Set<string> | null> => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return null;
+    const { data, error } = await supabase
+      .from('company_memberships')
+      .select('company_id')
+      .eq('user_id', auth.user.id);
+    if (error || !Array.isArray(data)) return null;
+    memberCompanyIds = new Set(data.map((row: any) => String(row.company_id)));
+    return memberCompanyIds;
+  } catch {
+    return null;
+  }
+};
+
 const countAllBrowserPending = (): number => {
   if (typeof localStorage === 'undefined') return 0;
   let total = 0;
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i) || '';
     if (!key.startsWith('calcarioflow_') || !key.includes('__pending_')) continue;
+    const parsed = parsePendingStorageKey(key);
+    if (parsed && memberCompanyIds && !memberCompanyIds.has(parsed.companyId)) continue;
     try {
       const value = JSON.parse(localStorage.getItem(key) || '[]');
       total += Array.isArray(value) ? value.length : 0;
@@ -365,6 +491,46 @@ export const resolveMembershipCompanyId = async (
   return fallback;
 };
 
+/**
+ * Toda empresa (matriz e/ou filial) onde o usuário logado tem vínculo, com o
+ * papel e a permissão por módulo dessa empresa específica. Alimenta o
+ * seletor de empresa no topo do app — sem RPC, company_memberships e
+ * companies já são RLS-scoped pra "só as minhas linhas".
+ */
+export const listMyMemberships = async (userId: string): Promise<CompanyMembership[]> => {
+  const supabase = getSupabase();
+  if (!supabase || !userId) return [];
+  try {
+    const { data: memberships, error } = await supabase
+      .from('company_memberships')
+      .select('company_id, role, permissions')
+      .eq('user_id', userId);
+    if (error || !Array.isArray(memberships) || memberships.length === 0) return [];
+
+    const companyIds = memberships.map((row: any) => row.company_id);
+    const { data: companies } = await supabase
+      .from('companies')
+      .select('id, name, parent_company_id')
+      .in('id', companyIds);
+    const companyById = new Map((companies || []).map((row: any) => [row.id, row]));
+
+    return memberships.map((row: any) => {
+      const company = companyById.get(row.company_id);
+      return {
+        companyId: row.company_id,
+        companyName: company?.name,
+        role: row.role,
+        permissions: row.permissions || {},
+        isBranch: Boolean(company?.parent_company_id),
+        parentCompanyId: company?.parent_company_id ?? null
+      };
+    });
+  } catch (err) {
+    console.warn('[Supabase] Falha ao listar empresas do usuário:', err);
+    return [];
+  }
+};
+
 // ========================================================
 // REPOSITÓRIO UNIFICADO: SUPABASE É A FONTE DA VERDADE
 // localStorage só guarda cache e fila de reenvio
@@ -380,69 +546,156 @@ export const db = {
     });
     return {
       pendingCount: Math.max(pendingCount, countAllBrowserPending()),
-      lastError: lastPersistError,
+      lastError: getLatestPersistError(compKey),
       cloudEnabled: Boolean(getSupabase())
     };
   },
 
   async flushPending(companyId?: string) {
     const compKey = resolveCompanyKey(companyId);
+    let lastError: unknown = null;
     for (const tableName of ALL_TABLES) {
       const storageKey = getStorageKey(tableName, compKey);
-      const pendingUpserts = getPendingUpserts(storageKey);
+      let pendingUpserts = getPendingUpserts(storageKey);
       const pendingDeletes = getPendingDeleteIds(storageKey);
-      if (pendingUpserts.length) {
-        await persistPendingUpserts(tableName, compKey, pendingUpserts);
-        confirmPendingUpserts(storageKey, pendingUpserts);
-      }
-      if (pendingDeletes.length) {
-        await persistPendingDeletes(tableName, compKey, pendingDeletes);
-        pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
+      try {
+        if (pendingUpserts.length) {
+          const stale = await findStalePending(tableName, compKey, pendingUpserts);
+          if (stale.length) {
+            console.warn(`[Supabase] ${stale.length} pendência(s) de '${tableName}' descartada(s): o banco tem versão mais nova.`);
+            confirmPendingUpserts(storageKey, stale);
+            const staleIds = new Set(stale.map((row) => String(row.id)));
+            pendingUpserts = pendingUpserts.filter((row) => !staleIds.has(String(row.id)));
+          }
+        }
+        if (pendingUpserts.length) {
+          await persistPendingUpserts(tableName, compKey, pendingUpserts);
+          confirmPendingUpserts(storageKey, pendingUpserts);
+        }
+        if (pendingDeletes.length) {
+          await persistPendingDeletes(tableName, compKey, pendingDeletes);
+          pendingDeletes.forEach((id) => removePendingDelete(storageKey, id));
+        }
+      } catch (err) {
+        lastError = err;
       }
     }
+    if (lastError) throw lastError;
   },
 
   async flushAllPending() {
     if (typeof localStorage === 'undefined') return;
-    const seen = new Set<string>();
+    const members = await loadMemberCompanyIds();
+    const companies = new Set<string>();
     for (let i = 0; i < localStorage.length; i += 1) {
-      const fullKey = localStorage.key(i) || '';
-      const parsed = parsePendingStorageKey(fullKey);
+      const parsed = parsePendingStorageKey(localStorage.key(i) || '');
       if (!parsed) continue;
-      const stamp = `${parsed.tableName}::${parsed.companyId}`;
-      if (seen.has(stamp)) continue;
-      seen.add(stamp);
-      await this.flushPending(parsed.companyId);
+      if (members && !members.has(parsed.companyId)) continue;
+      companies.add(parsed.companyId);
     }
+    // Uma empresa com falha não trava o reenvio das outras.
+    let lastError: unknown = null;
+    for (const companyId of companies) {
+      try {
+        await this.flushPending(companyId);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (lastError) throw lastError;
   },
 
   async getTable(tableName: string, companyId?: string): Promise<any[]> {
     const compKey = resolveCompanyKey(companyId);
     const storageKey = getStorageKey(tableName, compKey);
+
+    const erpDirect = await tryReadFromErp(tableName, compKey);
+    if (erpDirect !== null) {
+      let filtered = erpDirect;
+      if (!isDemoCompany(compKey) && FINANCE_SCOPED_TABLES.has(tableName)) {
+        const scope = await getFinanceScope(compKey);
+        if (scope) filtered = filtered.filter((row) => isInFinanceScope(tableName, row, scope));
+      }
+      storage.set(storageKey, filtered);
+      return filtered;
+    }
+
     const demo = isDemoCompany(compKey);
     const pendingAtReadStart = snapshotPending(storageKey);
+    const readStartedAt = Date.now();
 
     const supabase = getSupabase();
     if (supabase) {
       try {
+        let hasAuthUser = demo;
         if (!demo) {
-          try {
-            await supabase.auth.getSession();
-          } catch {}
+          hasAuthUser = await waitForAuthUser(2500);
         }
 
-        const { data, error } = await supabase
-          .from('app_records')
-          .select('id, data, updated_at')
-          .eq('table_name', tableName)
-          .eq('company_id', compKey);
+        const readRemote = () =>
+          supabase
+            .from('app_records')
+            .select('id, data, updated_at')
+            .eq('table_name', tableName)
+            .eq('company_id', compKey);
+
+        let { data, error } = await readRemote();
+        if (!demo && hasAuthUser && !error && Array.isArray(data) && data.length === 0) {
+          const retry = await readRemote();
+          if (!retry.error && Array.isArray(retry.data)) {
+            data = retry.data;
+            error = retry.error;
+          }
+        }
 
         if (!error && Array.isArray(data)) {
+          const decision = decideEmptyCloudRead({
+            isDemo: demo,
+            hasAuthUser,
+            remoteRowCount: data.length
+          });
+
+          if (decision === 'keep-local-unauthenticated') {
+            console.warn(`[Supabase] Sem sessão ao ler '${tableName}' (${compKey}). Não trato como pasta vazia.`);
+            const localOnly = stripSeedDocs(storage.get(storageKey) || []);
+            return composeVisibleRows(
+              localOnly,
+              pendingAtReadStart.upserts,
+              pendingAtReadStart.deletes,
+              localOnly
+            );
+          }
+
           const records = mapSupabaseRows(data);
           const initialized = hasSeedMeta(records) || data.length > 0;
           const cleanRecords = stripSeedDocs(records);
+          const remoteById = new Map(cleanRecords.map((row: any) => [String(row.id), row]));
+          // Registro que está no cache mas não no banco foi excluído por outro
+          // usuário — some daqui também. Antes ele era regravado, e exclusão
+          // feita em um aparelho "ressuscitava" pelo cache de outro. Só fica
+          // o que foi salvo neste aparelho durante esta leitura (a gravação
+          // pode ter confirmado depois do fetch sair).
+          const RECENT_WRITE_MS = 2 * 60 * 1000;
+          const cacheStillValid = (rows: any[]) => stripSeedDocs(rows).filter((row: any) =>
+            remoteById.has(String(row.id)) || recordUpdatedAtMs(row) >= readStartedAt - RECENT_WRITE_MS
+          );
+          // Pendência mais velha que a versão do banco: outro usuário salvou
+          // depois. O banco vence — reenviar a cópia velha desfazia o trabalho
+          // dele (ex.: abatimento sumindo).
+          const isStalePending = (row: any) => {
+            const remote = remoteById.get(String(row.id));
+            return Boolean(remote) && recordUpdatedAtMs(remote) > recordUpdatedAtMs(row);
+          };
+          const stale = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey)).filter(isStalePending);
+          if (stale.length) {
+            console.warn(`[Supabase] ${stale.length} pendência(s) de '${tableName}' descartada(s): o banco tem versão mais nova.`);
+            confirmPendingUpserts(storageKey, stale);
+            const staleIds = new Set(stale.map((row: any) => String(row.id)));
+            pendingAtReadStart.upserts = pendingAtReadStart.upserts.filter((row: any) => !staleIds.has(String(row.id)));
+          }
           const latestVisible = () => {
-            const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey));
+            const pendingUpserts = mergeRecordsById(pendingAtReadStart.upserts, getPendingUpserts(storageKey))
+              .filter((row: any) => !isStalePending(row));
             const pendingDeletes = Array.from(new Set([
               ...pendingAtReadStart.deletes,
               ...getPendingDeleteIds(storageKey)
@@ -454,38 +707,33 @@ export const db = {
                 cleanRecords,
                 pendingUpserts,
                 pendingDeletes,
-                stripSeedDocs(storage.get(storageKey) || [])
+                cacheStillValid(storage.get(storageKey) || [])
               )
             };
           };
           // Lê o cache de novo depois do fetch: um save no meio da espera não pode ser apagado.
           const visible = latestVisible();
-          const safeRecords = visible.rows;
+          let safeRecords = visible.rows;
+          if (!demo && FINANCE_SCOPED_TABLES.has(tableName)) {
+            const scope = await getFinanceScope(compKey);
+            if (scope) safeRecords = safeRecords.filter((row) => isInFinanceScope(tableName, row, scope));
+          }
 
           if (initialized || cleanRecords.length > 0 || safeRecords.length > 0) {
             storage.set(storageKey, safeRecords);
             if (!hasSeedMeta(records)) writeSeedMeta(tableName, compKey);
             retryUnconfirmed(tableName, compKey, storageKey, cleanRecords, visible.pendingUpserts, visible.pendingDeletes);
-            const remoteIds = new Set(cleanRecords.map((row) => String(row.id)));
-            const pendingIds = new Set(visible.pendingUpserts.map((row) => String(row.id)));
-            const missingRemote = safeRecords.filter((row) =>
-              row?.id && !remoteIds.has(String(row.id)) && !pendingIds.has(String(row.id))
-            );
-            if (missingRemote.length) {
-              this.upsert(tableName, compKey, missingRemote).catch((e) =>
-                console.warn('[Supabase] Reenvio do cache local para a nuvem falhou:', e)
-              );
-            }
+            triggerShadowComparison(tableName, compKey, safeRecords);
             return safeRecords;
           }
 
-          if (!demo) {
+          if (decision === 'empty-authenticated') {
             console.warn(`[Supabase] Tabela '${tableName}' vazia na nuvem para a empresa '${compKey}'. Preservando estado local.`);
             const localData = storage.get(storageKey) || [];
             return stripSeedDocs(localData);
           }
 
-          const initialData = demo ? (DEMO_TABLE_DATA[tableName] || []) : getCleanStarterData(tableName);
+          const initialData = DEMO_TABLE_DATA[tableName] || [];
           storage.set(storageKey, initialData);
           if (initialData.length > 0) {
             this.upsert(tableName, compKey, initialData).catch((e) =>
@@ -496,7 +744,7 @@ export const db = {
           return initialData;
         } else if (error) {
           console.warn(`[Supabase] Consulta '${tableName}' retornou aviso (código ${error.code}):`, error.message);
-          setPersistError(`Falha ao ler ${tableName} no Supabase: ${error.message}`);
+          setPersistError(tableName, compKey, `Falha ao ler ${tableName} no Supabase: ${error.message}`);
         }
       } catch (err) {
         console.warn(`[Supabase] Falha ao consultar '${tableName}':`, err);
@@ -542,11 +790,16 @@ export const db = {
     const updated = mergeRecordsById(current, operational);
     storage.set(storageKey, updated);
 
+    const wroteToErp = await tryWriteToErp(tableName, compKey, operational);
+    if (wroteToErp) {
+      return updated;
+    }
+
     const supabase = getSupabase();
     if (!supabase) {
       if (!isDemoCompany(compKey)) {
         const err = new Error('Supabase não está configurado. Cliente e venda não foram gravados no banco.');
-        setPersistError(err.message);
+        setPersistError(tableName, compKey, err.message);
         throw err;
       }
       return updated;
@@ -571,11 +824,17 @@ export const db = {
     removePendingUpsert(storageKey, id);
     queuePendingDelete(storageKey, id);
 
+    const deletedFromErp = await tryDeleteFromErp(tableName, compKey, id);
+    if (deletedFromErp) {
+      removePendingDelete(storageKey, id);
+      return;
+    }
+
     const supabase = getSupabase();
     if (!supabase) {
       if (!isDemoCompany(compKey)) {
         const err = new Error('Supabase não está configurado. A exclusão não foi gravada no banco.');
-        setPersistError(err.message);
+        setPersistError(tableName, compKey, err.message);
         throw err;
       }
       removePendingDelete(storageKey, id);
@@ -758,10 +1017,14 @@ export const userService = {
           if (authError.message.includes('Email not confirmed')) {
             throw new Error('E-mail ainda não confirmado no Supabase. Verifique sua caixa de entrada ou desative "Confirm email" no painel do Supabase Auth.');
           }
-          throw new Error(authError.message);
+          // Outra recusa do Supabase (bloqueio, limite de tentativas…) aparece como veio:
+          // o fallback abaixo trocava o motivo real por "Usuário não encontrado".
+          const authFailure = new Error(`Não foi possível entrar: ${authError.message}`);
+          (authFailure as any).fromSupabase = true;
+          throw authFailure;
         }
       } catch (err: any) {
-        if (err.message && (err.message.includes('E-mail') || err.message.includes('incorretos') || err.message.includes('confirmado'))) {
+        if (err?.fromSupabase || (err.message && (err.message.includes('E-mail') || err.message.includes('incorretos') || err.message.includes('confirmado')))) {
           throw err;
         }
         console.warn('[Supabase Auth] Tentando fallback para verificação de tabela:', err);
@@ -924,6 +1187,31 @@ export const userService = {
     };
   },
 
+  /** Grava a nova senha do usuário da sessão atual (link de recuperação ou "Alterar minha senha"). */
+  async updatePassword(newPassword: string): Promise<void> {
+    const supabase = getSupabase();
+    if (!supabase) {
+      throw new Error('Supabase não conectado. Configure as variáveis de ambiente.');
+    }
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      throw new Error('O link expirou ou a sessão acabou. Peça um novo link em "Esqueci minha senha".');
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) return;
+    const msg = error.message || '';
+    if (/different from the old password/i.test(msg)) {
+      throw new Error('A nova senha precisa ser diferente da atual.');
+    }
+    if (/weak|pwned|leaked|compromised|at least/i.test(msg)) {
+      throw new Error('Senha fraca ou já vazada na internet. Use outra, com letras e números.');
+    }
+    if (/reauthentication/i.test(msg)) {
+      throw new Error('Por segurança, saia e entre de novo antes de trocar a senha.');
+    }
+    throw new Error(`Não foi possível trocar a senha: ${msg}`);
+  },
+
   /**
    * Encerra a sessão ativa do usuário no Supabase Auth e localmente
    */
@@ -1022,11 +1310,54 @@ export const userService = {
   },
 
   async getAll(companyId?: string): Promise<User[]> {
+    const supabase = getSupabase();
+    if (supabase && typeof window !== 'undefined') {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (accessToken) {
+          const response = await fetch('/api/users/invite', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok && Array.isArray(payload?.users)) {
+            return payload.users as User[];
+          }
+        }
+      } catch (err) {
+        console.warn('[USUÁRIOS] Falha ao listar equipe no servidor, usando pasta local:', err);
+      }
+    }
     return await db.getTable('users', resolveCompanyKey(companyId));
   },
 
-  async saveUser(user: User) {
-    await db.upsert('users', resolveCompanyKey(user.companyId), user);
+  async saveUser(user: User & { newPassword?: string }) {
+    const { newPassword, ...userWithoutPassword } = user as any;
+    await db.upsert('users', resolveCompanyKey(user.companyId), userWithoutPassword);
+
+    // If a newPassword was set, call the invite API (which uses Admin SDK) to reset it
+    if (newPassword && newPassword.length >= 6) {
+      const supabase = getSupabase();
+      if (supabase && typeof window !== 'undefined') {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          if (accessToken) {
+            fetch('/api/users/invite', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`
+              },
+              body: JSON.stringify({ ...userWithoutPassword, password: newPassword })
+            }).catch((err) => console.warn('[USUÁRIOS] Falha ao redefinir senha:', err));
+          }
+        } catch (err) {
+          console.warn('[USUÁRIOS] Erro ao redefinir senha:', err);
+        }
+      }
+    }
+
     return user;
   },
 

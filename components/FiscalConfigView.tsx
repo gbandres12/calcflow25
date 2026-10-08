@@ -60,7 +60,7 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
   }
 
   const input = 'w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-purple-500';
-  const label = 'text-[10px] font-black uppercase tracking-widest text-slate-400';
+  const label = 'text-[11px] font-black uppercase tracking-widest text-slate-500';
 
   return (
     <div className="space-y-5">
@@ -70,7 +70,7 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
             <Sliders className="text-purple-600" size={24} />
             Configuração de Nota Fiscal
           </h1>
-          <p className="text-xs font-bold text-slate-400 mt-1">
+          <p className="text-xs font-bold text-slate-500 mt-1">
             Emitente, API NotaAs e regras da NF-e da empresa logada.
           </p>
         </div>

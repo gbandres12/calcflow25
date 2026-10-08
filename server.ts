@@ -4,15 +4,17 @@ import { createServer as createViteServer } from "vite";
 import emitirNfe from "./api/nfe/emitir";
 import consultarNfe from "./api/nfe/consultar";
 import cancelarNfe from "./api/nfe/cancelar";
+import correcaoNfe from "./api/nfe/correcao";
 import statusNfe from "./api/nfe/status";
 import danfeNfe from "./api/nfe/danfe";
 import xmlNfe from "./api/nfe/xml";
 import notaasWebhook from "./api/webhooks/notaas";
 import inviteUser from "./api/users/invite";
 import adminTenants from "./api/admin/tenants";
-import telegramPair from "./api/telegram/pair";
-import telegramWebhook from "./api/telegram/webhook";
-import telegramConferir from "./api/telegram/conferir";
+import adminCompanies from "./api/admin/companies";
+import telegramPair from "./api/_lib/telegram/pair";
+import telegramWebhook from "./api/_lib/telegram/webhook";
+import telegramConferir from "./api/_lib/telegram/conferir";
 
 async function startServer() {
   const app = express();
@@ -23,6 +25,7 @@ async function startServer() {
   app.post("/api/nfe/emitir", (req, res) => emitirNfe(req, res));
   app.post("/api/nfe/consultar", (req, res) => consultarNfe(req, res));
   app.post("/api/nfe/cancelar", (req, res) => cancelarNfe(req, res));
+  app.post("/api/nfe/correcao", (req, res) => correcaoNfe(req, res));
   app.post("/api/nfe/status", (req, res) => statusNfe(req, res));
   app.get("/api/nfe/status", (req, res) => statusNfe(req, res));
   app.post("/api/nfe/danfe", (req, res) => danfeNfe(req, res));
@@ -33,6 +36,8 @@ async function startServer() {
   app.delete("/api/users/invite", (req, res) => inviteUser(req, res));
   app.get("/api/admin/tenants", (req, res) => adminTenants(req, res));
   app.post("/api/admin/tenants", (req, res) => adminTenants(req, res));
+  app.get("/api/admin/companies", (req, res) => adminCompanies(req, res));
+  app.post("/api/admin/companies", (req, res) => adminCompanies(req, res));
   app.get("/api/telegram/pair", (req, res) => telegramPair(req, res));
   app.post("/api/telegram/pair", (req, res) => telegramPair(req, res));
   app.delete("/api/telegram/pair", (req, res) => telegramPair(req, res));

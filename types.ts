@@ -94,6 +94,40 @@ export interface Company {
   isActive: boolean;
 }
 
+/** read/write por módulo (mesma chave de ALL_TABLES em dataService.ts). */
+/** accounts só existe em financial_accounts: caixas liberados (sem = todos). */
+export type CompanyModulePermissions = Record<string, { read: boolean; write: boolean; accounts?: string[] }>;
+
+/** Vínculo do usuário logado com uma empresa (matriz ou filial). */
+export interface CompanyMembership {
+  companyId: string;
+  companyName?: string;
+  role: string;
+  permissions: CompanyModulePermissions;
+  isBranch: boolean;
+  parentCompanyId?: string | null;
+}
+
+/** Uma filial (ou a matriz) cadastrada em public.companies, com quem tem acesso. */
+export interface CompanyBranch {
+  id: string;
+  name: string;
+  parentCompanyId: string | null;
+  ownerUserId?: string | null;
+  isActive: boolean;
+  isBranch: boolean;
+  createdAt?: string;
+  members: CompanyBranchMember[];
+}
+
+export interface CompanyBranchMember {
+  userId: string;
+  role: string;
+  permissions: CompanyModulePermissions;
+  name?: string;
+  email?: string;
+}
+
 export interface FinancialAccount {
   id: string;
   name: string;
@@ -101,6 +135,7 @@ export interface FinancialAccount {
   bankName?: string;
   accountNumber?: string;
   initialBalance: number;
+  currentBalance?: number;
   companyId?: string;
 }
 
@@ -160,6 +195,8 @@ export interface InventoryItem {
   sujeitoIs?: boolean; // Sujeito ao Imposto Seletivo (IS)
   aliquotaIs?: number; // Alíquota Imposto Seletivo (%)
 }
+
+export type Product = InventoryItem;
 
 export interface Machine {
   id: string;
@@ -245,6 +282,11 @@ export interface PaymentReceipt {
   totalPaidSoFar?: number;
   remainingDebt?: number;
   notes?: string;
+  /** Usuário logado que lançou o recibo (auditoria). */
+  createdById?: string;
+  createdByName?: string;
+  /** Data/hora real do lançamento (ISO), independente da data do pagamento. */
+  createdAt?: string;
 }
 
 export interface OrderWithdrawal {
@@ -256,9 +298,15 @@ export interface OrderWithdrawal {
   driverCpf?: string;
   driverDocument?: string;
   plateNumber: string;
+  truckPlate?: string;
   truckModel?: string;
   truckType?: string;
+  /** Quantidade da nota (t) — é o que abate do saldo do pedido. */
   quantityWithdrawn: number;
+  /** Peso líquido da balança (t), guardado exatamente como pesado, pra conferência. */
+  netWeight?: number;
+  /** Quem transportou: nome livre (pode ser a própria CBA ou um terceiro não cadastrado). */
+  transporterName?: string;
   productName?: string;
   weighTicketNumber?: string;
   totalOrderQuantity?: number;
@@ -300,6 +348,8 @@ export interface TransactionPayment {
   notes?: string;
   isDiscountOrDeduction?: boolean;
   createdAt?: string;
+  /** Recibo que gerou este pagamento — trava contra aplicar o mesmo recibo duas vezes. */
+  receiptId?: string;
 }
 
 export interface Transaction {
@@ -368,6 +418,16 @@ export interface SaleOrderItem {
   garantiaNota?: string;
 }
 
+export interface CartaCorrecaoEvento {
+  sequencial: number;
+  correcao: string;
+  dataEvento: string;
+  protocolo?: string;
+  pdfUrl?: string;
+  xmlUrl?: string;
+  status?: string;
+}
+
 /** NF-e vinculada ao pedido (completa, avulsa/parcial, devolução ou transferência). */
 export interface SaleOrderLinkedNfe {
   id: string;
@@ -393,6 +453,8 @@ export interface SaleOrderLinkedNfe {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  destinatarioNome?: string;
+  cartasCorrecao?: CartaCorrecaoEvento[];
   createdAt: string;
   notes?: string;
 }
@@ -476,11 +538,14 @@ export interface SaleOrder {
   id: string;
   reference: string;
   customerId: string;
+  customerName?: string;
+  customerDocument?: string;
   sellerName: string;
   date: string;
   deliveryDate?: string;
   validUntil?: string;
   isAvulsa?: boolean;
+  /** Verdadeiro até alguém clicar em "Fazer lançamento financeiro" no pedido. */
   withoutFinance?: boolean;
   items: SaleOrderItem[];
   /** Notas emitidas a partir desta venda (pedido completo + avulsas parciais). */
@@ -529,6 +594,9 @@ export interface SaleOrder {
   nfeInfCpl?: string;
   nfePayload?: any;
   nfeRawResponse?: any;
+  cartasCorrecao?: CartaCorrecaoEvento[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface FiscalConfig {
@@ -625,6 +693,19 @@ export interface TransferShipment {
   nfeFileName?: string;
   supplierCnpj?: string;
   supplierName?: string;
+  /** Unidade (company_id) que enviou. */
+  originCompanyId?: string;
+  /** Unidade (company_id) que recebe e confere. Vazio = destino externo. */
+  destinationCompanyId?: string;
+  sentById?: string;
+  sentByName?: string;
+  sentAt?: string;
+  receivedById?: string;
+  receivedByName?: string;
+  receivedAt?: string;
+  stockIntegratedAt?: string;
+  /** Unidade onde a entrada de estoque foi lançada. */
+  stockIntegratedCompanyId?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers';
+export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';

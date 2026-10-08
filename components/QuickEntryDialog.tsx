@@ -140,7 +140,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-2xl font-black text-slate-800 tracking-tight">Lançamento Rápido</h3>
-                <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                <span className="bg-amber-100 text-amber-800 text-[11px] font-black uppercase px-2 py-0.5 rounded-full">
                   1-Click Express
                 </span>
               </div>
@@ -151,7 +151,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
           </div>
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
           >
             <X size={20} />
           </button>
@@ -193,7 +193,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
 
           {/* Descrição com IA */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Descrição do Lançamento *
             </label>
             <input
@@ -210,17 +210,17 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <div className="flex justify-between items-center">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
                   Valor R$ (Líquido) *
                 </label>
                 {isZeroValue && (
-                  <span className="text-[9px] font-black text-amber-600 uppercase bg-amber-50 px-1.5 py-0.5 rounded-md">
+                  <span className="text-[11px] font-black text-amber-600 uppercase bg-amber-50 px-1.5 py-0.5 rounded-md">
                     🟡 Pendente p/ Abatimento
                   </span>
                 )}
               </div>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400 text-sm">R$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-500 text-sm">R$</span>
                 <input
                   type="number"
                   step="0.01"
@@ -234,7 +234,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Data do Lançamento
               </label>
               <input
@@ -260,7 +260,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
           {/* Categoria com Assistente de IA */}
           <div className="space-y-1">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
                 Categoria Oficial *
               </label>
             </div>
@@ -287,7 +287,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
 
           {/* Centro de Custo com Assistente de IA */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Centro de Custo (Sugerido por IA ou Selecionável)
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -334,7 +334,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
           {/* Conta Financeira & Forma de Pagamento */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Conta Financeira Afetada *
               </label>
               <select
@@ -349,7 +349,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                 Meio de Pagamento
               </label>
               <select
@@ -370,7 +370,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
 
           {/* Cliente ou Fornecedor Vinculado */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Contato Vinculado (Cliente ou Fornecedor)
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -400,7 +400,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
 
           {/* Observações */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
               Observações Adicionais
             </label>
             <input

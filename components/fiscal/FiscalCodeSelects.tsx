@@ -2,7 +2,7 @@ import React from 'react';
 import { CFOP_OPTIONS, CST_ICMS_OPTIONS, CST_PIS_COFINS_OPTIONS, NfeOperacao, cfopsForOperacao } from './fiscalCatalog';
 
 const selectClass =
-  'w-full px-2 py-1.5 border rounded-lg text-[11px] font-bold outline-none bg-white';
+  'w-full px-2 py-1.5 border rounded-lg text-xs font-bold outline-none bg-white';
 
 export const CfopSelect: React.FC<{
   value: string;

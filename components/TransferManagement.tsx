@@ -329,7 +329,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
       {/* Cards de Métricas da Logística */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-1">
-          <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">Total de Remessas</span>
+          <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Total de Remessas</span>
           <div className="flex items-baseline justify-between">
             <span className="text-2xl font-black text-slate-800">{stats.total}</span>
             <span className="text-xs text-slate-500 font-bold">{stats.totalItemsTransferred} itens</span>
@@ -375,7 +375,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                   <span className="font-mono font-semibold text-[#0F5948]">{t.code}</span>
                   {t.vehiclePlate ? ` · ${t.vehiclePlate}` : ''}
                   {` · ${(t.items || []).length} volume(s)`}
-                  {t.nfeChave ? <span className="block sm:inline sm:ml-2 font-mono text-[10px] text-slate-500">NF {t.nfeNumero || t.nfeChave}</span> : null}
+                  {t.nfeChave ? <span className="block sm:inline sm:ml-2 font-mono text-xs text-slate-500">NF {t.nfeNumero || t.nfeChave}</span> : null}
                 </div>
                 <button
                   type="button"
@@ -441,7 +441,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
       <div className="space-y-4">
         {filteredTransfers.length === 0 ? (
           <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center space-y-3">
-            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-3xl flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 bg-slate-100 text-slate-500 rounded-3xl flex items-center justify-center mx-auto">
               <Truck size={32} />
             </div>
             <h3 className="text-base font-bold text-slate-700">Nenhuma relação de transferência encontrada</h3>
@@ -494,12 +494,12 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                       )}
 
                       {transfer.stockIntegrated && (
-                        <span className="text-[10px] font-bold bg-[#F7F8F3] text-[#0F5948] border border-[#D5E3DC] px-2 py-0.5 rounded-md">
+                        <span className="text-xs font-bold bg-[#F7F8F3] text-[#0F5948] border border-[#D5E3DC] px-2 py-0.5 rounded-md">
                           Estoque Matriz Atualizado
                         </span>
                       )}
                       {transfer.nfeChave && (
-                        <span className="text-[10px] font-mono bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md">
+                        <span className="text-xs font-mono bg-white text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md">
                           Chave {transfer.nfeChave}
                         </span>
                       )}
@@ -551,7 +551,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
                     <button
                       onClick={() => handleOpenEditModal(transfer)}
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors"
+                      className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-colors"
                       title="Editar Relação"
                     >
                       <Edit3 size={16} />
@@ -559,7 +559,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
                     <button
                       onClick={() => setDeleteCandidate(transfer)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition-colors"
+                      className="p-2 text-slate-500 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition-colors"
                       title="Excluir"
                     >
                       <Trash2 size={16} />
@@ -572,7 +572,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                   {/* Detalhes de Transporte e Expedição */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50/70 p-3.5 rounded-2xl border border-slate-100">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Data de Envio</span>
+                      <span className="text-[11px] uppercase font-bold text-slate-500 block">Data de Envio</span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
                         <Calendar size={13} className="text-slate-500" />
                         {new Date(transfer.dateSent).toLocaleDateString('pt-BR')}
@@ -580,14 +580,14 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Expedido em Santarém por</span>
+                      <span className="text-[11px] uppercase font-bold text-slate-500 block">Expedido em Santarém por</span>
                       <span className="font-bold text-slate-800 block mt-0.5 truncate">
                         {transfer.sentBy || 'Equipe de Compras'}
                       </span>
                     </div>
 
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Motorista / Transportador</span>
+                      <span className="text-[11px] uppercase font-bold text-slate-500 block">Motorista / Transportador</span>
                       <span className="font-bold text-slate-800 block mt-0.5 truncate">
                         {transfer.carrierOrDriver || 'Próprio / Retirada'}
                         {transfer.vehiclePlate ? ` (${transfer.vehiclePlate})` : ''}
@@ -595,7 +595,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Valor dos Suprimentos</span>
+                      <span className="text-[11px] uppercase font-bold text-slate-500 block">Valor dos Suprimentos</span>
                       <span className="font-bold text-slate-800 block mt-0.5">
                         {formatBRL(totalTransferCost)} ({itemCount} produtos)
                       </span>
@@ -604,13 +604,13 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
                   {/* Relação de Itens da Remessa */}
                   <div className="space-y-2">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
                       Relação de Produtos & Peças Enviados ({itemCount} itens / {totalQty} unidades):
                     </span>
 
                     <div className="overflow-x-auto border border-slate-200/80 rounded-2xl">
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200/80">
                           <tr>
                             <th className="px-4 py-2.5">Produto / Peça</th>
                             <th className="px-3 py-2.5">Categoria</th>
@@ -628,7 +628,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                                 {item.productName}
                               </td>
                               <td className="px-3 py-2.5">
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-700">
                                   {item.category || 'Peças'}
                                 </span>
                               </td>
@@ -641,7 +641,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                                     {item.quantityReceived ?? item.quantitySent} {item.unit}
                                   </span>
                                 ) : (
-                                  <span className="text-slate-400 italic">Em trânsito</span>
+                                  <span className="text-slate-500 italic">Em trânsito</span>
                                 )}
                               </td>
                               <td className="px-3 py-2.5 text-slate-600">
@@ -649,11 +649,11 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                                   <div>
                                     <span className="font-semibold text-slate-800">{item.supplier || 'Fornecedor Local'}</span>
                                     {item.nfCompraNumber && (
-                                      <span className="text-slate-400 block text-[10px]">{item.nfCompraNumber}</span>
+                                      <span className="text-slate-500 block text-xs">{item.nfCompraNumber}</span>
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-slate-400">—</span>
+                                  <span className="text-slate-500">—</span>
                                 )}
                               </td>
                               <td className="px-3 py-2.5 text-right font-mono text-slate-700">
@@ -661,11 +661,11 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                               </td>
                               <td className="px-4 py-2.5 text-center">
                                 {item.conferido ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                                     <CheckCircle2 size={12} /> OK
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
                                     Pendente
                                   </span>
                                 )}
@@ -681,7 +681,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                   {(isDelivered || isDivergent) && (
                     <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                       <div className="space-y-1">
-                        <span className="text-[10px] uppercase font-black tracking-wider text-emerald-700 flex items-center gap-1">
+                        <span className="text-[11px] uppercase font-black tracking-wider text-emerald-700 flex items-center gap-1">
                           <ShieldCheck size={14} /> Recebido e Conferido na Fazenda Matriz
                         </span>
                         <p className="font-bold text-slate-800">
@@ -698,7 +698,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
 
                       {/* Visualizador de Assinatura */}
                       <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Assinatura do Recebedor</span>
+                        <span className="text-[11px] uppercase font-bold text-slate-500 block mb-1">Assinatura do Recebedor</span>
                         {transfer.receiverSignature?.startsWith('data:image') ? (
                           <div className="bg-white p-1 rounded-xl border border-emerald-300 shadow-sm inline-block">
                             <img 
@@ -708,7 +708,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                             />
                           </div>
                         ) : (
-                          <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-300 font-mono text-[11px] font-bold text-emerald-800 shadow-sm inline-flex items-center gap-1.5">
+                          <div className="bg-white px-3 py-1.5 rounded-xl border border-emerald-300 font-mono text-xs font-bold text-emerald-800 shadow-sm inline-flex items-center gap-1.5">
                             <CheckCircle2 size={13} /> Assinado Digitalmente
                           </div>
                         )}
@@ -773,7 +773,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
               {/* Dados Gerais da Remessa */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Código do Romaneio *
                   </label>
                   <input
@@ -787,7 +787,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Data de Expedição / Saída *
                   </label>
                   <input
@@ -800,7 +800,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Responsável pelo Envio em Santarém *
                   </label>
                   <input
@@ -814,7 +814,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Origem do Envio
                   </label>
                   <input
@@ -827,7 +827,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Destino
                   </label>
                   <input
@@ -840,7 +840,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Motorista / Transportador
                   </label>
                   <input
@@ -853,7 +853,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Placa / Veículo
                   </label>
                   <input
@@ -866,7 +866,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                     Observações de Transporte
                   </label>
                   <input
@@ -906,7 +906,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                 <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div className="sm:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Puxar do Almoxarifado Existente (Opcional)
                       </label>
                       <select
@@ -924,7 +924,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Nome / Descrição do Produto ou Peça *
                       </label>
                       <input
@@ -937,7 +937,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Categoria
                       </label>
                       <select
@@ -955,7 +955,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Quantidade *
                       </label>
                       <div className="flex gap-1.5">
@@ -978,7 +978,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Custo Unit. (R$)
                       </label>
                       <input
@@ -993,7 +993,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         NF de Compra Santarém
                       </label>
                       <input
@@ -1006,7 +1006,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                     </div>
 
                     <div className="sm:col-span-3">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
                         Fornecedor Local em Santarém
                       </label>
                       <input
@@ -1038,13 +1038,13 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                   </span>
 
                   {formItems.length === 0 ? (
-                    <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs font-medium">
+                    <div className="p-6 text-center text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs font-medium">
                       Nenhum item adicionado ainda. Preencha os dados acima e clique em "Incluir na Relação".
                     </div>
                   ) : (
                     <div className="border border-slate-200 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
                           <tr>
                             <th className="px-4 py-2">Produto</th>
                             <th className="px-3 py-2">Categoria</th>
@@ -1074,7 +1074,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveFormItem(item.id)}
-                                  className="text-slate-400 hover:text-rose-600 p-1"
+                                  className="text-slate-500 hover:text-rose-600 p-1"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -1365,7 +1365,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
             <div>
               <h3 className="text-base font-black tracking-tight flex items-center gap-2">
                 Conferência e Recebimento na Fazenda Matriz
-                <span className="text-[10px] bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full font-bold uppercase">
+                <span className="text-[11px] bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full font-bold uppercase">
                   {transfer.code}
                 </span>
               </h3>
@@ -1388,24 +1388,24 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
           {/* Dados da Remessa */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Origem</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">Origem</span>
               <span className="font-bold text-slate-800">{transfer.originLocation}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Destino</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">Destino</span>
               <span className="font-bold text-emerald-800">{transfer.destinationLocation}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Data Envio</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">Data Envio</span>
               <span className="font-bold text-slate-800">{new Date(transfer.dateSent).toLocaleDateString('pt-BR')}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Motorista / Placa</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">Motorista / Placa</span>
               <span className="font-bold text-slate-800">{transfer.carrierOrDriver || '—'} {transfer.vehiclePlate ? `(${transfer.vehiclePlate})` : ''}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Chave da NF</span>
-              <span className="font-mono text-[10px] text-slate-800 break-all">{transfer.nfeChave || '—'}</span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase block">Chave da NF</span>
+              <span className="font-mono text-xs text-slate-800 break-all">{transfer.nfeChave || '—'}</span>
             </div>
           </div>
 
@@ -1426,7 +1426,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
                     divergenceNotes: ''
                   })));
                 }}
-                className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 px-3 py-1 rounded-xl transition-all"
+                className="text-xs text-emerald-700 hover:text-emerald-800 font-bold bg-emerald-50 hover:bg-emerald-100 px-3 py-1 rounded-xl transition-all"
               >
                 ✓ Marcar 100% Conferido e Sem Faltas
               </button>
@@ -1434,7 +1434,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
 
             <div className="border border-slate-200 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
                   <tr>
                     <th className="px-4 py-2.5">Item Enviado</th>
                     <th className="px-3 py-2.5 text-center">Qtde Enviada</th>
@@ -1451,7 +1451,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
                       <tr key={item.id} className={isMismatch ? 'bg-amber-50/60' : 'hover:bg-slate-50/50'}>
                         <td className="px-4 py-3">
                           <span className="font-bold text-slate-800 block">{item.productName}</span>
-                          <span className="text-[10px] text-slate-500">{item.category} {item.supplier ? `· ${item.supplier}` : ''}</span>
+                          <span className="text-xs text-slate-500">{item.category} {item.supplier ? `· ${item.supplier}` : ''}</span>
                         </td>
                         <td className="px-3 py-3 text-center font-bold text-slate-700">
                           {item.quantitySent} {item.unit}
@@ -1470,18 +1470,18 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
                                   : 'border-slate-200 bg-slate-50 text-slate-800 focus:ring-emerald-500'
                               }`}
                             />
-                            <span className="text-[10px] font-bold text-slate-500">{item.unit}</span>
+                            <span className="text-xs font-bold text-slate-500">{item.unit}</span>
                           </div>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold">
                             <input
                               type="checkbox"
                               checked={item.conferido ?? true}
                               onChange={e => handleUpdateItem(item.id, 'conferido', e.target.checked)}
                               className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
                             />
-                            <span className={item.conferido ? 'text-emerald-700' : 'text-slate-400'}>
+                            <span className={item.conferido ? 'text-emerald-700' : 'text-slate-500'}>
                               {item.conferido ? 'Conferido' : 'Pendente'}
                             </span>
                           </label>
@@ -1506,7 +1506,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
           {/* DADOS DO RECEBEDOR NA FAZENDA */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-200 pt-4">
             <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                 Nome de Quem Fez a Conferência na Fazenda *
               </label>
               <input
@@ -1520,7 +1520,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
             </div>
 
             <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                 Função / Cargo na Fazenda
               </label>
               <input
@@ -1533,7 +1533,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
                 Parecer Geral da Conferência
               </label>
               <input
@@ -1554,14 +1554,14 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
                   <PenTool size={15} className="text-indigo-600" />
                   Assinatura do Recebedor na Tela (Celular, Tablet ou Mouse)
                 </label>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   Assine com o dedo ou mouse para validar legalmente a conferência dos materiais.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={clearSignature}
-                className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-xl transition-colors"
+                className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-xl transition-colors"
               >
                 <RotateCcw size={13} /> Limpar
               </button>
@@ -1583,7 +1583,7 @@ const ConferenceAndSignatureModal: React.FC<ConferenceAndSignatureModalProps> = 
               />
             </div>
             {!hasDrawn && (
-              <p className="text-[10px] text-slate-400 italic text-center">
+              <p className="text-xs text-slate-500 italic text-center">
                 * Se preferir não desenhar, uma assinatura eletrônica com carimbo de data e hora do usuário logado será gerada automaticamente.
               </p>
             )}

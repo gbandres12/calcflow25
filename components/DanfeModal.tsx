@@ -4,9 +4,11 @@ import { fiscalService } from '../services/fiscalService';
 import { commitLinkedNfeSync, overlayLinkedNfeDocument, overlayNfeFields, findLinkedNfe } from '../services/saleNfe';
 import { buildNfeDraftPdf, draftPdfFileName } from '../services/domain/nfeDraftPdf';
 import {
-  Printer, Download, AlertTriangle, Ban, RefreshCw, FileX, Copy
+  Printer, Download, AlertTriangle, Ban, RefreshCw, FileX, Copy, FileEdit
 } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
+import NfeRejectionHint from './NfeRejectionHint';
+import { CartaCorrecaoModal } from './fiscal/CartaCorrecaoModal';
 
 interface DanfeModalProps {
   order: SaleOrder;
@@ -51,6 +53,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
   const [cancelJustificativa, setCancelJustificativa] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [showCceModal, setShowCceModal] = useState(false);
   const blobRef = useRef<string | null>(null);
   const isDraft = (current.nfeStatus || invoiceView.nfeStatus) === 'rascunho';
 
@@ -255,12 +258,12 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       subtitle={
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
+            <span className={`text-[11px] font-black uppercase px-2 py-0.5 rounded-full ${statusClass}`}>
               {STATUS_LABEL[status] || status}
             </span>
             <span>NF-e Nº <b>{current.nfeNumero || config.proxNumeroNFe || '—'}</b> · Série <b>{current.nfeSerie || config.serieNFe || '—'}</b></span>
           </div>
-          <p className="font-mono text-[10px] truncate">
+          <p className="font-mono text-xs truncate">
             {isDraft
               ? 'Prévia interna · SEM VALOR FISCAL · sem chave de acesso'
               : (current.nfeChave || 'Chave ainda não retornada pela SEFAZ')}
@@ -317,6 +320,16 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           {status === 'autorizada' && (
             <button
               type="button"
+              onClick={() => setShowCceModal(true)}
+              className="min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-purple-700 border border-purple-200 bg-purple-50 hover:bg-purple-100 rounded-xl text-xs font-bold transition-colors"
+              title="Emitir Carta de Correção Eletrônica (CC-e) para esta nota"
+            >
+              <FileEdit size={14} /> CC-e
+            </button>
+          )}
+          {status === 'autorizada' && (
+            <button
+              type="button"
               onClick={() => setIsCanceling(!isCanceling)}
               className="min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-600 border border-rose-200 bg-rose-50 rounded-xl text-xs font-bold"
             >
@@ -358,6 +371,7 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
       {status === 'rejeitada' && current.nfeErro && (
         <div className="px-4 py-3 bg-rose-50 border-b border-rose-100 text-sm text-rose-800 font-bold">
           Rejeição SEFAZ: {current.nfeErro}
+          <NfeRejectionHint message={current.nfeErro} className="mt-2 font-normal" />
         </div>
       )}
 
@@ -377,6 +391,20 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
           </div>
         )}
       </div>
+
+      {showCceModal && (
+        <CartaCorrecaoModal
+          order={order}
+          linkedNfeId={linkedNfeId}
+          config={config}
+          onClose={() => setShowCceModal(false)}
+          onSuccess={(updatedOrder) => {
+            onOrderUpdated(updatedOrder);
+            setCurrent(updatedOrder);
+            setShowCceModal(false);
+          }}
+        />
+      )}
     </FlowSheet>
   );
 };

@@ -262,7 +262,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
           </div>
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
           >
             <X size={20} />
           </button>
@@ -339,7 +339,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
               {/* Descrição */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Descrição do Lançamento *
                 </label>
                 <input
@@ -355,7 +355,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
               {/* Valores: Original, Desconto e Líquido */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Valor Bruto (R$) *
                   </label>
                   <input
@@ -372,13 +372,13 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
                       Desconto ({discountType === 'percentage' ? '%' : 'R$'})
                     </label>
                     <button
                       type="button"
                       onClick={() => setDiscountType(discountType === 'fixed' ? 'percentage' : 'fixed')}
-                      className="text-[9px] font-black text-purple-600 uppercase underline"
+                      className="text-[11px] font-black text-purple-600 uppercase underline"
                     >
                       Mudar p/ {discountType === 'fixed' ? '%' : 'R$'}
                     </button>
@@ -394,7 +394,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Valor Líquido Final
                   </label>
                   <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-2xl text-indigo-950 font-black text-sm">
@@ -405,7 +405,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
               {/* Categoria com IA */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Categoria Oficial *
                 </label>
                 <select
@@ -431,7 +431,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
               {/* Centro de Custo com IA */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Centro de Custo
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -482,7 +482,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
               {/* Status e Valor Pago */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Status do Lançamento
                   </label>
                   <select
@@ -498,7 +498,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Valor Já Pago / Baixado (R$)
                   </label>
                   <input
@@ -515,7 +515,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
               {/* Datas de Competência, Vencimento e Pagamento */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Data Emissão
                   </label>
                   <input
@@ -527,7 +527,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Data Vencimento
                   </label>
                   <input
@@ -539,7 +539,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Data Efetiva Pagto
                   </label>
                   <input
@@ -554,7 +554,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
               {/* Conta Bancária e Meio */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Conta Financeira *
                   </label>
                   <select
@@ -569,7 +569,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                     Forma de Pagamento
                   </label>
                   <select
@@ -590,7 +590,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
               {/* Contato Vinculado */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Cliente / Fornecedor Vinculado
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -620,7 +620,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
 
               {/* Observações */}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">
                   Observações / Histórico
                 </label>
                 <textarea
@@ -654,7 +654,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
               </h4>
               <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase">
+                  <thead className="bg-slate-50 text-[11px] font-black text-slate-500 uppercase">
                     <tr>
                       <th className="p-3">Data</th>
                       <th className="p-3">Meio</th>

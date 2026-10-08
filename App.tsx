@@ -23,7 +23,7 @@ import TransfersPage from './components/TransfersPage';
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck, Search } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -48,18 +48,27 @@ import {
   Company,
   TransferShipment,
   Transportador,
-  UserRole
+  UserRole,
+  CompanyMembership
 } from './types';
-import { 
+import {
   INITIAL_COST_CENTERS,
   COMPANY_INFO
 } from './constants';
-import { financeService, userService, inventoryService, orderService, db, isDemoCompany } from './services/dataService';
+import { financeService, userService, inventoryService, orderService, db, isDemoCompany, waitForAuthUser, listMyMemberships } from './services/dataService';
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
-import { toPublicUser, isDemoEmail } from './services/authLogic';
+import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
+import CompanyBranches from './components/CompanyBranches';
+import SetNewPassword from './components/SetNewPassword';
+import Loadings from './components/Loadings';
+import CommandPalette from './components/CommandPalette';
+import { isViewAllowed } from './services/viewAccess';
+import { useToast } from './components/ui/Toast';
+import { useConfirm } from './components/ui/ConfirmDialog';
+import { getSupabase, initialAuthRedirect } from './services/supabaseClient';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -84,6 +93,8 @@ const App: React.FC = () => {
       } catch {}
     }
   };
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [syncing, setSyncing] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
@@ -91,6 +102,35 @@ const App: React.FC = () => {
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showDbModal, setShowDbModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Link "Esqueci minha senha" do e-mail: antes, ele só logava a pessoa sem
+  // nunca pedir a senha nova. Agora prende a tela até ela definir uma.
+  const [passwordRecovery, setPasswordRecovery] = useState(initialAuthRedirect.type === 'recovery');
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Ctrl+K / Cmd+K abre a busca de qualquer tela.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const authLinkError = initialAuthRedirect.error
+    ? 'O link do e-mail expirou ou já foi usado. Peça um novo em "Esqueci minha senha".'
+    : undefined;
+
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   
   // App State
   const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
@@ -116,8 +156,17 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // ID isolado da empresa / tenant SaaS atual
-  const activeCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
+  // ID isolado da empresa / tenant SaaS atual — a empresa "de login" continua
+  // sendo a mesma de sempre; selectedCompanyId só existe quando o usuário
+  // troca pra outra empresa (matriz/filial) no seletor do topo.
+  const defaultCompanyId = currentUser?.companyId || (currentUser?.email === 'admin@calcarioflow.com.br' ? 'matriz-demo' : (currentUser ? `comp-${currentUser.id}` : 'matriz-demo'));
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<CompanyMembership[]>([]);
+  const [companySwitcherOpen, setCompanySwitcherOpen] = useState(false);
+  const activeCompanyId = (selectedCompanyId && memberships.some((m) => m.companyId === selectedCompanyId))
+    ? selectedCompanyId
+    : defaultCompanyId;
+  const activeMembership = memberships.find((m) => m.companyId === activeCompanyId) || null;
 
   const verifyCurrentUserPassword = async (password: string) => {
     if (!currentUser?.email || !password) return false;
@@ -157,19 +206,31 @@ const App: React.FC = () => {
     return one(record);
   };
 
-  const persistCloud = (tableName: string, record: any, options?: { required?: boolean }) => {
+  // onResult é opcional e não muda o tipo de retorno (continua Promise<void>,
+  // então quem já chama `persistCloud(...)` sem aguardar não muda em nada).
+  // Serve pra quem precisa saber se a gravação realmente confirmou no Supabase
+  // (ex: finalizeSale) sem depender de exceção — o catch abaixo nunca rejeita
+  // a menos que options.required seja passado.
+  const persistCloud = (
+    tableName: string,
+    record: any,
+    options?: { required?: boolean; onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
     dataEpochRef.current += 1;
     return db.upsert(tableName, activeCompanyId, stampUpdatedAt(record))
       .then(() => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
         setPersistError(state.lastError);
+        options?.onResult?.({ ok: true });
       })
       .catch((err) => {
         const state = db.getSyncState(activeCompanyId);
         setPendingSyncCount(state.pendingCount);
-        setPersistError(err?.message || `Não foi possível gravar ${tableName} no Supabase.`);
+        const message = err?.message || `Não foi possível gravar ${tableName} no Supabase.`;
+        setPersistError(message);
         console.warn('[PERSISTÊNCIA] Gravação no banco falhou; o registro ficou na fila local para reenvio:', tableName, err);
+        options?.onResult?.({ ok: false, error: message });
         if (options?.required) throw err;
       });
   };
@@ -205,6 +266,22 @@ const App: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // Empresas (matriz + filiais delegadas) do usuário logado, pro seletor do
+  // topo. Roda por usuário, não por activeCompanyId — senão trocar de
+  // empresa recarregaria a própria lista de empresas.
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setMemberships([]);
+      setSelectedCompanyId(null);
+      return;
+    }
+    let cancelled = false;
+    listMyMemberships(currentUser.id).then((rows) => {
+      if (!cancelled) setMemberships(rows);
+    });
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
   // Carregamento de dados unificado com auto-seed
   useEffect(() => {
     if (!currentUser) return;
@@ -239,19 +316,11 @@ const App: React.FC = () => {
       const epoch = dataEpochRef.current;
       setSyncing(true);
       try {
-        const supabase = getSupabase();
-        if (supabase) {
-          try {
-            await supabase.auth.getSession();
-          } catch {}
+        if (!isDemoCompany(activeCompanyId)) {
+          await waitForAuthUser(2500);
         }
 
-        const [
-          savedTxs, savedInv, savedCust, 
-          savedOrders, savedMachines, savedStore, 
-          savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers, savedTransportadores
-        ] = await Promise.all([
+        const fetchAll = () => Promise.all([
           financeService.getTransactions(activeCompanyId),
           inventoryService.getInventory(activeCompanyId),
           db.getTable('customers', activeCompanyId),
@@ -267,6 +336,19 @@ const App: React.FC = () => {
           db.getTable('transfers', activeCompanyId),
           db.getTable('transportadores', activeCompanyId)
         ]);
+
+        let bundle = await fetchAll();
+        if (!isDemoCompany(activeCompanyId) && Array.isArray(bundle[3]) && bundle[3].length === 0) {
+          await waitForAuthUser(1500);
+          bundle = await fetchAll();
+        }
+
+        const [
+          savedTxs, savedInv, savedCust, 
+          savedOrders, savedMachines, savedStore, 
+          savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
+          savedCategories, savedUsers, savedTransfers, savedTransportadores
+        ] = bundle;
 
         if (epoch !== dataEpochRef.current) return;
 
@@ -485,7 +567,10 @@ const App: React.FC = () => {
   };
 
   // Transações Financeiras
-  const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
+  const handleAddTransaction = (
+    newTx: Omit<Transaction, 'id'>,
+    options?: { onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
     const id = newId('tx');
     const tx: Transaction = {
       ...newTx,
@@ -494,16 +579,43 @@ const App: React.FC = () => {
       payments: (newTx.payments || []).map(payment => ({ ...payment, transactionId: id }))
     };
     setTransactions(prev => [tx, ...prev]);
-    persistCloud('transactions', tx);
+    return persistCloud('transactions', tx, options);
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
+    // Valor recebido que veio de recibo de pedido só muda pelo pedido: mexer
+    // aqui deixava o caixa diferente do saldo devedor do cliente.
+    const original = transactions.find(t => t.id === updatedTx.id);
+    const fromReceipt = Boolean(original?.orderId) && (
+      Boolean(original?.receiptId) || (original?.payments || []).some(p => p.receiptId)
+    );
+    if (original && fromReceipt) {
+      const receiptSum = (tx: Transaction) => (tx.payments || [])
+        .filter(p => p.receiptId)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const changedMoney =
+        Math.abs(Number(original.paidAmount || 0) - Number(updatedTx.paidAmount || 0)) > 0.01 ||
+        Math.abs(receiptSum(original) - receiptSum(updatedTx)) > 0.01 ||
+        (Boolean(original.receiptId) && original.status === TransactionStatus.CONFIRMADO &&
+          Math.abs(Number(original.amount || 0) - Number(updatedTx.amount || 0)) > 0.01);
+      if (changedMoney) {
+        const ref = orders.find(o => o.id === original.orderId)?.reference || 'do pedido';
+        toast.push(`Este valor veio de um recibo do ${ref}. Corrija em Vendas → pedido → Histórico → Corrigir recibo, para o pedido e o caixa mudarem juntos.`, 'danger');
+        return;
+      }
+    }
     const tagged = { ...updatedTx, companyId: updatedTx.companyId || activeCompanyId };
     setTransactions(prev => prev.map(t => t.id === tagged.id ? tagged : t));
     persistCloud('transactions', tagged);
   };
 
   const handleDeleteTransaction = (id: string) => {
+    const original = transactions.find(t => t.id === id);
+    if (original?.orderId && (original.receiptId || (original.payments || []).some(p => p.receiptId))) {
+      const ref = orders.find(o => o.id === original.orderId)?.reference || 'do pedido';
+      toast.push(`Este lançamento tem recibo do ${ref}. Exclua o recibo pelo pedido (Vendas → Histórico) para o saldo do cliente voltar certo.`, 'danger');
+      return;
+    }
     setTransactions(prev => prev.filter(t => t.id !== id));
     persistDelete('transactions', id);
   };
@@ -576,15 +688,21 @@ const App: React.FC = () => {
   };
 
   // Estoque
-  const processStockChange = (productId: string, quantity: number) => {
+  const processStockChange = (
+    productId: string,
+    quantity: number,
+    options?: { onResult?: (result: { ok: boolean; error?: string }) => void }
+  ): Promise<void> => {
+    let pending: Promise<void> = Promise.resolve();
     setInventory(prev => {
-      const newList = prev.map(item => 
+      const newList = prev.map(item =>
         (item.id === productId) ? { ...item, quantity: Math.max(0, item.quantity + quantity) } : item
       );
       const updatedItem = newList.find(i => i.id === productId);
-      if (updatedItem) persistCloud('inventory', updatedItem);
+      if (updatedItem) pending = persistCloud('inventory', updatedItem, options);
       return newList;
     });
+    return pending;
   };
 
   const handleAddInventoryItem = (item: Omit<InventoryItem, 'id'> & { id?: string }) => {
@@ -626,14 +744,15 @@ const App: React.FC = () => {
     return publicUser;
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
+  const handleUpdateUser = (updatedUser: User & { newPassword?: string }) => {
+    const { newPassword, ...rest } = updatedUser as any;
     const tagged = {
-      ...updatedUser,
-      email: (updatedUser.email || '').trim().toLowerCase(),
-      companyId: updatedUser.companyId || activeCompanyId
+      ...rest,
+      email: (rest.email || '').trim().toLowerCase(),
+      companyId: rest.companyId || activeCompanyId
     };
     setUsers(prev => prev.map(u => u.id === tagged.id ? toPublicUser(tagged) : u));
-    userService.saveUser(tagged);
+    userService.saveUser({ ...tagged, ...(newPassword ? { newPassword } : {}) });
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -665,18 +784,53 @@ const App: React.FC = () => {
       return exists ? prev.map(o => o.id === newOrder.id ? newOrder : o) : [...prev, newOrder];
     });
     persistCloud('sales_orders', newOrder);
-    if (!newOrder.withoutFinance && newOrder.status === OrderStatus.FINALIZED) {
+    if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
-      (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      if (!newOrder.withoutFinance) {
+        (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
+      }
     }
   };
 
-  const finalizeSale = (order: SaleOrder, payments: SalePayment[]) => {
-    if (order.withoutFinance) return;
-    (Array.isArray(order.items) ? order.items : []).forEach(item => {
-      if (!item?.productId) return;
-      processStockChange(String(item.productId), -(Number(item.quantity) || 0));
+  // Baixa de estoque acontece sempre que o pedido entra em "Venda Confirmada"
+  // — o produto saiu do pátio, existe ou não lançamento financeiro. Quem
+  // chama isso já garantiu que é a primeira vez que o pedido finaliza (ver
+  // finalizeSale), então não precisa reaplicar em reenvios/retiradas depois.
+  const applyOrderStock = (order: SaleOrder) => {
+    const failures: string[] = [];
+    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) failures.push(label);
+    };
+    const stockWrites = (Array.isArray(order.items) ? order.items : [])
+      .filter((item) => item?.productId)
+      .map((item) =>
+        processStockChange(String(item.productId), -(Number(item.quantity) || 0), {
+          onResult: noteFailure(`estoque de ${item.productId}`)
+        })
+      );
+    Promise.all(stockWrites).then(() => {
+      if (failures.length > 0) {
+        setPersistError(
+          `A baixa de estoque da venda #${order.reference} ficou salva neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
+          'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
+        );
+      }
     });
+  };
+
+  // Cria as parcelas, os lançamentos financeiros e atualiza o saldo do
+  // cliente. Só roda quando o pedido pede lançamento financeiro (checkbox
+  // "Fazer lançamento financeiro" marcada) — ou quando alguém clica nesse
+  // botão depois, num pedido que nasceu sem isso (ver handlePostOrderFinance).
+  // Todas as gravações disparam juntas, sem esperar uma pela outra — só
+  // esperamos elas confirmarem (ou não) antes de decidir a mensagem do
+  // banner, que agora aponta exatamente o que ficou pendente.
+  const postSaleFinance = async (order: SaleOrder, payments: SalePayment[]) => {
+    const failures: string[] = [];
+    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) failures.push(label);
+    };
+
     const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
     const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
     const financialSchedule: SalePayment[] = [
@@ -691,14 +845,15 @@ const App: React.FC = () => {
         paidAmount: 0,
         date: order.date,
         status: TransactionStatus.PENDENTE,
-        accountId: accounts[0]?.id || 'acc-1',
+        // A receber não pertence a caixa nenhum: o caixa só é escolhido no recebimento.
+        accountId: '',
         description: 'Saldo em aberto da venda'
       }] : [])
     ];
 
-    financialSchedule.forEach(payment => {
-      const accId = payment.accountId || accounts[0]?.id || 'acc-1';
-      handleAddTransaction({
+    const transactionWrites = financialSchedule.map((payment, index) => {
+      const accId = payment.accountId || '';
+      return handleAddTransaction({
         accountId: accId,
         costCenterId: 'cc4',
         date: payment.date,
@@ -711,8 +866,10 @@ const App: React.FC = () => {
         customerId: order.customerId,
         orderId: order.id,
         payments: []
-      });
+      }, { onResult: noteFailure(`parcela ${index + 1}/${financialSchedule.length}`) });
     });
+
+    let customerWrite: Promise<void> = Promise.resolve();
     setCustomers(prev => {
       const updatedList = prev
         .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
@@ -723,27 +880,73 @@ const App: React.FC = () => {
               totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
               status: 'Ativo' as const
             };
-            persistCloud('customers', updatedCustomer);
+            customerWrite = persistCloud('customers', updatedCustomer, { onResult: noteFailure('saldo do cliente') });
             return updatedCustomer;
           }
           return c;
         });
       return updatedList;
     });
-    const finalizedOrder = { ...order, payments: financialSchedule, status: OrderStatus.FINALIZED, companyId: order.companyId || activeCompanyId };
+    const finalizedOrder = {
+      ...order,
+      payments: financialSchedule,
+      status: OrderStatus.FINALIZED,
+      withoutFinance: false,
+      companyId: order.companyId || activeCompanyId
+    };
     setOrders(prev => {
       const exists = prev.some(o => o.id === order.id);
       return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
     });
-    persistCloud('sales_orders', finalizedOrder);
+    const orderWrite = persistCloud('sales_orders', finalizedOrder, { onResult: noteFailure('o próprio pedido') });
+
+    await Promise.all([...transactionWrites, customerWrite, orderWrite]);
+
+    if (failures.length > 0) {
+      setPersistError(
+        `O lançamento financeiro da venda #${order.reference} ficou salvo neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
+        'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
+      );
+    }
+  };
+
+  // Orquestra a primeira finalização de uma venda: sempre baixa o estoque
+  // (o produto saiu, independente de lançar no financeiro ou não); só cria
+  // parcelas/transações quando o pedido não pediu pra ficar "sem financeiro".
+  // Quem chama isso decide se é de fato a primeira vez que o pedido finaliza
+  // (ver os pontos que chamam finalizeSale em handleAddOrder/handleUpdateOrder)
+  // — chamar de novo depois (retirada parcial, edição) não deve reaplicar.
+  const finalizeSale = async (order: SaleOrder, payments: SalePayment[]) => {
+    applyOrderStock(order);
+    if (!order.withoutFinance) {
+      await postSaleFinance(order, payments);
+    }
+  };
+
+  // Ação explícita do botão "Fazer lançamento financeiro" num pedido que
+  // nasceu sem isso. Não toca em estoque — o produto já saiu na finalização.
+  const handlePostOrderFinance = (order: SaleOrder) => {
+    const alreadyPosted = transactions.some((t) => t.orderId === order.id);
+    if (alreadyPosted || !order.withoutFinance) return;
+    postSaleFinance(order, order.payments || []);
   };
 
   const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
     setTransactions(prev => {
-      const orderTxs = prev.filter(t => t.orderId === (receipt.orderId || order.id) && t.type === TransactionType.SALE);
-      const alreadyReceipt = orderTxs.some(t => t.receiptId === receipt.id);
-      if (alreadyReceipt) return prev;
+      // Trava de duplicidade: o recibo pode já ter entrado em qualquer
+      // lançamento, mesmo que depois outro recibo tenha sobrescrito o
+      // receiptId dele. Checa cada pagamento (e o texto dos antigos, que
+      // ainda não guardavam o receiptId).
+      const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
+      const alreadyApplied = prev.some(t =>
+        t.receiptId === receipt.id ||
+        (t.payments || []).some(p =>
+          p.receiptId === receipt.id ||
+          (!p.receiptId && t.orderId === (receipt.orderId || order.id) && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01)
+        )
+      );
+      if (alreadyApplied) return prev;
 
       let remainingReceipt = Number(receipt.amount || 0);
       const updatedTransactions = prev.map(transaction => {
@@ -767,13 +970,16 @@ const App: React.FC = () => {
           payments: [
             ...(transaction.payments || []),
             {
-              id: newId('pmt'),
+              // id fixo por recibo+lançamento: se o updater rodar de novo, a
+              // gravação repete o mesmo registro em vez de criar outro.
+              id: `pmt-${receipt.id}-${transaction.id}`,
               transactionId: transaction.id,
               amount: appliedAmount,
               paymentDate: receipt.date,
               accountId: accId,
               paymentMethod: receipt.paymentMethod || 'PIX',
-              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
+              receiptId: receipt.id
             }
           ]
         };
@@ -784,7 +990,7 @@ const App: React.FC = () => {
       if (remainingReceipt <= 0.01) return updatedTransactions;
 
       const tx: Transaction = {
-        id: newId('tx'),
+        id: `tx-rcpt-${receipt.id}`,
         accountId: accId,
         costCenterId: 'cc4',
         date: receipt.date,
@@ -801,13 +1007,14 @@ const App: React.FC = () => {
         notes: receipt.notes,
         companyId: activeCompanyId,
         payments: [{
-          id: newId('pmt'),
+          id: `pmt-${receipt.id}`,
           transactionId: '',
           amount: remainingReceipt,
           paymentDate: receipt.date,
           accountId: accId,
           paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
+          receiptId: receipt.id
         }]
       };
       tx.payments![0].transactionId = tx.id;
@@ -820,12 +1027,141 @@ const App: React.FC = () => {
     applyReceiptToFinance(receipt, updatedOrder);
   };
 
+  // Tira do financeiro tudo que um recibo lançou: a parcela dele dentro do
+  // lançamento da venda (volta o saldo em aberto) ou o lançamento avulso que
+  // ele criou (é apagado). Função pura: quem chama grava uma vez só —
+  // gravar de dentro do setState duplicava lançamento quando o React
+  // reexecuta o updater.
+  const stripReceiptFinance = (list: Transaction[], receipt: PaymentReceipt, orderId: string) => {
+    const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
+    const belongs = (tx: Transaction, p: { receiptId?: string; notes?: string; amount: number }) =>
+      p.receiptId === receipt.id ||
+      (!p.receiptId && tx.orderId === orderId && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01);
+    const next: Transaction[] = [];
+    const deleted: string[] = [];
+    const changed: Transaction[] = [];
+    list.forEach(tx => {
+      const payments = tx.payments || [];
+      const removed = payments.filter(p => belongs(tx, p));
+      if (removed.length === 0 && tx.receiptId !== receipt.id) { next.push(tx); return; }
+      const kept = payments.filter(p => !belongs(tx, p));
+      const removedAmount = removed.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      // Avulso criado só por este recibo (nasce CONFIRMADO em applyReceiptToFinance):
+      // some junto. O lançamento da venda quitado pelo recibo só perde a parcela.
+      if (tx.receiptId === receipt.id && kept.length === 0 && tx.status === TransactionStatus.CONFIRMADO) {
+        deleted.push(tx.id);
+        return;
+      }
+      const paidAmount = Math.max(0, Number(tx.paidAmount || 0) - removedAmount);
+      const amount = Number(tx.amount || 0);
+      const updated: Transaction = {
+        ...tx,
+        payments: kept,
+        paidAmount,
+        status: amount > 0 && paidAmount >= amount - 0.01
+          ? TransactionStatus.PAGO
+          : paidAmount > 0.01 ? TransactionStatus.PARCIAL : TransactionStatus.PENDENTE,
+        receiptId: tx.receiptId === receipt.id ? kept[kept.length - 1]?.receiptId : tx.receiptId,
+        paymentDate: tx.receiptId === receipt.id ? kept[kept.length - 1]?.paymentDate : tx.paymentDate
+      };
+      changed.push(updated);
+      next.push(updated);
+    });
+    return { next, deleted, changed };
+  };
+
+  // Lança um recibo no caixa (mesma regra de applyReceiptToFinance), sem efeito colateral.
+  const placeReceiptFinance = (list: Transaction[], receipt: PaymentReceipt, orderId: string) => {
+    const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
+    const changed: Transaction[] = [];
+    let remaining = Number(receipt.amount || 0);
+    const next = list.map(tx => {
+      if (tx.orderId !== orderId || tx.type !== TransactionType.SALE || remaining <= 0.01) return tx;
+      if (tx.status === TransactionStatus.CONFIRMADO && tx.receiptId) return tx; // avulso de outro recibo
+      const outstanding = Math.max(0, Number(tx.amount || 0) - Number(tx.paidAmount || 0));
+      if (outstanding <= 0.01) return tx;
+      const applied = Math.min(outstanding, remaining);
+      remaining -= applied;
+      const paidAmount = Number(tx.paidAmount || 0) + applied;
+      const updated: Transaction = {
+        ...tx,
+        paidAmount,
+        status: paidAmount >= Number(tx.amount || 0) - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
+        receiptId: receipt.id,
+        paymentDate: receipt.date,
+        paymentMethod: receipt.paymentMethod || tx.paymentMethod,
+        payments: [...(tx.payments || []), {
+          id: receipt.id ? `pmt-${receipt.id}-${tx.id}` : newId('pmt'), transactionId: tx.id, amount: applied, paymentDate: receipt.date,
+          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+        }]
+      };
+      changed.push(updated);
+      return updated;
+    });
+    if (remaining > 0.01) {
+      const id = newId('tx');
+      const tx: Transaction = {
+        id, accountId: accId, costCenterId: 'cc4', date: receipt.date,
+        type: TransactionType.SALE, status: TransactionStatus.CONFIRMADO,
+        description: `${receipt.description} - ${receipt.customerName}`,
+        category: 'Venda Calcário Moído Granel',
+        amount: remaining, paidAmount: remaining,
+        customerId: receipt.customerId, orderId, receiptId: receipt.id,
+        paymentMethod: receipt.paymentMethod, notes: receipt.notes, companyId: activeCompanyId,
+        payments: [{
+          id: receipt.id ? `pmt-${receipt.id}-${id}` : newId('pmt'), transactionId: id, amount: remaining, paymentDate: receipt.date,
+          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+        }]
+      };
+      changed.push(tx);
+      return { next: [tx, ...next], changed };
+    }
+    return { next, changed };
+  };
+
+  // Corrige (next = recibo novo) ou exclui (next = null) um recibo do pedido.
+  // Pedido e caixa mudam juntos: tira o lançamento antigo e lança o novo,
+  // calculando tudo uma vez e gravando cada lançamento uma única vez.
+  const handleReviseReceipt = (order: SaleOrder, receiptId: string, next: PaymentReceipt | null) => {
+    const current = (order.receipts || []).find(r => r.id === receiptId);
+    if (!current) return;
+    const receipts = next
+      ? (order.receipts || []).map(r => (r.id === receiptId ? { ...next, id: receiptId } : r))
+      : (order.receipts || []).filter(r => r.id !== receiptId);
+    let paidSoFar = 0;
+    const total = Number(order.total || 0);
+    const recalculated = receipts.map(r => {
+      paidSoFar += Number(r.amount || 0);
+      return { ...r, totalOrderAmount: total, totalPaidSoFar: paidSoFar, remainingDebt: Math.max(0, total - paidSoFar) };
+    });
+    const updatedOrder: SaleOrder = { ...order, receipts: recalculated };
+
+    const stripped = stripReceiptFinance(transactions, current, order.id);
+    let finalList = stripped.next;
+    const toSave = new Map<string, Transaction>(stripped.changed.map(t => [t.id, t]));
+    const revised = recalculated.find(r => r.id === receiptId);
+    if (revised && !order.withoutFinance) {
+      const placed = placeReceiptFinance(finalList, revised, order.id);
+      finalList = placed.next;
+      placed.changed.forEach(t => toSave.set(t.id, t));
+    }
+
+    setTransactions(finalList);
+    stripped.deleted.forEach(id => persistDelete('transactions', id));
+    toSave.forEach(tx => persistCloud('transactions', tx));
+    setOrders(prev => prev.map(o => (o.id === order.id ? updatedOrder : o)));
+    persistCloud('sales_orders', { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId });
+    toast.push(next ? 'Recibo corrigido. O caixa foi ajustado junto.' : 'Recibo excluído. O valor voltou para o saldo devedor.', 'success');
+  };
+
   const handleDeleteOrder = (orderId: string) => {
     const order = orders.find(item => item.id === orderId);
     if (!order) return;
 
     if (hasAuthorizedFiscalDocument(order)) {
-      window.alert('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.');
+      toast.push('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de excluir a venda.', 'danger');
       return;
     }
 
@@ -839,6 +1175,58 @@ const App: React.FC = () => {
     }
     setOrders(prev => prev.filter(o => o.id !== orderId));
     persistDelete('sales_orders', orderId);
+  };
+
+  const handleCancelOrder = (orderId: string, reason?: string) => {
+    const order = orders.find(item => item.id === orderId);
+    if (!order) return;
+
+    if (hasAuthorizedFiscalDocument(order)) {
+      toast.push('Esta venda possui NF-e autorizada. Cancele o documento fiscal antes de inabilitar o pedido.', 'danger');
+      return;
+    }
+
+    if (order.status === OrderStatus.FINALIZED) {
+      // Devolve o estoque das mercadorias
+      order.items.forEach(item => processStockChange(item.productId, item.quantity));
+      // Cancela/remove transações financeiras vinculadas
+      const linkedTransactions = transactions.filter(transaction => transaction.orderId === orderId);
+      setTransactions(prev => prev.filter(transaction => transaction.orderId !== orderId));
+      linkedTransactions.forEach(transaction => {
+        persistDelete('transactions', transaction.id);
+      });
+    }
+
+    const cancelledOrder: SaleOrder = {
+      ...order,
+      status: OrderStatus.CANCELLED,
+      notes: order.notes
+        ? `${order.notes}\n[Inabilitado/Cancelado em ${new Date().toLocaleDateString('pt-BR')}${reason ? `: ${reason}` : ''}]`
+        : `[Inabilitado/Cancelado em ${new Date().toLocaleDateString('pt-BR')}${reason ? `: ${reason}` : ''}]`,
+      updatedAt: new Date().toISOString()
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? cancelledOrder : o));
+    persistCloud('sales_orders', { ...cancelledOrder, companyId: cancelledOrder.companyId || activeCompanyId });
+    toast.push(`Pedido #${order.reference || order.id} foi inabilitado/cancelado. A numeração permanece preservada!`, 'success');
+  };
+
+  const handleReactivateOrder = (orderId: string) => {
+    const order = orders.find(item => item.id === orderId);
+    if (!order) return;
+
+    const reactivatedOrder: SaleOrder = {
+      ...order,
+      status: OrderStatus.BUDGET,
+      notes: order.notes
+        ? `${order.notes}\n[Reativado como Orçamento em ${new Date().toLocaleDateString('pt-BR')}]`
+        : `[Reativado como Orçamento em ${new Date().toLocaleDateString('pt-BR')}]`,
+      updatedAt: new Date().toISOString()
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? reactivatedOrder : o));
+    persistCloud('sales_orders', { ...reactivatedOrder, companyId: reactivatedOrder.companyId || activeCompanyId });
+    toast.push(`Pedido #${order.reference || order.id} foi reativado como Orçamento para revisão.`, 'success');
   };
 
   const voidCancelledNfeFinance = (order: SaleOrder) => {
@@ -867,24 +1255,29 @@ const App: React.FC = () => {
       setOrders(prev => [...prev, tagged]);
       voidCancelledNfeFinance(tagged);
       const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-      if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
+      if (tagged.status === OrderStatus.FINALIZED) {
         const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
         if (!hasTx) {
-          finalizeSale(tagged, tagged.payments || []);
-          (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+          applyOrderStock(tagged);
+          if (!tagged.withoutFinance) {
+            postSaleFinance(tagged, tagged.payments || []);
+            (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
+          }
         }
       }
       return persist;
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-    if (
-      tagged.status === OrderStatus.FINALIZED
-      && !tagged.withoutFinance
-    ) {
+    // Baixa de estoque só na transição pra "Venda Confirmada" — reenvios
+    // depois (retirada parcial, "Fazer lançamento financeiro") não reaplicam.
+    if (tagged.status === OrderStatus.FINALIZED && originalOrder.status !== OrderStatus.FINALIZED) {
+      applyOrderStock(tagged);
+    }
+    if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
       const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
       if (!hasTx || originalOrder.status === OrderStatus.BUDGET) {
-        finalizeSale(tagged, tagged.payments || []);
+        postSaleFinance(tagged, tagged.payments || []);
         (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
       }
     }
@@ -895,10 +1288,15 @@ const App: React.FC = () => {
   // Resetar empresa para banco 100% limpo
   const handleResetCompanyDatabase = async () => {
     if (activeCompanyId !== 'matriz-demo' && activeCompanyId !== 'demo') {
-      window.alert('Reset de base está bloqueado em produção para não perder pedidos reais.');
+      toast.push('Reset de base está bloqueado em produção para não perder pedidos reais.', 'danger');
       return;
     }
-    if (!window.confirm(`Tem certeza que deseja zerar todos os registros de "${currentUser.companyName || 'sua empresa'}" e deixar a base 100% limpa?`)) {
+    if (!(await confirmDialog({
+      title: 'Zerar a base?',
+      description: `Todos os registros de "${currentUser.companyName || 'sua empresa'}" serão apagados e a base volta limpa.`,
+      confirmLabel: 'Zerar base',
+      danger: true
+    }))) {
       return;
     }
     setSyncing(true);
@@ -922,7 +1320,11 @@ const App: React.FC = () => {
 
   // Carregar dados de demonstração para testes
   const handleLoadDemoData = async () => {
-    if (!window.confirm("Deseja carregar dados de demonstração para teste nesta empresa?")) return;
+    if (!(await confirmDialog({
+      title: 'Carregar dados de demonstração?',
+      description: 'Pedidos, clientes e estoque de exemplo serão adicionados nesta empresa.',
+      confirmLabel: 'Carregar'
+    }))) return;
     setSyncing(true);
     await db.loadDemoDataForCompany(activeCompanyId);
     const [
@@ -973,7 +1375,22 @@ const App: React.FC = () => {
     }
   };
 
-  if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} />;
+  if (passwordRecovery) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#F4F5EF]">
+        <SetNewPassword
+          mode="recovery"
+          onDone={() => {
+            setPasswordRecovery(false);
+            try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+            userService.getCurrentSessionUser().then((user) => { if (user) handleSetCurrentUser(user); });
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!currentUser) return <Login onLoginSuccess={handleSetCurrentUser} notice={authLinkError} />;
 
   const operatingCompany: Company = {
     id: activeCompanyId,
@@ -990,9 +1407,7 @@ const App: React.FC = () => {
     isActive: true
   };
 
-  const displayUsers = activeCompanyId === 'matriz-demo' 
-    ? users 
-    : users.filter(u => u.companyId === currentUser?.companyId || u.companyId === activeCompanyId || u.id === currentUser?.id || u.email === currentUser?.email);
+  const displayUsers = visibleCompanyUsers(users, currentUser);
 
   return (
     <div className="cf-app-shell min-h-screen flex flex-col lg:flex-row">
@@ -1001,13 +1416,14 @@ const App: React.FC = () => {
         onNavigate={setCurrentView} 
         user={currentUser}
         onLogout={() => handleSetCurrentUser(null)}
+        onChangePassword={isDemoCompany(activeCompanyId) ? undefined : () => { setMobileMenuOpen(false); setShowChangePassword(true); }}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
         onOpenDatabaseModal={() => setShowDbModal(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full lg:ml-[276px] p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
+      <main className="flex-1 w-full min-w-0 lg:ml-[276px] p-3 sm:p-6 lg:p-8 transition-all duration-300 print:ml-0 print:p-0 min-h-screen pb-24 lg:pb-8">
         <div className="max-w-[1440px] mx-auto print:max-w-none">
           {/* Topbar com suporte Mobile e Desktop */}
           <header className="cf-topbar print:hidden">
@@ -1025,10 +1441,35 @@ const App: React.FC = () => {
             </div>
 
             <div className="cf-topbar-actions">
-              <div className="cf-topbar-pill hidden sm:inline-flex">
-                <MapPin size={14} className="text-[#0F5948]" />
-                <span>{activeCompanyId === 'matriz-demo' ? 'Unidade Matriz' : 'Unidade ativa'}</span>
-                <ChevronDown size={13} />
+              <div className="relative hidden sm:block">
+                <button
+                  type="button"
+                  onClick={() => { if (memberships.length > 1) setCompanySwitcherOpen((open) => !open); }}
+                  className="cf-topbar-pill"
+                  title={memberships.length > 1 ? 'Trocar de empresa' : undefined}
+                >
+                  <MapPin size={14} className="text-[#0F5948]" />
+                  <span>
+                    {activeMembership?.companyName
+                      || (activeCompanyId === 'matriz-demo' ? 'Unidade Matriz' : (activeMembership?.isBranch ? 'Filial' : (currentUser.companyName || 'Unidade ativa')))}
+                  </span>
+                  {memberships.length > 1 && <ChevronDown size={13} />}
+                </button>
+                {companySwitcherOpen && memberships.length > 1 && (
+                  <div className="absolute right-0 mt-1 w-64 bg-white border border-[#DDE6DE] rounded-xl shadow-lg z-40 overflow-hidden">
+                    {memberships.map((m) => (
+                      <button
+                        key={m.companyId}
+                        type="button"
+                        onClick={() => { setSelectedCompanyId(m.companyId); setCompanySwitcherOpen(false); setCurrentView('dashboard'); }}
+                        className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 ${m.companyId === activeCompanyId ? 'bg-emerald-50 font-semibold text-emerald-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        <span className="truncate">{m.companyName || (m.isBranch ? 'Filial' : (currentUser.companyName || 'Matriz'))}</span>
+                        <span className="text-[11px] uppercase text-slate-500 shrink-0">{m.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {currentUser.onboardingCompleted === false && (
@@ -1040,6 +1481,18 @@ const App: React.FC = () => {
                   <span>Completar setup</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="cf-topbar-pill"
+                title="Buscar (Ctrl+K)"
+                aria-label="Buscar pedido, cliente, placa ou NF"
+              >
+                <Search size={15} className="text-[#36574E]" />
+                <span className="hidden md:inline whitespace-nowrap">Buscar</span>
+                <kbd className="hidden xl:inline whitespace-nowrap text-xs text-muted">Ctrl K</kbd>
+              </button>
 
               <div className="cf-topbar-divider hidden sm:block" />
               <button className="cf-topbar-pill hidden sm:inline-flex" title="Notificações" aria-label="Notificações">
@@ -1070,6 +1523,9 @@ const App: React.FC = () => {
                 {persistError
                   ? `O banco não confirmou a última gravação (${pendingSyncCount} item(ns) na fila). Não limpe o histórico nem os dados deste site neste aparelho — as notas podem estar só aqui até o reenvio.`
                   : `${pendingSyncCount} registro(s) aguardando confirmação no Supabase. Não limpe o navegador até tocar em Reenviar agora.`}
+                {persistError && (
+                  <span className="block mt-1 text-xs font-mono opacity-80 break-all">{persistError}</span>
+                )}
               </p>
               <button
                 type="button"
@@ -1099,12 +1555,12 @@ const App: React.FC = () => {
               transfers={transfers}
               user={currentUser}
               onNavigate={setCurrentView} 
-              onOpenOnboardingModal={() => setShowOnboardingModal(true)}
             />
           )}
           {(currentView === 'orders' || currentView === 'quotes') && (
             <ErrorBoundary label="vendas">
               <SalesOrders 
+                currentUser={currentUser}
                 orders={orders} 
                 customers={customers} 
                 inventory={inventory} 
@@ -1117,12 +1573,16 @@ const App: React.FC = () => {
                 onAddTransportador={handleAddTransportador}
                 onUpdateOrder={handleUpdateOrder} 
                 onDeleteOrder={handleDeleteOrder}
+                onCancelOrder={handleCancelOrder}
+                onReactivateOrder={handleReactivateOrder}
                 onVerifyDeletionPassword={verifyCurrentUserPassword}
                 onFinalizeOrder={(oid, p) => {
                   const order = orders.find(o => o.id === oid);
                   if (order) finalizeSale(order, p);
-                }} 
+                }}
+                onPostFinance={handlePostOrderFinance}
                 onPaymentReceived={handlePaymentReceived}
+                onReviseReceipt={handleReviseReceipt}
                 mode={currentView === 'quotes' ? 'quotes' : 'orders'}
               />
             </ErrorBoundary>
@@ -1288,6 +1748,17 @@ const App: React.FC = () => {
               onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
+          {currentView === 'loadings' && isViewAllowed(currentUser, 'loadings') && (
+            <Loadings orders={orders} customers={customers} />
+          )}
+          {currentView === 'branches' && (
+            <CompanyBranches
+              activeCompanyId={activeCompanyId}
+              currentUser={currentUser}
+              matrizUsers={displayUsers}
+              accounts={accounts}
+            />
+          )}
           {currentView === 'fleet' && (
             <FleetManagement 
               machines={machines} 
@@ -1312,6 +1783,8 @@ const App: React.FC = () => {
               orders={orders}
               customers={customers}
               company={operatingCompany}
+              transportadores={transportadores}
+              operatorName={currentUser.name}
               onAddMaintenance={handleAddMaintenance} 
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
@@ -1349,18 +1822,20 @@ const App: React.FC = () => {
           }`}
         >
           <LayoutDashboard size={18} />
-          <span className="text-[10px] tracking-tight">Início</span>
+          <span className="text-xs tracking-tight">Início</span>
         </button>
 
-        <button
-          onClick={() => setCurrentView('orders')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <FileText size={18} />
-          <span className="text-[10px] tracking-tight">Vendas</span>
-        </button>
+        {isViewAllowed(currentUser, 'orders') && (
+          <button
+            onClick={() => setCurrentView('orders')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <FileText size={18} />
+            <span className="text-xs tracking-tight">Vendas</span>
+          </button>
+        )}
 
         <button
           onClick={() => setCurrentView('yard')}
@@ -1369,37 +1844,72 @@ const App: React.FC = () => {
           }`}
         >
           <Scale size={18} />
-          <span className="text-[10px] tracking-tight">Balança</span>
+          <span className="text-xs tracking-tight">Balança</span>
         </button>
 
-        <button
-          onClick={() => setCurrentView('inventory')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <Package size={18} />
-          <span className="text-[10px] tracking-tight">Estoque</span>
-        </button>
+        {isViewAllowed(currentUser, 'inventory') && (
+          <button
+            onClick={() => setCurrentView('inventory')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <Package size={18} />
+            <span className="text-xs tracking-tight">Estoque</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setCurrentView('transfers')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
-            currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
-          }`}
-        >
-          <ArrowRightLeft size={18} />
-          <span className="text-[10px] tracking-tight">Remessas</span>
-        </button>
+        {isViewAllowed(currentUser, 'transfers') && (
+          <button
+            onClick={() => setCurrentView('transfers')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <ArrowRightLeft size={18} />
+            <span className="text-xs tracking-tight">Remessas</span>
+          </button>
+        )}
+
+        {isViewAllowed(currentUser, 'fiscal') && (
+          <button
+            onClick={() => setCurrentView('fiscal')}
+            className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
+              currentView === 'fiscal' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
+            }`}
+          >
+            <FileCheck size={18} />
+            <span className="text-xs tracking-tight">NF-e</span>
+          </button>
+        )}
 
         <button
           onClick={() => setMobileMenuOpen(true)}
           className="flex flex-col items-center gap-1 p-1.5 rounded-xl text-[#D5E3DC] hover:text-white"
         >
           <Menu size={18} />
-          <span className="text-[10px] tracking-tight">Menu</span>
+          <span className="text-xs tracking-tight">Menu</span>
         </button>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        user={currentUser}
+        orders={orders}
+        customers={customers}
+        onNavigate={(view) => { setCurrentView(view); setMobileMenuOpen(false); }}
+      />
+
+      {showChangePassword && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/60 flex items-center justify-center p-4 print:hidden">
+          <SetNewPassword
+            mode="change"
+            onDone={() => setShowChangePassword(false)}
+            onCancel={() => setShowChangePassword(false)}
+          />
+        </div>
+      )}
 
       {/* Assistente de Onboarding / Setup Inicial */}
       {showOnboardingModal && currentUser && (

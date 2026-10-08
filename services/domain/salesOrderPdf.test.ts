@@ -50,11 +50,13 @@ describe('PDF do pedido: layout oficial do ERP', () => {
           quantity: 50,
           unitPrice: 160,
           discount: 0,
-          total: 8000
+          total: 8000,
+          prntMinimoGarantido: 80,
+          mgoMinimoGarantido: 15
         }
       ],
       productSheetTitle: 'Calcário dolomítico',
-      productSheetBody: 'PRNT mínimo garantido: 80%\nMgO mínimo garantido: 14%',
+      productSheetBody: 'Entrega combinada na propriedade.\nPeneira 50 e PRNT mínimo garantido: 80%.',
       subtotal: 8000,
       discount: 0,
       shipping: 120,
@@ -103,7 +105,10 @@ describe('PDF do pedido: layout oficial do ERP', () => {
       'ASSINATURADOCLIENTE',
       'PED-2026-0008',
       'FazendaBoaVista',
-      'Totalgeral'
+      'Totalgeral',
+      'PRNTmínimogarantido:80%',
+      'MgOmínimogarantido:15%',
+      'Valoressujeitosavariação'
     ]) {
       assert.match(text, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }

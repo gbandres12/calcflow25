@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador } from '../types';
+import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador, OrderStatus } from '../types';
 import { fiscalService } from '../services/fiscalService';
-import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe, dedupeEmittedNfeRows } from '../services/saleNfe';
+import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe, dedupeEmittedNfeRows, isFiscalOnlyOrder } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
@@ -11,6 +11,7 @@ import {
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
+import { CartaCorrecaoModal } from './fiscal/CartaCorrecaoModal';
 import { DateFilterControl } from './ui/DateFilterControl';
 import { DatePreset, getDatePresetRange, isDateInRange } from '../utils/dateFilterUtils';
 import { resolveCustomerForOrder } from '../utils/customerUtils';
@@ -53,6 +54,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [isTransferenciaEmit, setIsTransferenciaEmit] = useState(false);
   const [isAvulsaEmit, setIsAvulsaEmit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [orderToCce, setOrderToCce] = useState<{ order: SaleOrder; linkedNfeId?: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao' | 'rascunhos'>('notas_emitidas');
   const [showAvulsaModal, setShowAvulsaModal] = useState(false);
   const [duplicateDraft, setDuplicateDraft] = useState<NfeDuplicateDraft | null>(null);
@@ -206,7 +208,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const emittedOrders = nfeRows.filter((r) => !isDraftNfe(r.nfe));
   const draftRows = nfeRows.filter((r) => isDraftNfe(r.nfe));
   const pendingEmissionOrders = safeOrders.filter(
-    (o) => totalRemainingQuantity(o) > 0.0001
+    (o) => !isFiscalOnlyOrder(o) && o.status === OrderStatus.FINALIZED && totalRemainingQuantity(o) > 0.0001
   );
 
   const emittedInDateRange = emittedOrders.filter((row) => {
@@ -226,26 +228,54 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const filteredEmittedOrders = emittedInDateRange.filter((row) => {
     const o = row.overlay;
     const cust = safeCustomers.find((c) => c.id === o.customerId);
+    const custName =
+      cust?.name ||
+      row.order.nfePayload?.dest?.nome ||
+      row.nfe.nfePayload?.dest?.nome ||
+      o.nfePayload?.dest?.nome ||
+      o.customerName ||
+      row.order.customerName ||
+      row.nfe.destinatarioNome ||
+      '';
+    const custDoc =
+      cust?.document ||
+      row.order.nfePayload?.dest?.cpf ||
+      row.order.nfePayload?.dest?.cnpj ||
+      row.nfe.nfePayload?.dest?.cpf ||
+      row.nfe.nfePayload?.dest?.cnpj ||
+      o.customerDocument ||
+      row.order.customerDocument ||
+      '';
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       (o.reference || '').toLowerCase().includes(q) ||
       (row.nfe.nfeNumero || '').includes(searchQuery) ||
       (row.nfe.nfeChave || '').includes(searchQuery) ||
       (row.nfe.reference || '').toLowerCase().includes(q) ||
-      (cust?.name || '').toLowerCase().includes(q) ||
-      (cust?.document || '').includes(searchQuery);
+      custName.toLowerCase().includes(q) ||
+      custDoc.includes(searchQuery);
     if (filterStatus === 'all') return matchesSearch;
     return matchesSearch && row.nfe.nfeStatus === filterStatus;
+  }).sort((a, b) => {
+    // Sequência da numeração: mais recente no topo; sem número vai para o fim.
+    const na = parseInt(a.nfe.nfeNumero || '', 10);
+    const nb = parseInt(b.nfe.nfeNumero || '', 10);
+    if (isNaN(na) && isNaN(nb)) return 0;
+    if (isNaN(na)) return 1;
+    if (isNaN(nb)) return -1;
+    return nb - na;
   });
 
   const filteredPendingEmissionOrders = pendingInDateRange.filter((o) => {
     if (!searchQuery.trim()) return true;
     const cust = safeCustomers.find((c) => c.id === o.customerId);
+    const custName = cust?.name || o.nfePayload?.dest?.nome || o.customerName || '';
+    const custDoc = cust?.document || o.nfePayload?.dest?.cpf || o.nfePayload?.dest?.cnpj || o.customerDocument || '';
     const q = searchQuery.toLowerCase();
     return (
       (o.reference || '').toLowerCase().includes(q) ||
-      (cust?.name || '').toLowerCase().includes(q) ||
-      (cust?.document || '').includes(searchQuery)
+      custName.toLowerCase().includes(q) ||
+      custDoc.includes(searchQuery)
     );
   });
 
@@ -253,12 +283,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
     if (!searchQuery.trim()) return true;
     const o = r.overlay;
     const cust = safeCustomers.find((c) => c.id === o.customerId);
+    const custName = cust?.name || r.nfe.nfePayload?.dest?.nome || o.nfePayload?.dest?.nome || o.customerName || '';
+    const custDoc = cust?.document || r.nfe.nfePayload?.dest?.cpf || r.nfe.nfePayload?.dest?.cnpj || o.customerDocument || '';
     const q = searchQuery.toLowerCase();
     return (
       (o.reference || '').toLowerCase().includes(q) ||
       (r.nfe.reference || '').toLowerCase().includes(q) ||
-      (cust?.name || '').toLowerCase().includes(q) ||
-      (cust?.document || '').includes(searchQuery)
+      custName.toLowerCase().includes(q) ||
+      custDoc.includes(searchQuery)
     );
   });
 
@@ -286,7 +318,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               Notas Fiscais Emitidas (NF-e 55)
             </h1>
           </div>
-          <p className="text-xs sm:text-sm font-bold text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">
             Histórico de notas, DANFE e fila de faturamento.
           </p>
         </div>
@@ -323,22 +355,22 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total NF-e Autorizadas</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Total NF-e Autorizadas</span>
           <p className="text-2xl font-black text-slate-800">{totalNfeAutorizadas} Notas</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Faturamento Fiscal</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Faturamento Fiscal</span>
           <p className="text-2xl font-black text-purple-700">{formatBRL(totalValorFaturado)}</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fila de Emissão</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Fila de Emissão</span>
           <p className="text-2xl font-black text-amber-600">{pendingInDateRange.length} Vendas</p>
-          <p className="text-xs text-slate-400">{formatBRL(totalValorPendente)}</p>
+          <p className="text-xs text-slate-500">{formatBRL(totalValorPendente)}</p>
         </div>
         <div className="bg-white p-5 rounded-3xl border border-slate-200/80 space-y-1 cursor-pointer hover:border-amber-300 transition-colors" onClick={() => setActiveTab('rascunhos')}>
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Rascunhos</span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Rascunhos</span>
           <p className="text-2xl font-black text-amber-700">{draftsInDateRange.length} Notas</p>
-          <p className="text-xs text-slate-400">Salvas para revisar e emitir</p>
+          <p className="text-xs text-slate-500">Salvas para revisar e emitir</p>
         </div>
       </div>
 
@@ -402,7 +434,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600"
               >
                 <X size={13} />
               </button>
@@ -412,7 +444,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
               type="button"
               onClick={syncAuthorizedFromSefaz}
               disabled={syncingAll}
-              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-[10px] font-black disabled:opacity-50 inline-flex items-center gap-1"
+              className="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black disabled:opacity-50 inline-flex items-center gap-1"
               title="Consulta a SEFAZ e atualiza notas que ainda aparecem como autorizadas"
             >
               <RefreshCw size={12} className={syncingAll ? 'animate-spin' : ''} />
@@ -439,7 +471,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">
+                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px]">
                   <tr>
                     <th className="px-4 py-3">Nº</th>
                     <th className="px-4 py-3">Destinatário</th>
@@ -451,20 +483,28 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                 <tbody>
                   {filteredEmittedOrders.map((row) => {
                     const customer = safeCustomers.find((c) => c.id === row.order.customerId);
+                    const customerName =
+                      customer?.name ||
+                      row.order.nfePayload?.dest?.nome ||
+                      row.nfe.nfePayload?.dest?.nome ||
+                      row.overlay.nfePayload?.dest?.nome ||
+                      row.order.customerName ||
+                      row.nfe.destinatarioNome ||
+                      'Cliente Geral';
                     return (
                       <tr key={`${row.order.id}-${row.nfe.id}`} className="border-t border-slate-100">
                         <td className="px-4 py-3 font-black">
                           <div className="flex items-center gap-1.5">
                             <span>{row.nfe.nfeNumero ? `Nº ${row.nfe.nfeNumero}` : '—'}</span>
                             {(row.nfe.tipo === 'avulsa' || row.order.isAvulsa) && (
-                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black rounded-full uppercase">
+                              <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[11px] font-black rounded-full uppercase">
                                 Avulsa
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] font-bold text-slate-400">{row.order.reference}</p>
+                          <p className="text-xs font-bold text-slate-500">{row.order.reference}</p>
                         </td>
-                        <td className="px-4 py-3">{customer?.name || 'Cliente Geral'}</td>
+                        <td className="px-4 py-3">{customerName}</td>
                         <td className={`px-4 py-3 ${row.nfe.nfeStatus === 'cancelada' ? 'font-black text-rose-700' : ''}`}>{nfeStatusLabel(row.nfe.nfeStatus)}</td>
                         <td className="px-4 py-3 text-right font-black">{formatBRL(row.nfe.total)}</td>
                         <td className="px-4 py-3 text-center">
@@ -472,7 +512,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                             <button
                               onClick={() => syncFromSefaz(row.order, row.nfe.id)}
                               disabled={syncingId === row.nfe.id || syncingAll}
-                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black disabled:opacity-50"
+                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black disabled:opacity-50"
                             >
                               {syncingId === row.nfe.id ? '…' : 'SEFAZ'}
                             </button>
@@ -481,17 +521,26 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                                 setSelectedDanfeLinkedNfeId(row.nfe.id);
                                 setSelectedDanfeOrder(row.order);
                               }}
-                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black inline-flex items-center gap-1"
+                              className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-black inline-flex items-center gap-1"
                             >
                               <Eye size={12} /> DANFE
                             </button>
                             <button
                               onClick={() => openDuplicate(row.order, row.nfe.id)}
-                              className="px-3 py-1.5 bg-white border border-purple-200 text-purple-800 rounded-xl text-[10px] font-black inline-flex items-center gap-1"
+                              className="px-3 py-1.5 bg-white border border-purple-200 text-purple-800 rounded-xl text-xs font-black inline-flex items-center gap-1"
                               title="Emitir uma nota nova com os mesmos dados"
                             >
                               <Copy size={12} /> Duplicar
                             </button>
+                            {row.nfe.nfeStatus === 'autorizada' && (
+                              <button
+                                onClick={() => setOrderToCce({ order: row.order, linkedNfeId: row.nfe.id })}
+                                className="px-2.5 py-1.5 bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 rounded-xl text-xs font-black inline-flex items-center gap-1 transition-colors"
+                                title="Emitir Carta de Correção Eletrônica (CC-e) na SEFAZ"
+                              >
+                                <FileEdit size={12} /> CC-e
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -526,14 +575,19 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           ) : (
             filteredPendingEmissionOrders.map((order) => {
               const customer = safeCustomers.find((c) => c.id === order.customerId);
+              const customerName =
+                customer?.name ||
+                order.nfePayload?.dest?.nome ||
+                order.customerName ||
+                'Não identificado';
               const validation = fiscalService.validarDadosFiscais(order, customer);
               return (
                 <div key={order.id} className="p-5 bg-slate-50 border border-slate-200 rounded-3xl space-y-3">
                   <div className="flex justify-between gap-3 flex-wrap">
                     <div>
                       <p className="font-black text-slate-900 text-sm">Pedido {order.reference}</p>
-                      <p className="text-xs font-bold text-slate-700">Cliente: {customer?.name || 'Não identificado'}</p>
-                      <p className="text-[11px] text-rose-700 font-bold">{validation.valid ? '' : validation.errors[0]}</p>
+                      <p className="text-xs font-bold text-slate-700">Cliente: {customerName}</p>
+                      <p className="text-xs text-rose-700 font-bold">{validation.valid ? '' : validation.errors[0]}</p>
                     </div>
                     <div className="text-right space-y-2">
                       <p className="text-base font-black">{formatBRL(order.total)}</p>
@@ -553,7 +607,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-[11px]">
+                  <div className="flex flex-wrap gap-2 text-xs">
                     {(order.items || []).map((it, idx) => (
                       <span key={idx} className="bg-white px-2.5 py-1 rounded-lg border font-bold">
                         {it.productName}: {it.quantity} {it.unit || 'Ton'}
@@ -589,18 +643,24 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           ) : (
             filteredDraftRows.map((row) => {
               const customer = safeCustomers.find((c) => c.id === row.order.customerId);
+              const customerName =
+                customer?.name ||
+                row.nfe.nfePayload?.dest?.nome ||
+                row.order.nfePayload?.dest?.nome ||
+                row.order.customerName ||
+                'Não identificado';
               return (
                 <div key={`${row.order.id}-${row.nfe.id}`} className="p-5 bg-amber-50/60 border border-amber-200 rounded-3xl space-y-3">
                   <div className="flex justify-between gap-3 flex-wrap">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-black text-slate-900 text-sm">Pedido {row.order.reference}</p>
-                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[9px] font-black rounded-full uppercase border border-amber-200">
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[11px] font-black rounded-full uppercase border border-amber-200">
                           Rascunho · {row.nfe.tipo}
                         </span>
                       </div>
-                      <p className="text-xs font-bold text-slate-700">Cliente: {customer?.name || 'Não identificado'}</p>
-                      <p className="text-[11px] text-slate-500 font-medium mt-1">
+                      <p className="text-xs font-bold text-slate-700">Cliente: {customerName}</p>
+                      <p className="text-xs text-slate-500 font-medium mt-1">
                         {row.nfe.nfeNaturezaOperacao || 'Natureza não informada'} · {row.nfe.items?.length || 0} item(ns)
                       </p>
                     </div>
@@ -701,7 +761,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         <ErrorBoundary label="emissão NF-e">
         <EmitirNfeModal
           order={orderToEmitNfe}
-          customer={resolveCustomerForOrder(safeCustomers, orderToEmitNfe.customerId)}
+          customer={resolveCustomerForOrder(safeCustomers, orderToEmitNfe.customerId, orderToEmitNfe)}
           config={config}
           company={company}
           transportadores={transportadores}
@@ -738,7 +798,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         <DanfeModal
           order={selectedDanfeOrder}
           linkedNfeId={selectedDanfeLinkedNfeId}
-          customer={resolveCustomerForOrder(safeCustomers, selectedDanfeOrder.customerId)}
+          customer={resolveCustomerForOrder(safeCustomers, selectedDanfeOrder.customerId, selectedDanfeOrder)}
           config={config}
           company={company}
           onClose={() => {
@@ -749,6 +809,20 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           onOrderUpdated={(updatedOrder) => {
             onUpdateOrder(updatedOrder);
             setSelectedDanfeOrder(updatedOrder);
+          }}
+        />
+      )}
+
+      {/* Modal de Carta de Correção (CC-e) */}
+      {orderToCce && config && (
+        <CartaCorrecaoModal
+          order={orderToCce.order}
+          linkedNfeId={orderToCce.linkedNfeId}
+          config={config}
+          onClose={() => setOrderToCce(null)}
+          onSuccess={(updatedOrder) => {
+            onUpdateOrder(updatedOrder);
+            setOrderToCce(null);
           }}
         />
       )}

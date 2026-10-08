@@ -58,14 +58,14 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-black text-slate-800 tracking-tight">{title}</h3>
-              <span className="text-[10px] font-black uppercase tracking-wider text-rose-500">
+              <span className="text-[11px] font-black uppercase tracking-wider text-rose-500">
                 Ação Crítica Protegida
               </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors"
           >
             <X size={18} />
           </button>
@@ -84,7 +84,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-1">
               Senha de acesso
             </label>
             <div className="relative">
@@ -103,7 +103,7 @@ export const DeletionPasswordModal: React.FC<DeletionPasswordModalProps> = ({
               />
             </div>
             {error && (
-              <p className="text-[11px] font-bold text-rose-600 mt-1.5 flex items-center gap-1">
+              <p className="text-xs font-bold text-rose-600 mt-1.5 flex items-center gap-1">
                 {error}
               </p>
             )}

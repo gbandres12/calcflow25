@@ -1,4 +1,4 @@
-import { getAdminSupabase, getAdminSupabaseConfigError } from './supabaseAdmin.js';
+import { getAdminSupabase, getAdminSupabaseAs, getAdminSupabaseConfigError } from './supabaseAdmin.js';
 
 const ADMIN_ROLE = 'Administrador';
 
@@ -53,7 +53,7 @@ export async function requireMember(req: any, res: any): Promise<MemberContext |
   }
 
   return {
-    admin,
+    admin: getAdminSupabaseAs(authData.user.id) || admin,
     userId: authData.user.id,
     companyId: membership.company_id as string,
     role: (membership.role as string) || 'Operador',

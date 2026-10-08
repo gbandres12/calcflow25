@@ -401,7 +401,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">Movimentação Diária</h2>
-            <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-amber-200">
+            <span className="bg-amber-100 text-amber-800 text-[11px] font-black uppercase px-3 py-1 rounded-full border border-amber-200">
               Fechamento & Caixa
             </span>
           </div>
@@ -481,7 +481,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         {/* Saldo Inicial */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Saldo Inicial</span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Saldo Inicial</span>
             <div className="p-2 bg-slate-100 text-slate-600 rounded-xl">
               <Wallet size={16} />
             </div>
@@ -489,13 +489,13 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           <p className="text-xl font-black text-slate-800 tracking-tight">
             R$ {initialBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] font-bold text-slate-400 mt-1 block">Até 00:00 da data</span>
+          <span className="text-xs font-bold text-slate-500 mt-1 block">Até 00:00 da data</span>
         </div>
 
         {/* Entradas do Dia */}
         <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600">Entradas (+)</span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-600">Entradas (+)</span>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
               <ArrowDownLeft size={16} />
             </div>
@@ -503,7 +503,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           <p className="text-xl font-black text-emerald-700 tracking-tight">
             R$ {totalDayInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] font-bold text-emerald-600 mt-1 block">
+          <span className="text-xs font-bold text-emerald-600 mt-1 block">
             {dayInflowTransactions.length} recebimento(s)
           </span>
         </div>
@@ -511,7 +511,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         {/* Saídas do Dia */}
         <div className="bg-white p-5 rounded-2xl border border-rose-200 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-rose-600">Saídas (-)</span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">Saídas (-)</span>
             <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
               <ArrowUpRight size={16} />
             </div>
@@ -519,7 +519,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           <p className="text-xl font-black text-rose-700 tracking-tight">
             R$ {totalDayOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] font-bold text-rose-600 mt-1 block">
+          <span className="text-xs font-bold text-rose-600 mt-1 block">
             {dayOutflowTransactions.length} despesa(s)/pagamento(s)
           </span>
         </div>
@@ -531,7 +531,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             : 'bg-rose-50/50 border-rose-200'
         }`}>
           <div className="flex justify-between items-start mb-2">
-            <span className={`text-[10px] font-black uppercase tracking-wider ${
+            <span className={`text-[11px] font-black uppercase tracking-wider ${
               netDayResult >= 0 ? 'text-emerald-700' : 'text-rose-700'
             }`}>
               Resultado Líquido
@@ -547,13 +547,13 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           }`}>
             R$ {netDayResult.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] font-bold text-slate-500 mt-1 block">Entradas - Saídas</span>
+          <span className="text-xs font-bold text-slate-500 mt-1 block">Entradas - Saídas</span>
         </div>
 
         {/* Saldo Final do Dia */}
         <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-md relative overflow-hidden">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Saldo Final (=)</span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">Saldo Final (=)</span>
             <div className="p-2 bg-slate-800 text-amber-400 rounded-xl">
               <DollarSign size={16} />
             </div>
@@ -561,7 +561,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           <p className="text-xl font-black text-white tracking-tight">
             R$ {finalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] font-bold text-slate-400 mt-1 block">Fechamento do Caixa</span>
+          <span className="text-xs font-bold text-slate-400 mt-1 block">Fechamento do Caixa</span>
         </div>
       </div>
 
@@ -624,7 +624,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           className={`pb-3 px-4 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
             activeTab === 'all'
               ? 'border-slate-900 text-slate-900'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
+              : 'border-transparent text-slate-500 hover:text-slate-600'
           }`}
         >
           Todos os Movimentos ({dayTransactions.length})
@@ -634,7 +634,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           className={`pb-3 px-4 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
             activeTab === 'inflows'
               ? 'border-emerald-600 text-emerald-700'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
+              : 'border-transparent text-slate-500 hover:text-slate-600'
           }`}
         >
           <ArrowDownLeft size={14} className="text-emerald-600" />
@@ -645,7 +645,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
           className={`pb-3 px-4 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
             activeTab === 'outflows'
               ? 'border-rose-600 text-rose-700'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
+              : 'border-transparent text-slate-500 hover:text-slate-600'
           }`}
         >
           <ArrowUpRight size={14} className="text-rose-600" />
@@ -657,7 +657,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             className={`pb-3 px-4 text-xs font-black transition-all border-b-2 flex items-center gap-2 ${
               activeTab === 'deductions'
                 ? 'border-amber-600 text-amber-700'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
+                : 'border-transparent text-slate-500 hover:text-slate-600'
             }`}
           >
             <Percent size={14} className="text-amber-600" />
@@ -671,7 +671,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-black uppercase tracking-wider">
                 <th className="px-5 py-3.5">Tipo & Descrição</th>
                 <th className="px-4 py-3.5">Cliente / Fornecedor</th>
                 <th className="px-4 py-3.5">Categoria & C. Custo</th>
@@ -684,11 +684,11 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             <tbody className="divide-y divide-slate-100">
               {filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-400 text-xs font-medium">
+                  <td colSpan={7} className="py-16 text-center text-slate-500 text-xs font-medium">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Wallet size={32} className="text-slate-300" />
                       <p className="font-bold text-slate-600">Nenhuma movimentação registrada nesta data ({selectedDate})</p>
-                      <p className="text-[11px] text-slate-400">Use os botões de "Receber / Entrada" ou "Pagar / Despesa" acima para lançar no dia.</p>
+                      <p className="text-xs text-slate-500">Use os botões de "Receber / Entrada" ou "Pagar / Despesa" acima para lançar no dia.</p>
                     </div>
                   </td>
                 </tr>
@@ -708,7 +708,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                           </div>
                           <div>
                             <p className="text-xs font-black text-slate-900">{tx.description}</p>
-                            {tx.notes && <p className="text-[10px] text-slate-400 line-clamp-1">{tx.notes}</p>}
+                            {tx.notes && <p className="text-xs text-slate-500 line-clamp-1">{tx.notes}</p>}
                           </div>
                         </div>
                       </td>
@@ -716,15 +716,15 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                         {tx.contactName || (isInflow ? 'Cliente Balança' : 'Fornecedor Operacional')}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="text-[11px] font-bold text-slate-700 block">{tx.category}</span>
-                        {tx.costCenter && <span className="text-[9px] font-bold text-slate-400 block">{tx.costCenter}</span>}
+                        <span className="text-xs font-bold text-slate-700 block">{tx.category}</span>
+                        {tx.costCenter && <span className="text-xs font-bold text-slate-500 block">{tx.costCenter}</span>}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="text-[11px] font-bold text-slate-800 block">{getAccountName(tx.accountId)}</span>
-                        <span className="text-[10px] font-bold text-slate-400 block">{tx.paymentMethod || 'PIX / À Vista'}</span>
+                        <span className="text-xs font-bold text-slate-800 block">{getAccountName(tx.accountId)}</span>
+                        <span className="text-xs font-bold text-slate-500 block">{tx.paymentMethod || 'PIX / À Vista'}</span>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border flex items-center gap-1 w-fit ${
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase border flex items-center gap-1 w-fit ${
                           tx.status === TransactionStatus.CONFIRMADO 
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                             : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -745,7 +745,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                           <button
                             onClick={() => setViewReceiptTx(tx)}
                             title="Visualizar Recibo"
-                            className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
                           >
                             <FileText size={15} />
                           </button>
@@ -757,7 +757,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                               setIsDeleteModalOpen(true);
                             }}
                             title="Excluir Lançamento"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -792,7 +792,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               </div>
               <button 
                 onClick={() => setIsQuickEntryOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1 text-slate-500 hover:text-slate-700 rounded-lg"
               >
                 <X size={18} />
               </button>
@@ -942,7 +942,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               </div>
               <button 
                 onClick={() => setViewReceiptTx(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1 text-slate-500 hover:text-slate-700 rounded-lg"
               >
                 <X size={16} />
               </button>
@@ -1016,7 +1016,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                 <h3 className="text-lg font-black text-slate-900">Relatório de Fechamento Diário de Caixa</h3>
                 <p className="text-xs text-slate-500">Pronto para impressão em folha A4 e assinatura</p>
               </div>
-              <button onClick={() => setIsPrintModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => setIsPrintModalOpen(false)} className="p-1 text-slate-500 hover:text-slate-700">
                 <X size={18} />
               </button>
             </div>
@@ -1027,7 +1027,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                 <div>
                   <h4 className="text-base font-black text-slate-900">{company.name}</h4>
                   <p className="text-xs text-slate-500 font-mono">CNPJ: {company.document} | IE: {company.phone}</p>
-                  <p className="text-[11px] text-slate-500">{company.address}, {company.city} - {company.state}</p>
+                  <p className="text-xs text-slate-500">{company.address}, {company.city} - {company.state}</p>
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-black uppercase bg-slate-900 text-white px-3 py-1 rounded-md">Extrato Diário</span>
@@ -1038,19 +1038,19 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               {/* Quadro Resumo Financeiro */}
               <div className="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Saldo Inicial</span>
+                  <span className="text-[11px] uppercase font-bold text-slate-400 block">Saldo Inicial</span>
                   <p className="font-black text-sm text-slate-800">
                     R$ {initialBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-emerald-600 block">Total Entradas</span>
+                  <span className="text-[11px] uppercase font-bold text-emerald-600 block">Total Entradas</span>
                   <p className="font-black text-sm text-emerald-700">
                     R$ {totalDayInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-rose-600 block">Total Saídas</span>
+                  <span className="text-[11px] uppercase font-bold text-rose-600 block">Total Saídas</span>
                   <p className="font-black text-sm text-rose-700">
                     R$ {totalDayOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
@@ -1066,9 +1066,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               {/* Itens do Dia */}
               <div>
                 <h5 className="font-black text-xs uppercase text-slate-800 mb-2">Detalhamento dos Lançamentos ({dayTransactions.length})</h5>
-                <table className="w-full text-left text-[11px]">
+                <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 text-slate-400 uppercase font-black text-[9px]">
+                    <tr className="border-b border-slate-200 text-slate-500 uppercase font-black text-[11px]">
                       <th className="py-1.5">Descrição</th>
                       <th className="py-1.5">Favorecido / Cliente</th>
                       <th className="py-1.5">Conta / Meio</th>
@@ -1096,11 +1096,11 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200">
                 <div className="text-center">
                   <div className="border-b border-slate-400 w-full mb-1"></div>
-                  <p className="text-[10px] font-bold text-slate-700">Operador de Caixa / Balança</p>
+                  <p className="text-xs font-bold text-slate-700">Operador de Caixa / Balança</p>
                 </div>
                 <div className="text-center">
                   <div className="border-b border-slate-400 w-full mb-1"></div>
-                  <p className="text-[10px] font-bold text-slate-700">Gerência / Diretoria Financeira</p>
+                  <p className="text-xs font-bold text-slate-700">Gerência / Diretoria Financeira</p>
                 </div>
               </div>
             </div>

@@ -27,6 +27,8 @@ export interface NfeDuplicateDraft {
   sourceNumero?: string;
   sourceTipo?: SaleNfeTipo;
   customerId: string;
+  customerDocument?: string;
+  customerName?: string;
   naturezaOperacao?: string;
   infCpl?: string;
   paymentMethod: NfeDuplicatePaymentMethod;
@@ -81,10 +83,14 @@ export function resolveNfeForDuplicate(order: SaleOrder, linkedNfeId?: string): 
 export function buildNfeDuplicateDraft(order: SaleOrder, nfe?: SaleOrderLinkedNfe): NfeDuplicateDraft {
   const sourceItems = nfe?.items?.length ? nfe.items : (order.items || []);
   const freteSource = nfe?.frete || order.frete || { modalidade: 9, valor: 0 };
+  const destDoc = nfe?.nfePayload?.dest?.cpf || nfe?.nfePayload?.dest?.cnpj || order.customerDocument || order.nfePayload?.dest?.cpf || order.nfePayload?.dest?.cnpj;
+  const destName = nfe?.destinatarioNome || nfe?.nfePayload?.dest?.nome || order.customerName || order.nfePayload?.dest?.nome;
   return {
     sourceNumero: nfe?.nfeNumero || order.nfeNumero,
     sourceTipo: nfe?.tipo,
     customerId: order.customerId,
+    customerDocument: destDoc,
+    customerName: destName,
     naturezaOperacao: nfe?.nfeNaturezaOperacao || order.nfeNaturezaOperacao,
     infCpl: nfe?.nfeInfCpl || order.nfeInfCpl,
     paymentMethod: mapPaymentMethodForDuplicate(order.paymentMethod, nfe?.tipo),

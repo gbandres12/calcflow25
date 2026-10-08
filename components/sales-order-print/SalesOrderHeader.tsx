@@ -30,7 +30,7 @@ export const SalesOrderHeader: React.FC<Props> = ({ company, title, orderNumber 
           >
             {title}
           </h1>
-          <p className="mt-1 text-[11px] font-medium" style={{ color: SO.muted }}>
+          <p className="mt-1 text-xs font-medium" style={{ color: SO.muted }}>
             Nº{' '}
             <span className="text-[24px] font-bold leading-none" style={{ color: SO.green }}>
               {orderNumber}
@@ -38,8 +38,8 @@ export const SalesOrderHeader: React.FC<Props> = ({ company, title, orderNumber 
           </p>
         </div>
 
-        <div className="w-[34%] text-right text-[10px] leading-[1.45]" style={{ color: SO.text }}>
-          <p className="text-[10px] font-semibold" style={{ color: SO.navy }}>{dash(company.name)}</p>
+        <div className="w-[34%] text-right text-xs leading-[1.45]" style={{ color: SO.text }}>
+          <p className="text-xs font-semibold" style={{ color: SO.navy }}>{dash(company.name)}</p>
           {company.document && <p>CNPJ: {company.document}</p>}
           {company.address && <p>{company.address}</p>}
           {cityUf && <p>{cityUf}</p>}

@@ -16,7 +16,7 @@ export const SalesOrderItemsTable: React.FC<Props> = ({ order }) => {
       <h2 className="text-[12px] font-bold mb-2" style={{ color: SO.navy }}>
         Itens do pedido
       </h2>
-      <table className="w-full border-collapse text-[10px]" style={{ color: SO.text }}>
+      <table className="w-full border-collapse text-xs" style={{ color: SO.text }}>
         <thead>
           <tr style={{ background: SO.navy, color: '#fff' }}>
             <th className="font-semibold text-left py-1.5 px-2 w-[72px]">Referência</th>
@@ -46,7 +46,7 @@ export const SalesOrderItemsTable: React.FC<Props> = ({ order }) => {
         </tbody>
       </table>
       <div
-        className="mt-0 flex items-center justify-between text-[10px] px-2.5 py-1.5 rounded-b-md"
+        className="mt-0 flex items-center justify-between text-xs px-2.5 py-1.5 rounded-b-md"
         style={{ background: SO.bg, border: `1px solid ${SO.border}`, borderTop: 'none' }}
       >
         <span style={{ color: SO.muted }}>

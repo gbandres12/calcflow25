@@ -41,3 +41,5 @@ testsprite_tests/TestSprite_MCP_Test_Report.html
 scripts/verifyFinancials.ts
 scripts/reconcileNfeAvulsaFinance.ts
 .vercel
+backups/
+supabase/.temp/

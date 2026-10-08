@@ -246,7 +246,11 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
   const tipoPagamento = order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01';
   const freteModalidade = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9)) as 0 | 1 | 2 | 3 | 4 | 9;
   const freteValor = Math.max(0, Number(order.frete?.valor ?? order.shipping ?? 0) || 0);
-  const hasFrete = freteValor > 0 && freteModalidade !== 9;
+  const hasFrete =
+    freteValor > 0 &&
+    freteModalidade !== 9 &&
+    freteModalidade !== 1 &&
+    freteModalidade !== 4;
   const isAvulsaNote = Boolean(order.isAvulsa) || String(order.nfeReferenciaExterna || '').includes('#AV#');
   const infCpl = buildNfeInfCpl({
     nfeInfCpl: order.nfeInfCpl,

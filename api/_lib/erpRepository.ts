@@ -3,8 +3,10 @@ import { getAdminSupabase } from './supabaseAdmin.js';
 /**
  * Acesso server-side ao app_records com a service role.
  *
+ * Fonte operacional do ERP: só esta tabela. Pedidos, clientes e o restante
+ * ficam em `data` JSONB filtrados por table_name + company_id.
  * A service role ignora a RLS de company_memberships, então o company_id
- * passado aqui é a única fronteira entre empresas: toda query filtra por ele.
+ * passado aqui é a única fronteira entre empresas.
  */
 
 const SEED_DOC_ID = '__seed__';
