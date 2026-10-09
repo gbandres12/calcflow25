@@ -54,6 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pendingNfe = commercialOrders.filter((o) =>
     o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando' || o.nfeStatus === 'rascunho')
   ).slice(0, 5);
+  const rejectedNfe = commercialOrders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
   const getTxRealizedAmount = (t: Transaction): number => {
     if (Array.isArray(t.payments) && t.payments.length > 0) {
       return t.payments
