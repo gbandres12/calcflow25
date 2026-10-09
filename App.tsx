@@ -1607,6 +1607,7 @@ const App: React.FC = () => {
             </div>
           )}
           
+          <ErrorBoundary key={currentView} label={currentView} onReset={() => navigateTo('dashboard', true)}>
           <React.Suspense fallback={<ViewLoading />}>
           {currentView === 'dashboard' && (
             <Dashboard 
@@ -1621,15 +1622,14 @@ const App: React.FC = () => {
             />
           )}
           {(currentView === 'orders' || currentView === 'quotes') && (
-            <ErrorBoundary label="vendas">
-              <SalesOrders 
-                currentUser={currentUser}
-                orders={orders} 
-                customers={customers} 
-                inventory={inventory} 
-                accounts={accounts} 
-                company={operatingCompany}
-                companyId={activeCompanyId}
+            <SalesOrders 
+              currentUser={currentUser}
+              orders={orders} 
+              customers={customers} 
+              inventory={inventory} 
+              accounts={accounts} 
+              company={operatingCompany}
+              companyId={activeCompanyId}
                 onAddOrder={handleAddOrder} 
                 onAddCustomer={handleAddCustomer}
                 transportadores={transportadores}
@@ -1648,7 +1648,6 @@ const App: React.FC = () => {
                 onReviseReceipt={handleReviseReceipt}
                 mode={currentView === 'quotes' ? 'quotes' : 'orders'}
               />
-            </ErrorBoundary>
           )}
           {currentView === 'fiscal' && (
             <FiscalManagement 
@@ -1877,6 +1876,7 @@ const App: React.FC = () => {
             />
           )}
           </React.Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 
