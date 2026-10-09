@@ -4,6 +4,7 @@ import { parseNfeFileContent, ParsedNfDocument } from '../services/nfeDocumentPa
 import { isMineralNcm, matchStoreItem } from '../services/storeItemMatch';
 import { nextTransferCode } from '../services/ids';
 import { Company, StoreItem, StoreItemCategory, TransferItem, TransferShipment, User } from '../types';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 const CATEGORIES: StoreItemCategory[] = ['Peças', 'Lubrificantes', 'EPI', 'Ferramentas', 'Insumos', 'Outros'];
 
@@ -41,7 +42,7 @@ export const NfImportModal: React.FC<Props> = ({
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [driver, setDriver] = useState('');
   const [plate, setPlate] = useState('');
-  const [dateSent, setDateSent] = useState(new Date().toISOString().slice(0, 10));
+  const [dateSent, setDateSent] = useState(dateISOBR());
 
   useEffect(() => {
     if (!isOpen) {
@@ -53,7 +54,7 @@ export const NfImportModal: React.FC<Props> = ({
       setRows([]);
       setDriver('');
       setPlate('');
-      setDateSent(new Date().toISOString().slice(0, 10));
+      setDateSent(dateISOBR());
     }
   }, [isOpen]);
 

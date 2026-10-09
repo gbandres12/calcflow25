@@ -12,6 +12,7 @@ import {
 } from '../../types.js';
 import { newId, nextOrderReference, nextQuoteReference } from '../ids.js';
 import { defaultWarrantyDraft, productSheetFromInventory, warrantyFromDraft } from '../../utils/salesOrderProduct.js';
+import { dateISOBR } from "../../utils/dateFilterUtils";
 
 /**
  * Regras de escrita do agente do Telegram.
@@ -267,7 +268,7 @@ export function buildBudgetOrder(input: BuildBudgetOrderInput): SaleOrder {
   if (!input.customer?.id) throw new Error('Informe o cliente do orçamento.');
   const items = buildOrderItems(input);
   const subtotal = round2(items.reduce((sum, item) => sum + toNumber(item.total), 0));
-  const date = input.date || new Date().toISOString().split('T')[0];
+  const date = input.date || dateISOBR();
 
   return {
     id: newId('ord'),
@@ -302,7 +303,7 @@ export function buildSaleOrder(input: BuildSaleOrderInput): SaleOrder {
   if (!input.customer?.id) throw new Error('Informe o cliente do pedido.');
   const items = buildOrderItems(input);
   const subtotal = round2(items.reduce((sum, item) => sum + toNumber(item.total), 0));
-  const date = input.date || new Date().toISOString().split('T')[0];
+  const date = input.date || dateISOBR();
   const accountId = input.accountId || 'acc-1';
   const sheet =
     items.length > 1

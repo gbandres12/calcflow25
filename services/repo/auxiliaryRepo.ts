@@ -1,3 +1,4 @@
+import { dateISOBR } from "../../utils/dateFilterUtils";
 // services/repo/auxiliaryRepo.ts
 // Assemblers e fetchers para tabelas auxiliares e frota (Lote 1 de migração)
 
@@ -247,7 +248,7 @@ export async function upsertMaintenanceRecordToErp(companyId: string, record: an
       company_id: companyId,
       id: String(id),
       machine_id: machineId || '',
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || dateISOBR(),
       description: description || '',
       cost: Number(cost || 0),
       type: type || 'Preventiva',
@@ -267,7 +268,7 @@ export async function upsertFuelRecordToErp(companyId: string, record: any, supa
       company_id: companyId,
       id: String(id),
       machine_id: machineId || '',
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || dateISOBR(),
       liters: Number(liters || 0),
       price_per_liter: Number(pricePerLiter || 0),
       total_cost: Number(totalCost || 0),
@@ -287,7 +288,7 @@ export async function upsertFuelPurchaseToErp(companyId: string, record: any, su
     .upsert({
       company_id: companyId,
       id: String(id),
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || dateISOBR(),
       liters: Number(liters || 0),
       price_per_liter: Number(pricePerLiter || 0),
       total_cost: Number(totalCost || 0),

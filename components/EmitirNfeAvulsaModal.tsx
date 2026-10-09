@@ -16,6 +16,7 @@ import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { useToast } from './ui/Toast';
 import NfeRejectionHint from './NfeRejectionHint';
+import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface EmitirNfeAvulsaModalProps {
   customers: Customer[];
@@ -53,8 +54,7 @@ interface AvulsaItem {
   informacoesComplementares?: string;
 }
 
-const getLocalDateStr = (d: Date = new Date()) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const getLocalDateStr = (d: Date = new Date()) => dateISOBR(d);
 
 export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   customers = [],

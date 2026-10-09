@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { dateISOBR } from "../utils/dateFilterUtils";
 import { 
   Printer, Share2, Calendar, TrendingUp, TrendingDown, 
   DollarSign, CheckCircle2, Tag, ArrowUpRight, ArrowDownLeft,
@@ -28,7 +29,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
   onClose
 }) => {
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    dateISOBR()
   );
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
 

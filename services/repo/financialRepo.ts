@@ -1,4 +1,5 @@
 import type { FinancialAccount, Transaction, TransactionPayment } from '../../types';
+import { dateISOBR } from "../../utils/dateFilterUtils";
 
 export function assembleAccount(row: any): FinancialAccount {
   const extra = row.extra || {};
@@ -144,7 +145,7 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
       amount: Number(amount || 0),
       paid_amount: Number(paidAmount || 0),
       status: status || 'pendente',
-      date: date || new Date().toISOString().slice(0, 10),
+      date: date || dateISOBR(),
       payment_date: paymentDate || null,
       category: category || null,
       account_id: accountId || null,
@@ -170,7 +171,7 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
           id: String(pid),
           transaction_id: String(id),
           amount: Number(p.amount || 0),
-          payment_date: p.paymentDate || date || new Date().toISOString().slice(0, 10),
+          payment_date: p.paymentDate || date || dateISOBR(),
           payment_method: p.paymentMethod || paymentMethod || 'PIX',
           account_id: p.accountId || accountId || null,
           receipt_id: receiptRef ? String(receiptRef) : null,

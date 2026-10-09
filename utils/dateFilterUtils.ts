@@ -1,11 +1,17 @@
 export type DatePreset = 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH' | 'CUSTOM';
 
-export const getLocalDateStr = (d: Date = new Date()): string => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+/**
+ * Data (YYYY-MM-DD) no fuso de São Paulo / Brasília. Usar no lugar de
+ * `toISOString().slice(0, 10)`, que devolve a data em UTC e vira o
+ * dia seguinte depois das 21h no Brasil (inclusive no servidor da Vercel).
+ */
+const BR_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+});
+
+export const dateISOBR = (d: Date = new Date()): string => BR_DATE_FMT.format(d);
+
+export const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
 
 export const formatDateBR = (dateStr?: string): string => {
   if (!dateStr) return '-';
@@ -21,7 +27,7 @@ export const getDatePresetRange = (
   preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH'
 ): { startDate: string; endDate: string } => {
   const today = new Date();
-  const todayStr = getLocalDateStr(today);
+  const todayStr = dateISOBR(today);
 
   if (preset === 'ALL') {
     return { startDate: '', endDate: '' };
@@ -31,13 +37,17 @@ export const getDatePresetRange = (
   }
   if (preset === '7DAYS') {
     const past7 = new Date();
-    past7.setDate(today.getDate() - 7);
-    return { startDate: getLocalDateStr(past7), endDate: todayStr };
+    past7.setDate(past7.getDate() - 7);
+    return { startDate: dateISOBR(past7), endDate: todayStr };
   }
   if (preset === 'THIS_MONTH') {
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    return { startDate: getLocalDateStr(firstDay), endDate: getLocalDateStr(lastDay) };
+    const parts = todayStr.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const firstDayStr = `${parts[0]}-${parts[1]}-01`;
+    const lastDayNum = new Date(year, month, 0).getDate();
+    const lastDayStr = `${parts[0]}-${parts[1]}-${String(lastDayNum).padStart(2, '0')}`;
+    return { startDate: firstDayStr, endDate: lastDayStr };
   }
 
   return { startDate: '', endDate: '' };

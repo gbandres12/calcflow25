@@ -32,6 +32,7 @@ import { NfImportModal } from './NfImportModal';
 import { nextTransferCode } from '../services/ids';
 import { TransferRomaneioDocument } from './transfer-print/TransferRomaneioDocument';
 import { QuickRomaneioModal } from './QuickRomaneioModal';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface TransferManagementProps {
   transfers: TransferShipment[];
@@ -85,7 +86,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
     code: '',
     originLocation: 'Polo de Compras Santarém (Av. Mendonça Furtado)',
     destinationLocation: 'Fazenda Usina Matriz (Zona Rural / Rodovia)',
-    dateSent: new Date().toISOString().split('T')[0],
+    dateSent: dateISOBR(),
     sentBy: currentUser?.name || 'Compras / Expedição Santarém',
     carrierOrDriver: '',
     vehiclePlate: '',
@@ -117,7 +118,7 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
       code: nextTransferCode(safeTransfers),
       originLocation: 'Polo de Compras Santarém (Av. Mendonça Furtado)',
       destinationLocation: 'Fazenda Usina Matriz (Zona Rural / Rodovia)',
-      dateSent: new Date().toISOString().split('T')[0],
+      dateSent: dateISOBR(),
       sentBy: currentUser?.name ? `${currentUser.name} (Compras Santarém)` : 'Compras / Expedição Santarém',
       carrierOrDriver: '',
       vehiclePlate: '',

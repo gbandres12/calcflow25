@@ -25,6 +25,7 @@ import { QuickEntryDialog } from './QuickEntryDialog';
 import { ReceivePayDialog } from './ReceivePayDialog';
 import { DailyFinancialReport } from './DailyFinancialReport';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { dateISOBR, getDatePresetRange } from '../utils/dateFilterUtils';
 
 interface TransactionsProps {
   transactions: Transaction[];
@@ -95,37 +96,14 @@ export const Transactions: React.FC<TransactionsProps> = ({
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
   };
-
-  const getLocalDateStr = (d: Date = new Date()): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
 
   // Presets de Data
   const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH') => {
     setActiveDatePreset(preset);
-    const today = new Date();
-    const todayStr = getLocalDateStr(today);
-
-    if (preset === 'ALL') {
-      setStartDate('');
-      setEndDate('');
-    } else if (preset === 'TODAY') {
-      setStartDate(todayStr);
-      setEndDate(todayStr);
-    } else if (preset === '7DAYS') {
-      const past7 = new Date();
-      past7.setDate(today.getDate() - 7);
-      setStartDate(getLocalDateStr(past7));
-      setEndDate(todayStr);
-    } else if (preset === 'THIS_MONTH') {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      setStartDate(getLocalDateStr(firstDay));
-      setEndDate(getLocalDateStr(lastDay));
-    }
+    const range = getDatePresetRange(preset);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
   };
 
   const handleCustomDateChange = (type: 'start' | 'end', value: string) => {

@@ -16,6 +16,7 @@ import {
 import { CategorySuggestion } from './CategorySuggestion';
 import { CostCenterSuggestion } from './CostCenterSuggestion';
 import { INFLOW_CATEGORIES, OUTFLOW_CATEGORIES } from '../constants';
+import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface QuickEntryDialogProps {
   isOpen: boolean;
@@ -47,12 +48,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
   const [category, setCategory] = useState(OUTFLOW_CATEGORIES[0]);
   const [customerId, setCustomerId] = useState('');
   const [contactName, setContactName] = useState('');
-  const getLocalDateStr = (d: Date = new Date()): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
 
   const [date, setDate] = useState(getLocalDateStr());
   const [paymentMethod, setPaymentMethod] = useState('PIX');

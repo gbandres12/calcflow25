@@ -8,6 +8,7 @@ import {
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
 import { printThermalTicket } from '../services/domain/thermalTicket';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface YardManagementProps {
   machines: Machine[];
@@ -60,7 +61,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
   // Formulário Manutenção
   const [maintForm, setMaintForm] = useState({
     machineId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: dateISOBR(),
     description: '',
     cost: 0,
     type: 'Preventiva' as MaintenanceRecord['type'],
@@ -137,7 +138,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
     e.preventDefault();
     onAddMaintenance(maintForm);
     setIsMaintModalOpen(false);
-    setMaintForm({ machineId: '', date: new Date().toISOString().split('T')[0], description: '', cost: 0, type: 'Preventiva', horimeter: 0 });
+    setMaintForm({ machineId: '', date: dateISOBR(), description: '', cost: 0, type: 'Preventiva', horimeter: 0 });
   };
 
   const handleSaveWithdrawal = (withdrawal: OrderWithdrawal) => {

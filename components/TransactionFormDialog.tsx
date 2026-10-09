@@ -18,6 +18,7 @@ import { CategorySuggestion } from './CategorySuggestion';
 import { CostCenterSuggestion } from './CostCenterSuggestion';
 import { INFLOW_CATEGORIES, OUTFLOW_CATEGORIES } from '../constants';
 import { openOrdersForReceipt, openReceivables, orderOpenBalance, transactionOpenBalance, ReceiptInput } from '../services/receiptLink';
+import { dateISOBR } from '../utils/dateFilterUtils';
 
 export type ReceiptLink = { kind: 'order' | 'receivable'; id: string };
 
@@ -61,12 +62,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('fixed');
   const [discountValueStr, setDiscountValueStr] = useState('0');
   
-  const getLocalDateStr = (d: Date = new Date()): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
 
   const [paidAmountStr, setPaidAmountStr] = useState('');
   const [date, setDate] = useState(getLocalDateStr());

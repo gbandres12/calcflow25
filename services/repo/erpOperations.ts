@@ -1,4 +1,5 @@
 import { getSupabase } from '../supabaseClient';
+import { dateISOBR } from "../../utils/dateFilterUtils";
 
 export const erpOperations = {
   /**
@@ -24,7 +25,7 @@ export const erpOperations = {
       p_company_id: params.companyId,
       p_order_id: params.orderId,
       p_amount: params.amount,
-      p_date: params.date || new Date().toISOString().split('T')[0],
+      p_date: params.date || dateISOBR(),
       p_method: params.method || 'PIX',
       p_account_id: params.accountId || null,
       p_received_by: params.receivedBy || null,

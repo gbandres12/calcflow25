@@ -60,6 +60,14 @@ function webhookAuthorized(req: any): boolean {
   return received === expected;
 }
 
+const todayInBrazil = (): string =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+
 function buildContext(link: TelegramLink): AgentContext {
   return {
     companyId: link.companyId,
@@ -71,7 +79,7 @@ function buildContext(link: TelegramLink): AgentContext {
     },
     repo,
     allowWrites: writesEnabled(),
-    today: new Date().toISOString().split('T')[0]
+    today: todayInBrazil()
   };
 }
 

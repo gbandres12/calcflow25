@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Machine, FuelRecord, FuelPurchase, FuelType } from '../types';
 import { Fuel, Plus, History, X, Droplets, TrendingUp, TrendingDown, DollarSign, Truck, ShoppingCart, Container } from 'lucide-react';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface FuelManagementProps {
   machines: Machine[];
@@ -19,7 +20,7 @@ const FuelManagement: React.FC<FuelManagementProps> = ({ machines, fuelRecords, 
   // Form Consumption
   const [consumptionForm, setConsumptionForm] = useState({
     machineId: '',
-    date: new Date().toISOString().split('T')[0],
+    date: dateISOBR(),
     liters: 0,
     pricePerLiter: 0,
     horimeter: 0,
@@ -28,7 +29,7 @@ const FuelManagement: React.FC<FuelManagementProps> = ({ machines, fuelRecords, 
 
   // Form Purchase
   const [purchaseForm, setPurchaseForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: dateISOBR(),
     liters: 0,
     pricePerLiter: 0,
     supplier: '',
@@ -61,7 +62,7 @@ const FuelManagement: React.FC<FuelManagementProps> = ({ machines, fuelRecords, 
       totalCost: consumptionForm.liters * consumptionForm.pricePerLiter
     });
     setIsConsumptionModalOpen(false);
-    setConsumptionForm({ machineId: '', date: new Date().toISOString().split('T')[0], liters: 0, pricePerLiter: 0, horimeter: 0, fuelType: 'S10' });
+    setConsumptionForm({ machineId: '', date: dateISOBR(), liters: 0, pricePerLiter: 0, horimeter: 0, fuelType: 'S10' });
   };
 
   const handlePurchaseSubmit = (e: React.FormEvent) => {
@@ -71,7 +72,7 @@ const FuelManagement: React.FC<FuelManagementProps> = ({ machines, fuelRecords, 
       totalCost: purchaseForm.liters * purchaseForm.pricePerLiter
     });
     setIsPurchaseModalOpen(false);
-    setPurchaseForm({ date: new Date().toISOString().split('T')[0], liters: 0, pricePerLiter: 0, supplier: '', fuelType: 'S10' });
+    setPurchaseForm({ date: dateISOBR(), liters: 0, pricePerLiter: 0, supplier: '', fuelType: 'S10' });
   };
 
   return (

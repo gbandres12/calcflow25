@@ -1,4 +1,5 @@
 import type { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, OrderWithdrawal, PaymentReceipt } from '../../types';
+import { dateISOBR } from "../../utils/dateFilterUtils";
 
 export function assembleOrder(
   header: any,
@@ -371,7 +372,7 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
         id: String(instId || `${id}_inst_${idx + 1}`),
         order_id: String(id),
         amount: Number(amount || 0),
-        due_date: dueDate || pDate || new Date().toISOString().slice(0, 10),
+        due_date: dueDate || pDate || dateISOBR(),
         status: instStatus || 'PENDENTE',
         paid_amount: Number(paidAmount || 0),
         payment_method: instPm || null,
@@ -413,7 +414,7 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
         customer_id: rCust || customerId || null,
         order_reference: orderReference || reference || null,
         amount: Number(amount || 0),
-        payment_date: rDate || new Date().toISOString().slice(0, 10),
+        payment_date: rDate || dateISOBR(),
         payment_method: rPm || 'PIX',
         account_id: accountId || null,
         received_by: receivedBy || null,

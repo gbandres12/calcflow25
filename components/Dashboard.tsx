@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
 import {
   Transaction, InventoryItem, Customer, TransactionType, View, User,
-  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, TransferStatus
+  SaleOrder, FinancialAccount, OrderStatus, TransferShipment, TransferStatus,
+  TransactionStatus
 } from '../types';
 import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -20,15 +22,18 @@ interface DashboardProps {
 
 const brl = (n: number) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const tons = (n: number) => `${(Number(n) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} t`;
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => dateISOBR();
 const isoDaysAgo = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+  return dateISOBR(date);
 };
 
+// Prioriza id exato; só cai na busca por nome se não achar (evita pegar
+// "Moído fino" quando existe o item 'moido').
 const stockOf = (inventory: InventoryItem[], keys: string[]) =>
-  inventory.find((i) => keys.some((k) => (i.id || '').toLowerCase().includes(k) || (i.name || '').toLowerCase().includes(k)));
+  inventory.find((i) => keys.includes((i.id || '').toLowerCase())) ||
+  inventory.find((i) => keys.some((k) => (i.name || '').toLowerCase().includes(k)));
 
 const Dashboard: React.FC<DashboardProps> = ({
   transactions, inventory, customers, orders = [], accounts = [], transfers = [],
@@ -49,15 +54,38 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pendingNfe = commercialOrders.filter((o) =>
     o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando' || o.nfeStatus === 'rascunho')
   ).slice(0, 5);
-  const rejectedNfe = commercialOrders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
-  const dayTx = transactions.filter((t) => (t.date || '').slice(0, 10) === today);
-  const cashIn = (t: Transaction) => Number(t.paidAmount || 0);
-  const cashOut = (t: Transaction) => Number(t.paidAmount || 0);
-  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + cashIn(t), 0);
-  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + cashOut(t), 0);
+  const getTxRealizedAmount = (t: Transaction): number => {
+    if (Array.isArray(t.payments) && t.payments.length > 0) {
+      return t.payments
+        .filter((p) => !p.isDiscountOrDeduction)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    }
+    const isPaidOrConfirmed =
+      t.status === TransactionStatus.CONFIRMADO ||
+      t.status === TransactionStatus.PAGO ||
+      t.status === TransactionStatus.PARCIAL;
+    if (!isPaidOrConfirmed) return 0;
+    if (t.paidAmount !== undefined && t.paidAmount !== null && Number(t.paidAmount) > 0) {
+      return Number(t.paidAmount);
+    }
+    if (t.status === TransactionStatus.PAGO || t.status === TransactionStatus.CONFIRMADO) {
+      return Number(t.amount || 0);
+    }
+    return 0;
+  };
+
+  const dayTx = transactions.filter((t) => {
+    const txDate = (t.paymentDate || t.date || '').slice(0, 10);
+    return txDate === today;
+  });
+  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + getTxRealizedAmount(t), 0);
+  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + getTxRealizedAmount(t), 0);
   const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
-  const saldoDia = saldoContas + dayTx.reduce((s, t) => {
-    const v = Number(t.paidAmount || 0);
+  // Saldo real = saldo inicial das contas + todo histórico realizado até hoje (inclui pagamentos e baixas)
+  const saldoDia = saldoContas + transactions.reduce((s, t) => {
+    const txDate = (t.paymentDate || t.date || '').slice(0, 10);
+    if (txDate && txDate > today) return s;
+    const v = getTxRealizedAmount(t);
     return t.type === TransactionType.SALE ? s + v : s - v;
   }, 0);
   const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
@@ -72,9 +100,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       const date = isoDaysAgo(6 - index);
       const daily = transactions.filter((tx) => (tx.paymentDate || tx.date || '').slice(0, 10) === date);
       const receivedDay = daily.filter((tx) => tx.type === TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || 0), 0);
+        .reduce((sum, tx) => sum + getTxRealizedAmount(tx), 0);
       const spentDay = daily.filter((tx) => tx.type !== TransactionType.SALE)
-        .reduce((sum, tx) => sum + Number(tx.paidAmount || 0), 0);
+        .reduce((sum, tx) => sum + getTxRealizedAmount(tx), 0);
       return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: receivedDay, saidas: spentDay };
     });
     return {

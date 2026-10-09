@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, CostCenter, Category } from '../types';
 import { INITIAL_COST_CENTERS } from '../constants';
+import { dateISOBR } from "../utils/dateFilterUtils";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -34,7 +35,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
   const [selectedCCId, setSelectedCCId] = useState('Todos');
   const [isClosureModalOpen, setIsClosureModalOpen] = useState(false);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = dateISOBR();
 
   const allCategoryNames = useMemo(() => {
     const names = categories.map(c => c.name);

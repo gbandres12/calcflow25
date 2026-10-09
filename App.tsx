@@ -2,24 +2,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import Inventory from './components/Inventory';
-import Customers from './components/Customers';
-import CashFlow from './components/CashFlow';
-import { DailyFinancialManagement } from './components/DailyFinancialManagement';
-import MillingProcess from './components/MillingProcess';
-import FinancialAccounts from './components/FinancialAccounts';
-import SalesOrders from './components/SalesOrders';
-import TransactionsArea from './components/Transactions';
-import FleetManagement from './components/FleetManagement';
-import YardManagement from './components/YardManagement';
-import FuelManagement from './components/FuelManagement';
-import UserManagement from './components/UserManagement';
-import CategorySettings from './components/CategorySettings';
-import { FiscalManagement } from './components/FiscalManagement';
-import { FiscalConfigView } from './components/FiscalConfigView';
-import Transportadores from './components/Transportadores';
+const Inventory = React.lazy(() => import('./components/Inventory'));
+const Customers = React.lazy(() => import('./components/Customers'));
+const CashFlow = React.lazy(() => import('./components/CashFlow'));
+const DailyFinancialManagement = React.lazy(() => import('./components/DailyFinancialManagement').then((m) => ({ default: m.DailyFinancialManagement })));
+const MillingProcess = React.lazy(() => import('./components/MillingProcess'));
+const FinancialAccounts = React.lazy(() => import('./components/FinancialAccounts'));
+const SalesOrders = React.lazy(() => import('./components/SalesOrders'));
+const TransactionsArea = React.lazy(() => import('./components/Transactions'));
+const FleetManagement = React.lazy(() => import('./components/FleetManagement'));
+const YardManagement = React.lazy(() => import('./components/YardManagement'));
+const FuelManagement = React.lazy(() => import('./components/FuelManagement'));
+const UserManagement = React.lazy(() => import('./components/UserManagement'));
+const CategorySettings = React.lazy(() => import('./components/CategorySettings'));
+const FiscalManagement = React.lazy(() => import('./components/FiscalManagement').then((m) => ({ default: m.FiscalManagement })));
+const FiscalConfigView = React.lazy(() => import('./components/FiscalConfigView').then((m) => ({ default: m.FiscalConfigView })));
+const Transportadores = React.lazy(() => import('./components/Transportadores'));
 import ErrorBoundary from './components/ErrorBoundary';
-import TransfersPage from './components/TransfersPage';
+const TransfersPage = React.lazy(() => import('./components/TransfersPage'));
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
@@ -61,14 +61,24 @@ import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authL
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
-import CompanyBranches from './components/CompanyBranches';
+const CompanyBranches = React.lazy(() => import('./components/CompanyBranches'));
 import SetNewPassword from './components/SetNewPassword';
-import Loadings from './components/Loadings';
+const Loadings = React.lazy(() => import('./components/Loadings'));
 import CommandPalette from './components/CommandPalette';
 import { isViewAllowed } from './services/viewAccess';
 import { useToast } from './components/ui/Toast';
 import { useConfirm } from './components/ui/ConfirmDialog';
 import { getSupabase, initialAuthRedirect } from './services/supabaseClient';
+import { dateISOBR } from "./utils/dateFilterUtils";
+import { parseViewFromLocation, updateBrowserUrl, getViewTitle } from './services/routes';
+
+// Telas carregadas sob demanda: reduz o bundle inicial (antes 3,1 MB num arquivo só).
+const ViewLoading: React.FC = () => (
+  <div className="flex items-center justify-center py-24 text-sm text-muted" role="status" aria-live="polite">
+    <span className="h-5 w-5 mr-3 rounded-full border-2 border-forest/30 border-t-forest animate-spin" />
+    Carregando…
+  </div>
+);
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -95,7 +105,45 @@ const App: React.FC = () => {
   };
   const toast = useToast();
   const confirmDialog = useConfirm();
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [currentView, setCurrentView] = useState<View>(() => parseViewFromLocation());
+
+  const navigateTo = (view: View, replace = false) => {
+    let target = view;
+    if (currentUser && !isViewAllowed(currentUser, target)) {
+      target = 'dashboard';
+    }
+    setCurrentView(target);
+    updateBrowserUrl(target, replace);
+  };
+
+  // Suporte a histórico do navegador (botões Voltar / Avançar e links diretos)
+  useEffect(() => {
+    const handlePopState = () => {
+      const v = parseViewFromLocation();
+      if (currentUser && !isViewAllowed(currentUser, v)) {
+        setCurrentView('dashboard');
+        updateBrowserUrl('dashboard', true);
+      } else {
+        setCurrentView(v);
+        document.title = getViewTitle(v);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentUser]);
+
+  // Ao carregar ou alternar usuário, alinha o endereço no navegador com a rota canônica
+  useEffect(() => {
+    if (currentUser) {
+      if (!isViewAllowed(currentUser, currentView)) {
+        navigateTo('dashboard', true);
+      } else {
+        updateBrowserUrl(currentView, true);
+      }
+    }
+  }, [currentUser]);
+
   const [syncing, setSyncing] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
@@ -1427,7 +1475,7 @@ const App: React.FC = () => {
     <div className="cf-app-shell min-h-screen flex flex-col lg:flex-row">
       <Sidebar 
         currentView={currentView} 
-        onNavigate={setCurrentView} 
+        onNavigate={navigateTo} 
         user={currentUser}
         onLogout={() => handleSetCurrentUser(null)}
         onChangePassword={isDemoCompany(activeCompanyId) ? undefined : () => { setMobileMenuOpen(false); setShowChangePassword(true); }}
@@ -1475,7 +1523,7 @@ const App: React.FC = () => {
                       <button
                         key={m.companyId}
                         type="button"
-                        onClick={() => { setSelectedCompanyId(m.companyId); setCompanySwitcherOpen(false); setCurrentView('dashboard'); }}
+                        onClick={() => { setSelectedCompanyId(m.companyId); setCompanySwitcherOpen(false); navigateTo('dashboard'); }}
                         className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 ${m.companyId === activeCompanyId ? 'bg-emerald-50 font-semibold text-emerald-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <span className="truncate">{m.companyName || (m.isBranch ? 'Filial' : (currentUser.companyName || 'Matriz'))}</span>
@@ -1559,6 +1607,7 @@ const App: React.FC = () => {
             </div>
           )}
           
+          <React.Suspense fallback={<ViewLoading />}>
           {currentView === 'dashboard' && (
             <Dashboard 
               transactions={transactions} 
@@ -1568,7 +1617,7 @@ const App: React.FC = () => {
               accounts={accounts}
               transfers={transfers}
               user={currentUser}
-              onNavigate={setCurrentView} 
+              onNavigate={navigateTo} 
             />
           )}
           {(currentView === 'orders' || currentView === 'quotes') && (
@@ -1614,7 +1663,7 @@ const App: React.FC = () => {
               onUpdateCustomer={handleUpdateCustomer}
               onUpdateOrder={handleUpdateOrder} 
               onAddOrder={handleAddOrder}
-              onNavigate={setCurrentView}
+              onNavigate={navigateTo}
               canConfigure={currentUser.role === 'Administrador' || (currentUser.role === 'Gerente' && Boolean(currentUser.permissions?.financial))}
             />
           )}
@@ -1622,7 +1671,7 @@ const App: React.FC = () => {
             <FiscalConfigView 
               company={operatingCompany}
               companyId={activeCompanyId}
-              onNavigate={setCurrentView}
+              onNavigate={navigateTo}
             />
           )}
           {currentView === 'inventory' && (
@@ -1637,7 +1686,7 @@ const App: React.FC = () => {
                   : paidAmount > 0
                     ? TransactionStatus.PARCIAL
                     : TransactionStatus.PENDENTE;
-                const date = new Date().toISOString().split('T')[0];
+                const date = dateISOBR();
                 processStockChange('britado', q); 
                 handleAddTransaction({ 
                   accountId: accounts[0]?.id || 'acc-1', 
@@ -1668,14 +1717,14 @@ const App: React.FC = () => {
               onSale={(q, p, c) => handleAddOrder({ 
                 customerId: c, 
                 sellerName: currentUser.name, 
-                date: new Date().toISOString().split('T')[0], 
+                date: dateISOBR(), 
                 total: q * p, 
                 subtotal: q * p, 
                 discount: 0, 
                 shipping: 0, 
                 status: OrderStatus.FINALIZED, 
                 items: [{ productId: 'moido', productCode: 'CALC-MOI', productName: 'Calcário Agrícola Moído (Granel)', unit: 'Ton', quantity: q, unitPrice: p, discount: 0, total: q * p }], 
-                payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: new Date().toISOString().split('T')[0], status: TransactionStatus.CONFIRMADO, accountId: accounts[0]?.id || 'acc-1', description: 'Venda Direta de Pátio' }] 
+                payments: [{ id: `pay-${Date.now()}`, amount: q * p, paidAmount: q * p, date: dateISOBR(), status: TransactionStatus.CONFIRMADO, accountId: accounts[0]?.id || 'acc-1', description: 'Venda Direta de Pátio' }] 
               })} 
               onAddProduct={handleAddInventoryItem} 
               onUpdateProduct={handleUpdateInventoryItem}
@@ -1827,13 +1876,14 @@ const App: React.FC = () => {
               onDeleteCategory={handleDeleteCategory} 
             />
           )}
+          </React.Suspense>
         </div>
       </main>
 
       {/* Barra de Navegação Inferior Rápida para Celular (PWA / Mobile) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#0F5948] border-t border-[#1B6B58] px-2 py-2 flex items-center justify-around z-40 print:hidden shadow-2xl">
         <button
-          onClick={() => setCurrentView('dashboard')}
+          onClick={() => navigateTo('dashboard')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
             currentView === 'dashboard' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
@@ -1844,7 +1894,7 @@ const App: React.FC = () => {
 
         {isViewAllowed(currentUser, 'orders') && (
           <button
-            onClick={() => setCurrentView('orders')}
+            onClick={() => navigateTo('orders')}
             className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
               currentView === 'orders' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
             }`}
@@ -1855,7 +1905,7 @@ const App: React.FC = () => {
         )}
 
         <button
-          onClick={() => setCurrentView('yard')}
+          onClick={() => navigateTo('yard')}
           className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
             currentView === 'yard' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
           }`}
@@ -1866,7 +1916,7 @@ const App: React.FC = () => {
 
         {isViewAllowed(currentUser, 'inventory') && (
           <button
-            onClick={() => setCurrentView('inventory')}
+            onClick={() => navigateTo('inventory')}
             className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
               currentView === 'inventory' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
             }`}
@@ -1878,7 +1928,7 @@ const App: React.FC = () => {
 
         {isViewAllowed(currentUser, 'transfers') && (
           <button
-            onClick={() => setCurrentView('transfers')}
+            onClick={() => navigateTo('transfers')}
             className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
               currentView === 'transfers' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
             }`}
@@ -1890,7 +1940,7 @@ const App: React.FC = () => {
 
         {isViewAllowed(currentUser, 'fiscal') && (
           <button
-            onClick={() => setCurrentView('fiscal')}
+            onClick={() => navigateTo('fiscal')}
             className={`flex flex-col items-center gap-1 p-1.5 rounded-xl transition-all ${
               currentView === 'fiscal' ? 'text-[#F1D67A] font-bold' : 'text-[#D5E3DC] hover:text-white'
             }`}
@@ -1915,7 +1965,7 @@ const App: React.FC = () => {
         user={currentUser}
         orders={orders}
         customers={customers}
-        onNavigate={(view) => { setCurrentView(view); setMobileMenuOpen(false); }}
+        onNavigate={(view) => { navigateTo(view); setMobileMenuOpen(false); }}
       />
 
       {showChangePassword && (

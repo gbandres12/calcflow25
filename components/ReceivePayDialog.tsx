@@ -11,6 +11,7 @@ import {
   TransactionPayment 
 } from '../types';
 import { FlowSheet } from './ui/FlowSheet';
+import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface ReceivePayDialogProps {
   isOpen: boolean;
@@ -35,12 +36,7 @@ export const ReceivePayDialog: React.FC<ReceivePayDialogProps> = ({
   const currentPaid = Number(transaction.paidAmount || 0);
   const remainingBalance = Math.max(0, totalAmount - currentPaid);
 
-  const getLocalDateStr = (d: Date = new Date()): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
 
   // States do formulário
   const [payAmountStr, setPayAmountStr] = useState(remainingBalance.toString());

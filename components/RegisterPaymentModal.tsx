@@ -3,6 +3,7 @@ import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company } from '
 import { orderReceiptsPaid } from '../services/saleNfe';
 import { CheckCircle } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface RegisterPaymentModalProps {
   order: SaleOrder;
@@ -34,7 +35,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [receivedBy, setReceivedBy] = useState('Setor Financeiro / Caixa');
   const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(dateISOBR());
   const [formError, setFormError] = useState('');
 
   const amountNum = parseFloat(amount) || 0;

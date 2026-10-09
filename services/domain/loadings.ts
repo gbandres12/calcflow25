@@ -1,4 +1,5 @@
 import { Customer, OrderStatus, SaleOrder } from '../../types.js';
+import { dateISOBR } from '../../utils/dateFilterUtils';
 
 /** Uma linha da planilha de carregamentos: um caminhão que saiu da balança. */
 export interface LoadingRow {
@@ -113,11 +114,8 @@ export function openOrdersForLoading(orders: SaleOrder[], customerId?: string): 
   );
 }
 
-/** Data do dia no fuso do aparelho — toISOString() vira o dia seguinte depois das 21h no Brasil. */
-export const localIsoDate = (date: Date = new Date()): string => {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-};
+/** Data do dia no fuso de Brasília — toISOString() vira o dia seguinte depois das 21h no Brasil. */
+export const localIsoDate = (date: Date = new Date()): string => dateISOBR(date);
 
 export const formatTons = (value: number | null | undefined): string =>
   value == null ? '—' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });

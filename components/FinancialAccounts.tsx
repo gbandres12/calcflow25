@@ -6,6 +6,7 @@ import {
   Info, X, Lock, ShieldAlert, CheckCircle2, Building, Scale, AlertTriangle 
 } from 'lucide-react';
 import { useToast } from './ui/Toast';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface AccountsProps {
   accounts: FinancialAccount[];
@@ -121,7 +122,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
     if (Math.abs(diff) > 0.01) {
       onAddTransaction({
         accountId: reconcilingAccount.id,
-        date: new Date().toISOString().split('T')[0],
+        date: dateISOBR(),
         type: diff > 0 ? TransactionType.SALE : TransactionType.EXPENSE,
         status: TransactionStatus.CONFIRMADO,
         description: `Ajuste de Conciliação (Caixa Real)`,

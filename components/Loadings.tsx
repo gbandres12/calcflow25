@@ -3,6 +3,7 @@ import { Download, FileSpreadsheet, Search, Truck, X } from 'lucide-react';
 import { Customer, OrderStatus, SaleOrder } from '../types';
 import { Button } from './ui/Button';
 import { DataTable, DataTableColumn } from './ui/DataTable';
+import { dateISOBR } from "../utils/dateFilterUtils";
 import {
   LoadingRow,
   buildLoadingRows,
@@ -95,7 +96,7 @@ export const Loadings: React.FC<Props> = ({ orders, customers }) => {
     const link = document.createElement('a');
     const tag = selectedCustomer ? `-${selectedCustomer.name.replace(/[^\w]+/g, '_')}` : '';
     link.href = url;
-    link.download = `carregamentos${tag}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `carregamentos${tag}-${dateISOBR()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };

@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { COMPANY_INFO, INFLOW_CATEGORIES, OUTFLOW_CATEGORIES, INITIAL_COST_CENTERS } from '../constants';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface DailyFinancialManagementProps {
   transactions: Transaction[];
@@ -62,15 +63,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   onPrintReceipt,
   onVerifyDeletionPassword
 }) => {
-  // Format date in local timezone YYYY-MM-DD
-  const getLocalDateStr = (d: Date = new Date()): string => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getTodayStr = () => getLocalDateStr(new Date());
+  // Data no fuso horário brasileiro (America/Sao_Paulo) YYYY-MM-DD
+  const getLocalDateStr = (d: Date = new Date()): string => dateISOBR(d);
+  const getTodayStr = () => dateISOBR();
 
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
@@ -102,13 +97,13 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const handlePrevDay = () => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() - 1);
-    setSelectedDate(getLocalDateStr(d));
+    setSelectedDate(dateISOBR(d));
   };
 
   const handleNextDay = () => {
     const d = new Date(selectedDate + 'T12:00:00');
     d.setDate(d.getDate() + 1);
-    setSelectedDate(getLocalDateStr(d));
+    setSelectedDate(dateISOBR(d));
   };
 
   const handleSetToday = () => {
@@ -118,7 +113,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const handleSetYesterday = () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    setSelectedDate(getLocalDateStr(d));
+    setSelectedDate(dateISOBR(d));
   };
 
   // Mathematical balance and movement calculations

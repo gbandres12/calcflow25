@@ -1,5 +1,6 @@
 import { StoreItem, StoreItemCategory, TransferItem, TransferShipment, User } from '../types';
 import { nextTransferCode } from './ids';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 export const QUICK_ROMANEIO_ORIGIN = 'Polo de Compras Santarém (Av. Mendonça Furtado)';
 export const QUICK_ROMANEIO_DESTINATION = 'Fazenda Usina Matriz (Zona Rural / Rodovia)';
@@ -141,7 +142,7 @@ export function cloneTransferAsQuickRomaneio(
     code: nextTransferCode(transfers),
     originLocation: QUICK_ROMANEIO_ORIGIN,
     destinationLocation: QUICK_ROMANEIO_DESTINATION,
-    dateSent: new Date().toISOString().split('T')[0],
+    dateSent: dateISOBR(),
     sentBy: currentUser?.name ? `${currentUser.name} (Compras Santarém)` : (source.sentBy || 'Compras / Expedição Santarém'),
     carrierOrDriver: source.carrierOrDriver,
     vehiclePlate: source.vehiclePlate,
@@ -161,7 +162,7 @@ export function buildBlankQuickRomaneio(
     code: nextTransferCode(transfers),
     originLocation: QUICK_ROMANEIO_ORIGIN,
     destinationLocation: QUICK_ROMANEIO_DESTINATION,
-    dateSent: new Date().toISOString().split('T')[0],
+    dateSent: dateISOBR(),
     sentBy: currentUser?.name ? `${currentUser.name} (Compras Santarém)` : 'Compras / Expedição Santarém',
     carrierOrDriver: '',
     vehiclePlate: '',

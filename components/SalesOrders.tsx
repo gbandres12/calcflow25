@@ -58,6 +58,7 @@ import { useToast } from './ui/Toast';
 import { useConfirm } from './ui/ConfirmDialog';
 import OrderTimeline from './OrderTimeline';
 import { formatTons } from '../services/domain/loadings';
+import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface SalesOrdersProps {
   currentUser?: { id: string; name?: string; email?: string } | null;
@@ -195,7 +196,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         reference: String(item.reference || `PED-${String(item.id).slice(-6)}`),
         customerId: String(item.customerId || ''),
         sellerName: String(item.sellerName || ''),
-        date: String(item.date || new Date().toISOString().split('T')[0]),
+        date: String(item.date || dateISOBR()),
         subtotal: Number(item.subtotal) || 0,
         discount: Number(item.discount) || 0,
         shipping: Number(item.shipping) || 0,
@@ -494,7 +495,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             id: String(p.id),
             amount: Number(p.amount) || 0,
             paidAmount: Number(p.paidAmount) || 0,
-            date: String(p.date || new Date().toISOString().split('T')[0]),
+            date: String(p.date || dateISOBR()),
             accountId: String(p.accountId || accounts[0]?.id || ''),
             description: String(p.description || '')
           }))
@@ -512,7 +513,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       id: `pay-${Date.now()}-${Math.random()}`,
       amount: remainingToProgram > 0 ? remainingToProgram : 0,
       paidAmount: 0,
-      date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      date: dateISOBR(new Date(Date.now() + 30 * 86400000)),
       status: TransactionStatus.PENDENTE,
       accountId: accounts[0]?.id || '',
       description: `Parcela ${payments.length + 1}`
@@ -573,7 +574,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         customerName: selectedCustomer?.name || 'Cliente Geral',
         customerDocument: selectedCustomer?.document,
         amount: downPaymentNum,
-        date: new Date().toISOString().split('T')[0],
+        date: dateISOBR(),
         paymentMethod: downPaymentMethod,
         accountId: downPaymentAccount,
         accountName: selectedAcc?.name || 'Caixa',
@@ -591,9 +592,9 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     const orderPayload = {
       customerId: selectedCustomerId,
       sellerName: 'Vendedor Responsável',
-      date: editingOrder?.date || new Date().toISOString().split('T')[0],
-      deliveryDate: new Date().toISOString().split('T')[0],
-      validUntil: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      date: editingOrder?.date || dateISOBR(),
+      deliveryDate: dateISOBR(),
+      validUntil: dateISOBR(new Date(Date.now() + 15 * 86400000)),
       subtotal: itemsSubtotal,
       discount: parseFloat(discount) || 0,
       shipping: parseFloat(shipping) || 0,
@@ -704,7 +705,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       const isLast = i === count;
       const amount = isLast ? Number((targetAmount - accumulated).toFixed(2)) : partAmount;
       accumulated += amount;
-      const dueDate = new Date(Date.now() + i * 30 * 86400000).toISOString().split('T')[0];
+      const dueDate = dateISOBR(new Date(Date.now() + i * 30 * 86400000));
       newPayments.push({
         id: `pay-${Date.now()}-${i}`,
         amount,
