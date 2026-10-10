@@ -1022,6 +1022,7 @@ const App: React.FC = () => {
         const appliedAmount = Math.min(outstanding, remainingReceipt);
         remainingReceipt -= appliedAmount;
         const paidAmount = Number(transaction.paidAmount || 0) + appliedAmount;
+        const isDeduction = receipt.type === 'ABATIMENTO';
         const updated: Transaction = {
           ...transaction,
           paidAmount,
@@ -1041,7 +1042,8 @@ const App: React.FC = () => {
               accountId: accId,
               paymentMethod: receipt.paymentMethod || 'PIX',
               notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
-              receiptId: receipt.id
+              receiptId: receipt.id,
+              isDiscountOrDeduction: isDeduction
             }
           ]
         };
@@ -1051,6 +1053,7 @@ const App: React.FC = () => {
 
       if (remainingReceipt <= 0.01) return updatedTransactions;
 
+      const isDeduction = receipt.type === 'ABATIMENTO';
       const tx: Transaction = {
         id: `tx-rcpt-${receipt.id}`,
         accountId: accId,
@@ -1059,7 +1062,7 @@ const App: React.FC = () => {
         type: TransactionType.SALE,
         status: TransactionStatus.CONFIRMADO,
         description: `${receipt.description} - ${receipt.customerName}`,
-        category: 'Venda Calcário Moído Granel',
+        category: isDeduction ? 'Abatimentos e Descontos Concedidos' : 'Venda Calcário Moído Granel',
         amount: remainingReceipt,
         paidAmount: remainingReceipt,
         customerId: receipt.customerId,
@@ -1076,7 +1079,8 @@ const App: React.FC = () => {
           accountId: accId,
           paymentMethod: receipt.paymentMethod || 'PIX',
           notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
-          receiptId: receipt.id
+          receiptId: receipt.id,
+          isDiscountOrDeduction: isDeduction
         }]
       };
       tx.payments![0].transactionId = tx.id;
@@ -1145,6 +1149,7 @@ const App: React.FC = () => {
       const applied = Math.min(outstanding, remaining);
       remaining -= applied;
       const paidAmount = Number(tx.paidAmount || 0) + applied;
+      const isDeduction = receipt.type === 'ABATIMENTO';
       const updated: Transaction = {
         ...tx,
         paidAmount,
@@ -1155,7 +1160,8 @@ const App: React.FC = () => {
         payments: [...(tx.payments || []), {
           id: receipt.id ? `pmt-${receipt.id}-${tx.id}` : newId('pmt'), transactionId: tx.id, amount: applied, paymentDate: receipt.date,
           accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id,
+          isDiscountOrDeduction: isDeduction
         }]
       };
       changed.push(updated);
@@ -1163,18 +1169,20 @@ const App: React.FC = () => {
     });
     if (remaining > 0.01) {
       const id = newId('tx');
+      const isDeduction = receipt.type === 'ABATIMENTO';
       const tx: Transaction = {
         id, accountId: accId, costCenterId: 'cc4', date: receipt.date,
         type: TransactionType.SALE, status: TransactionStatus.CONFIRMADO,
         description: `${receipt.description} - ${receipt.customerName}`,
-        category: 'Venda Calcário Moído Granel',
+        category: isDeduction ? 'Abatimentos e Descontos Concedidos' : 'Venda Calcário Moído Granel',
         amount: remaining, paidAmount: remaining,
         customerId: receipt.customerId, orderId, receiptId: receipt.id,
         paymentMethod: receipt.paymentMethod, notes: receipt.notes, companyId: activeCompanyId,
         payments: [{
           id: receipt.id ? `pmt-${receipt.id}-${id}` : newId('pmt'), transactionId: id, amount: remaining, paymentDate: receipt.date,
           accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id
+          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id,
+          isDiscountOrDeduction: isDeduction
         }]
       };
       changed.push(tx);
@@ -1793,6 +1801,7 @@ const App: React.FC = () => {
             <DailyFinancialManagement 
               transactions={transactions} 
               accounts={accounts} 
+              costCenters={costCenters}
               customers={customers}
               orders={orders}
               company={operatingCompany}

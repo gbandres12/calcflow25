@@ -47,7 +47,13 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
       const txDate = t.paymentDate || t.date;
       const dateMatch = (!startDate || txDate >= startDate) && (!endDate || txDate <= endDate);
       const categoryMatch = selectedCategory === 'Todas' || t.category === selectedCategory;
-      const ccMatch = selectedCCId === 'Todos' || t.costCenterId === selectedCCId || t.costCenter === selectedCCId;
+      let ccMatch = selectedCCId === 'Todos';
+      if (!ccMatch) {
+        const targetCc = INITIAL_COST_CENTERS.find(c => c.id === selectedCCId);
+        ccMatch = t.costCenterId === selectedCCId || 
+                  Boolean(targetCc && t.costCenter && t.costCenter.trim().toLowerCase() === targetCc.name.trim().toLowerCase()) ||
+                  t.costCenter === selectedCCId;
+      }
       return dateMatch && categoryMatch && ccMatch;
     });
   }, [transactions, startDate, endDate, selectedCategory, selectedCCId]);
@@ -63,7 +69,8 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
     filteredTransactions.forEach(t => {
       const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
-      const ccId = t.costCenterId || 'cc1';
+      const resolvedCc = INITIAL_COST_CENTERS.find(c => c.id === t.costCenterId || (t.costCenter && c.name.toLowerCase() === t.costCenter.toLowerCase()));
+      const ccId = resolvedCc?.id || t.costCenterId || 'cc1';
 
       if (hasPayments) {
         t.payments!.forEach(pmt => {
@@ -87,6 +94,11 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
           t.status === TransactionStatus.PAGO || 
           t.status === TransactionStatus.PARCIAL;
         if (!isPaid) return;
+
+        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
+          t.category?.toLowerCase().includes('devolu') ||
+          t.description?.toLowerCase().includes('abatimento');
+        if (isDeduction) return;
 
         const paidAmt = Number(
           t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
@@ -118,14 +130,38 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
   const todayIn = useMemo(() => 
     todayTransactions
       .filter(t => t.type === TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
-  , [todayTransactions]);
+      .reduce((acc, t) => {
+        if (Array.isArray(t.payments) && t.payments.length > 0) {
+          const sum = t.payments
+            .filter(p => !p.isDiscountOrDeduction && (p.paymentDate || t.paymentDate || t.date) === todayStr)
+            .reduce((s, p) => s + Number(p.amount || 0), 0);
+          return acc + sum;
+        }
+        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
+          t.category?.toLowerCase().includes('devolu') ||
+          t.description?.toLowerCase().includes('abatimento');
+        if (isDeduction) return acc;
+        return acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0);
+      }, 0)
+  , [todayTransactions, todayStr]);
 
   const todayOut = useMemo(() => 
     todayTransactions
       .filter(t => t.type !== TransactionType.SALE)
-      .reduce((acc, t) => acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0), 0)
-  , [todayTransactions]);
+      .reduce((acc, t) => {
+        if (Array.isArray(t.payments) && t.payments.length > 0) {
+          const sum = t.payments
+            .filter(p => !p.isDiscountOrDeduction && (p.paymentDate || t.paymentDate || t.date) === todayStr)
+            .reduce((s, p) => s + Number(p.amount || 0), 0);
+          return acc + sum;
+        }
+        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
+          t.category?.toLowerCase().includes('devolu') ||
+          t.description?.toLowerCase().includes('abatimento');
+        if (isDeduction) return acc;
+        return acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0);
+      }, 0)
+  , [todayTransactions, todayStr]);
 
   const todayBalance = todayIn - todayOut;
 

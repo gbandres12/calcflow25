@@ -44,6 +44,7 @@ export interface ReceiptInput {
   accountName?: string;
   notes?: string;
   receivedBy?: string;
+  isDeduction?: boolean;
 }
 
 /** Mesmo recibo que a tela "Receber entrada / abatimento" da venda gera. */
@@ -51,7 +52,7 @@ export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefin
   const paidBefore = orderReceiptsPaid(order);
   const debtBefore = orderOpenBalance(order);
   const isFirst = (order.receipts || []).length === 0;
-  const kind = isFirst ? 'ENTRADA' : 'ABATIMENTO';
+  const kind = input.isDeduction ? 'ABATIMENTO' : (isFirst ? 'ENTRADA' : 'ABATIMENTO');
   const id = `REC-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
   return {
     id,
@@ -66,7 +67,7 @@ export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefin
     accountId: input.accountId,
     accountName: input.accountName || 'Caixa Geral',
     receivedBy: input.receivedBy || 'Setor Financeiro / Caixa',
-    description: `${isFirst ? 'Entrada' : 'Abatimento'} Pedido #${order.reference}`,
+    description: `${isFirst && !input.isDeduction ? 'Entrada' : 'Abatimento'} Pedido #${order.reference}`,
     type: kind,
     totalOrderAmount: order.total,
     totalPaidSoFar: paidBefore + input.amount,
@@ -79,6 +80,7 @@ export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefin
 export function settleReceivable(tx: Transaction, input: ReceiptInput, now = new Date()): Transaction {
   const paidAfter = Number(tx.paidAmount || 0) + input.amount;
   const remaining = Math.max(0, Number(tx.amount || 0) - paidAfter);
+  const isDeduction = Boolean(input.isDeduction || input.paymentMethod?.toLowerCase().includes('abatimento'));
   const payment: TransactionPayment = {
     id: `pmt-${now.getTime()}`,
     transactionId: tx.id,
@@ -86,8 +88,8 @@ export function settleReceivable(tx: Transaction, input: ReceiptInput, now = new
     paymentDate: input.date,
     accountId: input.accountId,
     paymentMethod: input.paymentMethod,
-    notes: (input.notes || '').trim() || `Pagamento via ${input.paymentMethod}`,
-    isDiscountOrDeduction: false,
+    notes: (input.notes || '').trim() || (isDeduction ? 'Abatimento concedido' : `Pagamento via ${input.paymentMethod}`),
+    isDiscountOrDeduction: isDeduction,
     createdAt: now.toISOString()
   };
   return {

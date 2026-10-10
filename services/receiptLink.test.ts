@@ -50,9 +50,19 @@ describe('vínculo de recebimento com venda/conta', () => {
     assert.equal(p.status, TransactionStatus.PARCIAL);
     assert.equal(p.paidAmount, 200);
     assert.equal(p.payments?.length, 1);
+    assert.equal(p.payments?.[0].isDiscountOrDeduction, false);
     const f = settleReceivable(p, { ...input, amount: 300 });
     assert.equal(f.status, TransactionStatus.PAGO);
     assert.equal(f.paidAmount, 500);
     assert.equal(f.payments?.length, 2);
+  });
+
+  it('baixa com abatimento/desconto marca isDiscountOrDeduction como true', () => {
+    const base = { id: 't2', type: TransactionType.SALE, amount: 500, paidAmount: 0, status: TransactionStatus.PENDENTE, date: '2026-09-01', accountId: 'a' } as any;
+    const input = { amount: 150, date: '2026-10-05', paymentMethod: 'Abatimento / Devolução', accountId: 'acc', isDeduction: true };
+    const res = settleReceivable(base, input);
+    assert.equal(res.status, TransactionStatus.PARCIAL);
+    assert.equal(res.paidAmount, 150);
+    assert.equal(res.payments?.[0].isDiscountOrDeduction, true);
   });
 });

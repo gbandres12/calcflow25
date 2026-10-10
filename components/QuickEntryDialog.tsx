@@ -73,15 +73,19 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
       const isPaid = numAmount > 0;
       const initialStatus = isPaid ? TransactionStatus.PAGO : TransactionStatus.PENDENTE;
       
+      const isDeduction = category?.toLowerCase().includes('abatimento') || 
+        category?.toLowerCase().includes('devolu') ||
+        description?.toLowerCase().includes('abatimento');
+
       const newPayments: TransactionPayment[] = isPaid ? [{
         id: `pmt-${Date.now()}`,
         transactionId: '',
         amount: numAmount,
         paymentDate: date,
         accountId: accountId,
-        paymentMethod: paymentMethod,
+        paymentMethod: isDeduction ? 'Abatimento / Devolução' : paymentMethod,
         notes: `Lançamento rápido inicial em ${new Date().toLocaleDateString('pt-BR')}`,
-        isDiscountOrDeduction: false,
+        isDiscountOrDeduction: isDeduction,
         createdAt: new Date().toISOString()
       }] : [];
 

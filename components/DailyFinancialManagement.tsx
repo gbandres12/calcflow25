@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Transaction, 
   FinancialAccount, 
+  CostCenter,
   TransactionType, 
   TransactionStatus, 
   Customer, 
@@ -36,11 +37,13 @@ import {
 } from 'lucide-react';
 import { COMPANY_INFO, INFLOW_CATEGORIES, OUTFLOW_CATEGORIES, INITIAL_COST_CENTERS } from '../constants';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { ReceivePayDialog } from './ReceivePayDialog';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface DailyFinancialManagementProps {
   transactions: Transaction[];
   accounts: FinancialAccount[];
+  costCenters?: CostCenter[];
   customers?: Customer[];
   orders?: SaleOrder[];
   company?: Company;
@@ -54,6 +57,7 @@ interface DailyFinancialManagementProps {
 export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> = ({
   transactions,
   accounts,
+  costCenters = INITIAL_COST_CENTERS,
   customers = [],
   orders = [],
   company = COMPANY_INFO,
@@ -79,6 +83,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [viewReceiptTx, setViewReceiptTx] = useState<Transaction | null>(null);
+  const [settleTx, setSettleTx] = useState<Transaction | null>(null);
 
   // Quick Entry Form
   const [quickForm, setQuickForm] = useState({
@@ -86,7 +91,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     amount: '',
     category: INFLOW_CATEGORIES[0],
     accountId: accounts[0]?.id || 'acc-1',
-    costCenter: INITIAL_COST_CENTERS[0]?.name || 'Geral',
+    costCenterId: costCenters[0]?.id || 'cc1',
+    costCenter: costCenters[0]?.name || INITIAL_COST_CENTERS[0]?.name || 'Geral',
     contactName: '',
     paymentMethod: 'PIX',
     status: TransactionStatus.CONFIRMADO,
@@ -203,17 +209,27 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
         ) || 0;
 
+        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
+          t.category?.toLowerCase().includes('devolu') ||
+          t.description?.toLowerCase().includes('abatimento');
+
         if (txDate < targetDate) {
-          if (t.type === TransactionType.SALE) {
-            priorNetMovements += paidAmt;
-          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
-            priorNetMovements -= paidAmt;
+          if (!isDeduction) {
+            if (t.type === TransactionType.SALE) {
+              priorNetMovements += paidAmt;
+            } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+              priorNetMovements -= paidAmt;
+            }
           }
         } else if (txDate === targetDate) {
-          if (t.type === TransactionType.SALE) {
-            sumInflows += paidAmt;
-          } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
-            sumOutflows += paidAmt;
+          if (isDeduction) {
+            sumDeductions += paidAmt;
+          } else {
+            if (t.type === TransactionType.SALE) {
+              sumInflows += paidAmt;
+            } else if (t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE) {
+              sumOutflows += paidAmt;
+            }
           }
           if (t.discount) {
             sumDeductions += Number(t.discount) || 0;
@@ -267,20 +283,27 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     if (!searchQuery.trim()) return list;
 
     const q = searchQuery.toLowerCase();
-    return list.filter(t => 
-      t.description.toLowerCase().includes(q) ||
-      (t.contactName && t.contactName.toLowerCase().includes(q)) ||
-      (t.category && t.category.toLowerCase().includes(q)) ||
-      (t.paymentMethod && t.paymentMethod.toLowerCase().includes(q)) ||
-      (t.costCenter && t.costCenter.toLowerCase().includes(q))
-    );
-  }, [dayTransactions, dayInflowTransactions, dayOutflowTransactions, activeTab, searchQuery]);
+    return list.filter(t => {
+      const ccName = (t.costCenter || (costCenters || INITIAL_COST_CENTERS).find(c => c.id === t.costCenterId)?.name || '').toLowerCase();
+      return (
+        t.description.toLowerCase().includes(q) ||
+        (t.contactName && t.contactName.toLowerCase().includes(q)) ||
+        (t.category && t.category.toLowerCase().includes(q)) ||
+        (t.paymentMethod && t.paymentMethod.toLowerCase().includes(q)) ||
+        ccName.includes(q)
+      );
+    });
+  }, [dayTransactions, dayInflowTransactions, dayOutflowTransactions, activeTab, searchQuery, costCenters]);
 
   // Submit Quick Entry
   const handleQuickEntrySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(quickForm.amount);
     if (isNaN(val) || val <= 0) return;
+
+    const resolvedCc = (costCenters || INITIAL_COST_CENTERS).find(c => c.id === quickForm.costCenterId || c.name === quickForm.costCenter);
+    const resolvedCcId = resolvedCc?.id || quickForm.costCenterId || 'cc1';
+    const resolvedCcName = resolvedCc?.name || quickForm.costCenter || 'Geral';
 
     onAddTransaction({
       description: quickForm.description || (quickEntryType === TransactionType.SALE ? 'Recebimento Balança / Venda' : 'Despesa Operacional'),
@@ -292,7 +315,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
       accountId: quickForm.accountId,
       date: selectedDate,
       paymentDate: quickForm.status === TransactionStatus.CONFIRMADO ? selectedDate : undefined,
-      costCenter: quickForm.costCenter,
+      costCenterId: resolvedCcId,
+      costCenter: resolvedCcName,
       contactName: quickForm.contactName,
       paymentMethod: quickForm.paymentMethod,
       notes: quickForm.notes
@@ -304,7 +328,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
       amount: '',
       category: quickEntryType === TransactionType.SALE ? INFLOW_CATEGORIES[0] : OUTFLOW_CATEGORIES[0],
       accountId: accounts[0]?.id || 'acc-1',
-      costCenter: INITIAL_COST_CENTERS[0]?.name || 'Geral',
+      costCenterId: costCenters[0]?.id || 'cc1',
+      costCenter: costCenters[0]?.name || INITIAL_COST_CENTERS[0]?.name || 'Geral',
       contactName: '',
       paymentMethod: 'PIX',
       status: TransactionStatus.CONFIRMADO,
@@ -712,7 +737,11 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                       </td>
                       <td className="px-4 py-4">
                         <span className="text-xs font-bold text-slate-700 block">{tx.category}</span>
-                        {tx.costCenter && <span className="text-xs font-bold text-slate-500 block">{tx.costCenter}</span>}
+                        {Boolean(tx.costCenter || tx.costCenterId) && (
+                          <span className="text-xs font-bold text-slate-500 block">
+                            {tx.costCenter || (costCenters || INITIAL_COST_CENTERS).find(c => c.id === tx.costCenterId)?.name}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         <span className="text-xs font-bold text-slate-800 block">{getAccountName(tx.accountId)}</span>
@@ -736,6 +765,17 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                       </td>
                       <td className="px-5 py-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          {/* Baixar / Registrar Abatimento */}
+                          {tx.status !== TransactionStatus.PAGO && tx.status !== TransactionStatus.CONFIRMADO && (
+                            <button
+                              onClick={() => setSettleTx(tx)}
+                              title="Baixar ou Abater Saldo"
+                              className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-all"
+                            >
+                              <CheckCircle2 size={15} />
+                            </button>
+                          )}
+
                           {/* Recibo */}
                           <button
                             onClick={() => setViewReceiptTx(tx)}
@@ -848,9 +888,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Conta / Caixa de Destino</label>
+                  <label className="text-xs font-bold text-slate-700">Conta / Caixa</label>
                   <select
                     value={quickForm.accountId}
                     onChange={(e) => setQuickForm({ ...quickForm, accountId: e.target.value })}
@@ -876,6 +916,26 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                     <option value="Cartão de Débito">Cartão de Débito</option>
                     <option value="Cartão de Crédito">Cartão de Crédito</option>
                     <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Centro de Custo</label>
+                  <select
+                    value={quickForm.costCenterId}
+                    onChange={(e) => {
+                      const selectedCc = (costCenters || INITIAL_COST_CENTERS).find(c => c.id === e.target.value);
+                      setQuickForm({
+                        ...quickForm,
+                        costCenterId: e.target.value,
+                        costCenter: selectedCc?.name || quickForm.costCenter
+                      });
+                    }}
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-xs text-slate-800 outline-none"
+                  >
+                    {(costCenters || INITIAL_COST_CENTERS).map(cc => (
+                      <option key={cc.id} value={cc.id}>{cc.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1118,6 +1178,20 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Baixar / Registrar Abatimento */}
+      {settleTx && (
+        <ReceivePayDialog
+          isOpen={Boolean(settleTx)}
+          onClose={() => setSettleTx(null)}
+          transaction={settleTx}
+          accounts={accounts}
+          onConfirm={async (updatedTransaction) => {
+            await onUpdateTransaction(updatedTransaction);
+            setSettleTx(null);
+          }}
+        />
       )}
     </div>
   );

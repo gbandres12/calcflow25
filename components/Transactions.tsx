@@ -178,7 +178,12 @@ export const Transactions: React.FC<TransactionsProps> = ({
         const matchesPayment = t.payments?.some(p => (p.accountId || t.accountId) === filterAccount);
         if (!matchesMaster && !matchesPayment) return false;
       }
-      if (filterCostCenter !== 'ALL' && t.costCenterId !== filterCostCenter) return false;
+      if (filterCostCenter !== 'ALL') {
+        const selectedCc = costCenters.find(cc => cc.id === filterCostCenter);
+        const matchesId = t.costCenterId === filterCostCenter;
+        const matchesName = Boolean(selectedCc && t.costCenter && t.costCenter.trim().toLowerCase() === selectedCc.name.trim().toLowerCase());
+        if (!matchesId && !matchesName) return false;
+      }
       if (filterStatus !== 'ALL' && t.status !== filterStatus) return false;
 
       if (searchQuery.trim()) {

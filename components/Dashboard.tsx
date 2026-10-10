@@ -66,6 +66,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       t.status === TransactionStatus.PAGO ||
       t.status === TransactionStatus.PARCIAL;
     if (!isPaidOrConfirmed) return 0;
+    const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
+      t.category?.toLowerCase().includes('devolu') ||
+      t.description?.toLowerCase().includes('abatimento');
+    if (isDeduction) return 0;
     if (t.paidAmount !== undefined && t.paidAmount !== null && Number(t.paidAmount) > 0) {
       return Number(t.paidAmount);
     }

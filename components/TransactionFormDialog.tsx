@@ -223,15 +223,19 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
       // Cria ou atualiza pagamentos
       let paymentsList: TransactionPayment[] = editingTransaction?.payments || [];
       if (paymentsList.length === 0 && paidNum > 0) {
+        const isDeduction = category?.toLowerCase().includes('abatimento') || 
+          category?.toLowerCase().includes('devolu') ||
+          description?.toLowerCase().includes('abatimento');
+
         paymentsList = [{
           id: `pmt-${Date.now()}`,
           transactionId: editingTransaction?.id || '',
           amount: paidNum,
           paymentDate: paymentDate || date,
           accountId: accountId,
-          paymentMethod: paymentMethod,
-          notes: 'Pagamento inicial registrado no formulário',
-          isDiscountOrDeduction: false,
+          paymentMethod: isDeduction ? 'Abatimento / Devolução' : paymentMethod,
+          notes: isDeduction ? 'Abatimento / Desconto registrado no formulário' : 'Pagamento inicial registrado no formulário',
+          isDiscountOrDeduction: isDeduction,
           createdAt: new Date().toISOString()
         }];
       }
