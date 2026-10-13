@@ -53,7 +53,9 @@ _CBA Mineração_`;
 
         <div className="no-print text-white p-4 px-6 flex items-center justify-between shrink-0 print:hidden" style={{ background: SO.navy }}>
           <div>
-            <h3 className="font-bold text-sm tracking-tight text-white">Pedido de Venda</h3>
+            <h3 className="font-bold text-sm tracking-tight text-white">
+              {isBudget ? 'Orçamento Comercial' : 'Pedido de Venda'}
+            </h3>
             <p className="text-xs text-slate-300">Layout A4 para impressão e PDF · {order.reference}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -90,30 +92,54 @@ _CBA Mineração_`;
 
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 11mm; }
+          @page {
+            size: A4 portrait;
+            margin: 6mm 8mm;
+          }
           html, body {
             background: #fff !important;
             margin: 0 !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            padding: 0 !important;
+            font-size: 13px !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow: hidden !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          .no-print { display: none !important; }
-          body * { visibility: hidden; }
-          #printable-sales-order, #printable-sales-order * { visibility: visible; }
+          .no-print {
+            display: none !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #printable-sales-order,
+          #printable-sales-order * {
+            visibility: visible;
+          }
           #printable-sales-order {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             background: #fff !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
           }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
-          tr, .so-keep, .so-totals {
-            break-inside: avoid;
-            page-break-inside: avoid;
+          thead {
+            display: table-header-group;
+          }
+          tfoot {
+            display: table-footer-group;
+          }
+          tr, section, header, footer, .so-keep, .so-totals {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
