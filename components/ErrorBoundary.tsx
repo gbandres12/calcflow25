@@ -38,19 +38,27 @@ export class ErrorBoundary extends React.Component<Props, State> {
             </div>
           </div>
           <p className="text-sm font-medium text-rose-900 bg-white/70 border border-rose-200/60 rounded-xl p-3 font-mono text-xs break-all mb-4">
-            {this.state.error.message || 'Erro inesperado'}
+            {/failed to fetch dynamically imported module/i.test(this.state.error.message || '')
+              ? 'Uma nova versão do sistema foi publicada. Clique em "Atualizar sistema" para recarregar com as novidades.'
+              : this.state.error.message || 'Erro inesperado'}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-900 hover:bg-rose-950 text-white text-xs font-bold transition-colors"
               onClick={() => {
+                if (/failed to fetch dynamically imported module/i.test(this.state.error?.message || '')) {
+                  window.location.reload();
+                  return;
+                }
                 this.setState({ error: null });
                 this.props.onReset?.();
               }}
             >
               <RefreshCw size={14} />
-              Tentar recarregar
+              {/failed to fetch dynamically imported module/i.test(this.state.error.message || '')
+                ? 'Atualizar sistema'
+                : 'Tentar recarregar'}
             </button>
             <button
               type="button"
