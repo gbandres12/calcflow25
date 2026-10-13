@@ -422,31 +422,44 @@ const Customers: React.FC<CustomersProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex flex-col lg:flex-row gap-3 lg:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <div className="relative w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
           <input 
             type="text" 
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-            placeholder="Buscar por nome, CPF/CNPJ, e-mail ou telefone..." 
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50/60 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 focus:bg-white transition-all text-sm"
+            placeholder="Buscar por nome do cliente, CPF/CNPJ, e-mail, telefone ou cidade..." 
+            className="w-full pl-12 pr-10 py-3.5 bg-slate-50/80 border border-slate-200 rounded-xl outline-none focus:border-emerald-600 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all text-base text-slate-800 placeholder-slate-400 font-medium shadow-inner"
           />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {filterChips.map(chip => (
+          {searchQuery && (
             <button
-              key={chip.key}
-              onClick={() => { setFilterDebtOnly(chip.key); setPage(1); }}
-              className={`px-3.5 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 transition-all ${filterDebtOnly === chip.key ? chip.active : chip.idle}`}
+              type="button"
+              onClick={() => { setSearchQuery(''); setPage(1); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60"
+              title="Limpar busca"
             >
-              {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${filterDebtOnly === chip.key ? 'bg-white' : chip.dot}`} />}
-              {chip.label}
-              <span className={`text-xs px-1.5 rounded-full ${filterDebtOnly === chip.key ? 'bg-white/20' : 'bg-black/5'}`}>{chip.count}</span>
+              <X size={16} />
             </button>
-          ))}
-          <button onClick={exportCsv} className="px-3.5 py-2 rounded-lg text-sm font-medium border border-slate-200 bg-white text-slate-700 flex items-center gap-2 hover:bg-slate-50">
-            <Download size={15} /> Exportar Excel
+          )}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">Filtros:</span>
+            {filterChips.map(chip => (
+              <button
+                key={chip.key}
+                onClick={() => { setFilterDebtOnly(chip.key); setPage(1); }}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border flex items-center gap-1.5 transition-all ${filterDebtOnly === chip.key ? chip.active : chip.idle}`}
+              >
+                {chip.dot && <span className={`w-1.5 h-1.5 rounded-full ${filterDebtOnly === chip.key ? 'bg-white' : chip.dot}`} />}
+                {chip.label}
+                <span className={`text-xs px-1.5 py-0.2 rounded-full font-bold ${filterDebtOnly === chip.key ? 'bg-white/25 text-white' : 'bg-black/5 text-slate-600'}`}>{chip.count}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={exportCsv} className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-slate-200 bg-white text-slate-700 flex items-center gap-1.5 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+            <Download size={14} /> Exportar Excel
           </button>
         </div>
       </div>
