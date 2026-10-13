@@ -61,6 +61,7 @@ import { financeService, userService, inventoryService, orderService, db, isDemo
 import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
+import { buildQuoteFromLead, leadToCustomer } from './services/domain/crmConversion';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 const CompanyBranches = React.lazy(() => import('./components/CompanyBranches'));
@@ -772,6 +773,35 @@ const App: React.FC = () => {
     const tagged: CrmLead = { ...updated, companyId: updated.companyId || activeCompanyId, updatedAt: new Date().toISOString() };
     setCrmLeads(prev => prev.map(item => item.id === tagged.id ? tagged : item));
     persistCloud('crm_leads', tagged);
+  };
+
+  const handleConvertCrmLead = (
+    lead: CrmLead,
+    opts: { customerId?: string; productId: string; quantity: number; unitPrice: number }
+  ): { ok: boolean; error?: string; reference?: string } => {
+    let customer = opts.customerId ? customers.find(c => c.id === opts.customerId) : undefined;
+    const createdCustomer = !customer;
+    if (!customer) customer = handleAddCustomer(leadToCustomer(lead));
+    const quote = buildQuoteFromLead({
+      lead, customer, productId: opts.productId, quantity: opts.quantity, unitPrice: opts.unitPrice,
+      sellerName: lead.responsavel || currentUser?.name || 'Vendedor', inventory,
+      today: dateISOBR(), validUntil: dateISOBR(new Date(Date.now() + 15 * 86400000))
+    });
+    if (!quote) return { ok: false, error: 'Informe produto, quantidade e preço válidos.' };
+    const orderId = newId('ord');
+    const reference = nextOrderReference(orders);
+    handleAddOrder({ ...quote, id: orderId, reference } as SaleOrder);
+    const now = new Date().toISOString();
+    handleUpdateCrmLead({
+      ...lead,
+      stage: 'GANHO',
+      customerId: customer.id,
+      orderId,
+      orderReference: reference,
+      convertedAt: now,
+      notes: [{ id: newId('note'), text: `${createdCustomer ? 'Cliente cadastrado' : 'Cliente vinculado'} e orçamento ${reference} gerado`, createdAt: now, authorName: currentUser?.name }, ...(lead.notes || [])]
+    });
+    return { ok: true, reference };
   };
 
   const handleDeleteCrmLead = (id: string) => {
@@ -1820,6 +1850,15 @@ const App: React.FC = () => {
               onAdd={handleAddCrmLead}
               onUpdate={handleUpdateCrmLead}
               onDelete={handleDeleteCrmLead}
+              customers={customers}
+              inventory={inventory}
+              users={users}
+              branches={memberships.length
+                ? memberships.map(m => ({ id: m.companyId, name: m.companyName || (m.isBranch ? 'Filial' : 'Matriz') }))
+                : [{ id: activeCompanyId, name: activeMembership?.companyName || currentUser?.companyName || 'Unidade ativa' }]}
+              activeCompanyId={activeCompanyId}
+              onConvert={handleConvertCrmLead}
+              onOpenQuotes={() => navigateTo('quotes')}
             />
           )}
           {currentView === 'transportadores' && (

@@ -755,8 +755,16 @@ export interface CrmLead {
   proximoContato?: string;
   origem?: string;
   responsavel?: string;
+  responsavelId?: string;
+  /** Unidade (matriz/filial) que cuida do produtor. */
+  filialId?: string;
+  filialNome?: string;
   motivoPerda?: string;
   customerId?: string;
+  /** Orçamento gerado ao fechar o negócio. */
+  orderId?: string;
+  orderReference?: string;
+  convertedAt?: string;
   observacoes?: string;
   notes?: CrmNote[];
   createdAt: string;

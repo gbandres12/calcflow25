@@ -1,13 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import {
-  CalendarClock, MapPin, MessageSquarePlus, Pencil, Phone, Plus, Search,
-  Sprout, Trash2, Trophy, Weight, X
+  Building2, CalendarClock, ExternalLink, FileText, MapPin, MessageSquarePlus, Pencil, Phone, Plus, Search,
+  Sprout, Trash2, Trophy, UserRound, Weight, X
 } from 'lucide-react';
-import { CrmLead, CrmNote, CrmOrderType, CrmPriority, CrmStage } from '../types';
+import { CrmLead, CrmNote, CrmOrderType, CrmPriority, CrmStage, Customer, InventoryItem, User } from '../types';
 import { useConfirm } from './ui/ConfirmDialog';
 import { newId } from '../services/ids';
+import { findMatchingCustomer, suggestProductForLead } from '../services/domain/crmConversion';
+import { sellableInventoryItems } from '../utils/salesOrderProduct';
 
 export type CrmLeadInput = Omit<CrmLead, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>;
+
+export interface CrmBranchOption { id: string; name: string }
+export interface CrmConvertOptions { customerId?: string; productId: string; quantity: number; unitPrice: number }
 
 interface CrmKanbanProps {
   leads: CrmLead[];
@@ -15,6 +20,13 @@ interface CrmKanbanProps {
   onAdd: (data: CrmLeadInput) => CrmLead;
   onUpdate: (data: CrmLead) => void;
   onDelete: (id: string) => void;
+  customers: Customer[];
+  inventory: InventoryItem[];
+  users: User[];
+  branches: CrmBranchOption[];
+  activeCompanyId: string;
+  onConvert: (lead: CrmLead, opts: CrmConvertOptions) => { ok: boolean; error?: string; reference?: string };
+  onOpenQuotes: () => void;
 }
 
 export const CRM_STAGES: Array<{ id: CrmStage; label: string; accent: string }> = [
@@ -83,10 +95,15 @@ const toNum = (v: string): number | undefined => {
 const fmtDate = (iso?: string) => (iso ? new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '');
 const today = () => new Date().toISOString().slice(0, 10);
 
-const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, onUpdate, onDelete }) => {
+const CrmKanban: React.FC<CrmKanbanProps> = ({
+  leads, currentUserName, onAdd, onUpdate, onDelete,
+  customers, inventory, users, branches, activeCompanyId, onConvert, onOpenQuotes
+}) => {
   const confirmDialog = useConfirm();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'TODOS' | CrmOrderType>('TODOS');
+  const [branchFilter, setBranchFilter] = useState<string>('TODAS');
+  const [ownerFilter, setOwnerFilter] = useState<string>('TODOS');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CrmLead | null>(null);
   const [form, setForm] = useState<CrmLeadInput>(EMPTY_FORM);
@@ -94,34 +111,58 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
   const [error, setError] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<CrmStage | null>(null);
+  // Conversão (pedido fechado → cliente + orçamento)
+  const [converting, setConverting] = useState<CrmLead | null>(null);
+  const [conv, setConv] = useState({ customerId: '', productId: '', quantity: '', unitPrice: '' });
+  const [convError, setConvError] = useState('');
+  const [convDone, setConvDone] = useState<string | null>(null);
 
   const safeLeads = useMemo(() => (Array.isArray(leads) ? leads.filter(l => l && l.id) : []), [leads]);
+  const safeCustomers = useMemo(() => (Array.isArray(customers) ? customers.filter(c => c && c.id) : []), [customers]);
+  const products = useMemo(() => sellableInventoryItems(inventory), [inventory]);
+  const teamNames = useMemo(() => {
+    const names = new Set<string>();
+    (Array.isArray(users) ? users : []).forEach(u => u?.name && u.status !== 'Inativo' && names.add(u.name));
+    if (currentUserName) names.add(currentUserName);
+    safeLeads.forEach(l => l.responsavel && names.add(l.responsavel));
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [users, currentUserName, safeLeads]);
+  const branchName = (id?: string) => branches.find(b => b.id === id)?.name;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return safeLeads.filter(l => {
       if (typeFilter !== 'TODOS' && l.tipoPedido !== typeFilter) return false;
+      if (branchFilter !== 'TODAS' && l.filialId !== branchFilter) return false;
+      if (ownerFilter !== 'TODOS' && (l.responsavel || '') !== ownerFilter) return false;
       if (!q) return true;
-      return [l.produtor, l.fazenda, l.cidade, l.telefone, l.documento, l.responsavel, ...(l.culturas || [])]
+      return [l.produtor, l.fazenda, l.cidade, l.telefone, l.documento, l.responsavel, l.filialNome, l.orderReference, ...(l.culturas || [])]
         .some(v => String(v || '').toLowerCase().includes(q));
     });
-  }, [safeLeads, search, typeFilter]);
+  }, [safeLeads, search, typeFilter, branchFilter, ownerFilter]);
 
   const stats = useMemo(() => {
-    const open = safeLeads.filter(l => l.stage !== 'GANHO' && l.stage !== 'PERDIDO');
-    const won = safeLeads.filter(l => l.stage === 'GANHO');
-    const closed = won.length + safeLeads.filter(l => l.stage === 'PERDIDO').length;
+    const open = filtered.filter(l => l.stage !== 'GANHO' && l.stage !== 'PERDIDO');
+    const won = filtered.filter(l => l.stage === 'GANHO');
+    const closed = won.length + filtered.filter(l => l.stage === 'PERDIDO').length;
     return {
       abertos: open.length,
       pipeline: open.reduce((s, l) => s + (l.valorEstimado || 0), 0),
       toneladas: open.reduce((s, l) => s + (l.quantidadeT || 0), 0),
       conversao: closed ? Math.round((won.length / closed) * 100) : 0
     };
-  }, [safeLeads]);
+  }, [filtered]);
 
   const openNew = (stage: CrmStage = 'NOVO') => {
     setEditing(null);
-    setForm({ ...EMPTY_FORM, stage, responsavel: currentUserName || '' });
+    setForm({
+      ...EMPTY_FORM,
+      stage: stage === 'GANHO' ? 'NEGOCIACAO' : stage,
+      responsavel: currentUserName || '',
+      responsavelId: (users || []).find(u => u?.name === currentUserName)?.id,
+      filialId: activeCompanyId,
+      filialNome: branchName(activeCompanyId)
+    });
     setNewNote('');
     setError('');
     setShowForm(true);
@@ -148,6 +189,33 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
     setNewNote('');
   };
 
+  const openConvert = (lead: CrmLead) => {
+    const match = findMatchingCustomer(lead, safeCustomers);
+    const product = suggestProductForLead(lead, inventory);
+    const qty = lead.quantidadeT || 0;
+    const price = qty && lead.valorEstimado ? lead.valorEstimado / qty : Number(product?.unitPrice) || 0;
+    setConv({
+      customerId: match?.id || '',
+      productId: String(product?.id || ''),
+      quantity: qty ? String(qty) : '',
+      unitPrice: price ? String(Math.round(price * 100) / 100) : ''
+    });
+    setConvError('');
+    setConvDone(null);
+    setConverting(lead);
+  };
+
+  const confirmConvert = () => {
+    if (!converting) return;
+    const quantity = toNum(conv.quantity) || 0;
+    const unitPrice = toNum(conv.unitPrice) || 0;
+    if (!conv.productId) return setConvError('Selecione o produto.');
+    if (quantity <= 0 || unitPrice <= 0) return setConvError('Informe quantidade e preço maiores que zero.');
+    const result = onConvert(converting, { customerId: conv.customerId || undefined, productId: conv.productId, quantity, unitPrice });
+    if (!result.ok) return setConvError(result.error || 'Não foi possível gerar o orçamento.');
+    setConvDone(result.reference || 'gerado');
+  };
+
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     const produtor = form.produtor.trim();
@@ -164,9 +232,11 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
       uf: String(form.uf || '').toUpperCase().slice(0, 2),
       notes
     };
-    if (editing) onUpdate({ ...editing, ...data });
-    else onAdd(data);
+    const wantsConversion = data.stage === 'GANHO' && !data.orderId;
+    const saved = editing ? { ...editing, ...data } : onAdd(data);
+    if (editing) onUpdate(saved);
     setShowForm(false);
+    if (wantsConversion) openConvert(saved);
   };
 
   const moveTo = async (lead: CrmLead, stage: CrmStage) => {
@@ -174,6 +244,10 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
     if (stage === 'PERDIDO' && !lead.motivoPerda) {
       openEdit({ ...lead, stage });
       setError('Informe o motivo da perda e salve.');
+      return;
+    }
+    if (stage === 'GANHO' && !lead.orderId) {
+      openConvert(lead);
       return;
     }
     const note: CrmNote = {
@@ -238,6 +312,16 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
           <option value="TODOS">Todos os tipos de pedido</option>
           {Object.entries(ORDER_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        {branches.length > 1 && (
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} aria-label="Filial" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 outline-none">
+            <option value="TODAS">Todas as filiais</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
+        <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)} aria-label="Responsável" className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 outline-none">
+          <option value="TODOS">Todos os responsáveis</option>
+          {teamNames.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
       </div>
 
       <div className="-mx-3 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
@@ -299,6 +383,9 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({ leads, currentUserName, onAdd, on
                             <p className="flex items-center gap-1"><MapPin size={11} />{[lead.cidade && `${lead.cidade}${lead.uf ? `/${lead.uf}` : ''}`, lead.areaTotalHa && `${num(lead.areaTotalHa)} ha`].filter(Boolean).join(' · ')}</p>
                           )}
                           {lead.telefone && <p className="flex items-center gap-1"><Phone size={11} />{lead.telefone}</p>}
+                          {(lead.responsavel || lead.filialId) && (
+                            <p className="flex items-center gap-1"><UserRound size={11} />{[lead.responsavel, branches.length > 1 ? (branchName(lead.filialId) || lead.filialNome) : ''].filter(Boolean).join(' · ')}</p>
+                          )}
                           {lead.proximoContato && (
                             <p className={`flex items-center gap-1 ${overdue ? 'font-black text-rose-600' : ''}`}><CalendarClock size={11} />Retorno {fmtDate(lead.proximoContato)}</p>
                           )}
