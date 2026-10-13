@@ -386,6 +386,20 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
                           {(lead.responsavel || lead.filialId) && (
                             <p className="flex items-center gap-1"><UserRound size={11} />{[lead.responsavel, branches.length > 1 ? (branchName(lead.filialId) || lead.filialNome) : ''].filter(Boolean).join(' · ')}</p>
                           )}
+                          {lead.orderReference && (
+                            <div className="flex items-center gap-1.5 pt-1">
+                              <span className="flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-800">
+                                <FileText size={10} /> {lead.orderReference}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onOpenQuotes(); }}
+                                className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 hover:underline"
+                              >
+                                Ver orçamento <ExternalLink size={9} />
+                              </button>
+                            </div>
+                          )}
                           {lead.proximoContato && (
                             <p className={`flex items-center gap-1 ${overdue ? 'font-black text-rose-600' : ''}`}><CalendarClock size={11} />Retorno {fmtDate(lead.proximoContato)}</p>
                           )}
@@ -430,7 +444,7 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
             <div className="space-y-4 overflow-y-auto p-5">
               {error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{error}</p>}
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <div><label className={labelClass}>Etapa</label>
                   <select value={form.stage} onChange={e => set('stage', e.target.value as CrmStage)} className={fieldClass}>
                     {CRM_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -439,8 +453,33 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
                   <select value={form.priority} onChange={e => set('priority', e.target.value as CrmPriority)} className={fieldClass}>
                     <option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option>
                   </select></div>
+                <div><label className={labelClass}>Filial Responsável</label>
+                  <select
+                    value={form.filialId || ''}
+                    onChange={e => {
+                      const fid = e.target.value;
+                      set('filialId', fid);
+                      set('filialNome', branchName(fid));
+                    }}
+                    className={fieldClass}
+                  >
+                    <option value="">Selecione a filial</option>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select></div>
                 <div><label className={labelClass}>Responsável</label>
-                  <input value={form.responsavel || ''} onChange={e => set('responsavel', e.target.value)} className={fieldClass} /></div>
+                  <select
+                    value={form.responsavel || ''}
+                    onChange={e => {
+                      const name = e.target.value;
+                      set('responsavel', name);
+                      const matchedUser = (users || []).find(u => u?.name === name);
+                      set('responsavelId', matchedUser?.id);
+                    }}
+                    className={fieldClass}
+                  >
+                    <option value="">Selecione o responsável</option>
+                    {teamNames.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select></div>
               </div>
 
               <div className={sectionClass}>
@@ -542,6 +581,170 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {converting && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4">
+          <div className="flex max-h-[95vh] w-full max-w-xl flex-col rounded-t-3xl bg-white sm:rounded-3xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Pedido Fechado</p>
+                <h3 className="text-lg font-black text-slate-900">Gerar Cliente & Orçamento</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setConverting(null); setConvDone(null); }}
+                aria-label="Fechar"
+                className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto p-5">
+              {convDone ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    <Trophy size={24} />
+                  </div>
+                  <h4 className="mt-3 text-base font-black text-emerald-900">Negócio Fechado com Sucesso!</h4>
+                  <p className="mt-1 text-sm text-emerald-700">
+                    O produtor foi vinculado/cadastrado e o orçamento <span className="font-mono font-black">{convDone}</span> foi criado.
+                  </p>
+                  <div className="mt-5 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setConverting(null); setConvDone(null); }}
+                      className="rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-xs font-black uppercase text-emerald-800 hover:bg-emerald-100"
+                    >
+                      Continuar no CRM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setConverting(null); setConvDone(null); onOpenQuotes(); }}
+                      className="flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-800"
+                    >
+                      Ver Orçamentos <ExternalLink size={14} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500">
+                    Ao fechar a venda de <strong className="text-slate-800">{converting.produtor}</strong>, confirmamos os dados abaixo para vincular ou cadastrar o cliente e já emitir o orçamento correspondente.
+                  </p>
+
+                  {convError && <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{convError}</p>}
+
+                  <div className={sectionClass}>
+                    <p className={sectionTitle}>Cliente</p>
+                    <div>
+                      <label className={labelClass}>Vincular a cliente existente ou cadastrar novo</label>
+                      <select
+                        value={conv.customerId}
+                        onChange={e => setConv(c => ({ ...c, customerId: e.target.value }))}
+                        className={fieldClass}
+                      >
+                        <option value="">(Cadastrar automaticamente como novo cliente)</option>
+                        {safeCustomers.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.document ? `(${c.document})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        {conv.customerId
+                          ? 'O orçamento será emitido diretamente para este cliente existente.'
+                          : `Será criado um novo cadastro com o nome "${converting.produtor}" e dados da fazenda.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={sectionClass}>
+                    <p className={sectionTitle}>Itens do Orçamento</p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="sm:col-span-3">
+                        <label className={labelClass}>Produto do Estoque *</label>
+                        <select
+                          value={conv.productId}
+                          onChange={e => {
+                            const pid = e.target.value;
+                            const prod = products.find(p => p.id === pid);
+                            setConv(c => ({
+                              ...c,
+                              productId: pid,
+                              unitPrice: c.unitPrice || (prod ? String(prod.unitPrice) : '')
+                            }));
+                          }}
+                          className={fieldClass}
+                        >
+                          <option value="">Selecione o produto</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} {p.unitPrice ? `— ${brl(p.unitPrice)}/${p.unit || 'TON'}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Quantidade (t) *</label>
+                        <input
+                          inputMode="decimal"
+                          value={conv.quantity}
+                          onChange={e => setConv(c => ({ ...c, quantity: e.target.value }))}
+                          placeholder="Ex: 100"
+                          className={fieldClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Preço Unitário (R$) *</label>
+                        <input
+                          inputMode="decimal"
+                          value={conv.unitPrice}
+                          onChange={e => setConv(c => ({ ...c, unitPrice: e.target.value }))}
+                          placeholder="Ex: 120,00"
+                          className={fieldClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Total Estimado</label>
+                        <div className="flex h-[42px] items-center rounded-xl bg-slate-50 px-3 text-sm font-black text-slate-800">
+                          {brl((toNum(conv.quantity) || 0) * (toNum(conv.unitPrice) || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-amber-50 p-3.5 text-xs text-amber-800">
+                    <p className="font-black">Unidade e Vendedor Responsável:</p>
+                    <p className="mt-0.5">
+                      Filial: <strong>{branchName(converting.filialId) || converting.filialNome || 'Unidade ativa'}</strong> · Responsável: <strong>{converting.responsavel || currentUserName || 'Vendedor'}</strong>
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!convDone && (
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 p-4">
+                <button
+                  type="button"
+                  onClick={() => setConverting(null)}
+                  className="rounded-xl px-4 py-2.5 text-xs font-black uppercase text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmConvert}
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-black uppercase text-white hover:bg-emerald-800"
+                >
+                  <Trophy size={14} /> Fechar Negócio & Criar Orçamento
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
