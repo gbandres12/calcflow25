@@ -184,9 +184,16 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
     if (!pdfUrl) return;
     const link = document.createElement('a');
     link.href = pdfUrl;
+    const clientName = (customer?.name || current.customerName || order.customerName || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .replace(/[^\w.-]+/g, '_')
+      .slice(0, 40);
+    const seq = current.nfeNumero || current.nfeChave || current.reference;
     link.download = isDraft
-      ? draftPdfFileName(current)
-      : `DANFE_${current.nfeNumero || current.nfeChave || current.reference}.pdf`;
+      ? draftPdfFileName(current, clientName)
+      : clientName ? `DANFE_${seq}_${clientName}.pdf` : `DANFE_${seq}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

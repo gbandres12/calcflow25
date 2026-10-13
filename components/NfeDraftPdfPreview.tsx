@@ -77,7 +77,7 @@ export const NfeDraftPdfPreview: React.FC<NfeDraftPdfPreviewProps> = ({
     if (!url) return;
     const link = document.createElement('a');
     link.href = url;
-    link.download = draftPdfFileName(order);
+    link.download = draftPdfFileName(order, customer?.name);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

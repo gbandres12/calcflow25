@@ -45,11 +45,17 @@ export function orderForDraftPdf(order: SaleOrder, linked?: SaleOrderLinkedNfe |
   return overlayLinkedNfeDocument(order, linked);
 }
 
-export function draftPdfFileName(order: SaleOrder): string {
+export function draftPdfFileName(order: SaleOrder, customerName?: string): string {
   const ref = String(order.nfeNumero || order.reference || 'rascunho')
     .replace(/[^\w.-]+/g, '_')
     .slice(0, 40);
-  return `RASCUNHO_NFe_${ref}.pdf`;
+  const cleanCustomer = String(customerName || order.customerName || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/[^\w.-]+/g, '_')
+    .slice(0, 40);
+  return cleanCustomer ? `RASCUNHO_NFe_${ref}_${cleanCustomer}.pdf` : `RASCUNHO_NFe_${ref}.pdf`;
 }
 
 const money = (value: number): string =>

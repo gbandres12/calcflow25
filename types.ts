@@ -735,6 +735,7 @@ export interface CrmLead {
   // Produtor
   produtor: string;
   documento?: string;
+  dataNascimento?: string;
   telefone?: string;
   email?: string;
   // Fazenda

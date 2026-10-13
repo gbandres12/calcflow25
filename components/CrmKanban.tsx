@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Building2, CalendarClock, ExternalLink, FileText, MapPin, MessageSquarePlus, Pencil, Phone, Plus, Search,
+  Building2, Cake, CalendarClock, ExternalLink, FileText, MapPin, MessageSquarePlus, Pencil, Phone, Plus, Search,
   Sprout, Trash2, Trophy, UserRound, Weight, X
 } from 'lucide-react';
 import { CrmLead, CrmNote, CrmOrderType, CrmPriority, CrmStage, Customer, InventoryItem, User } from '../types';
@@ -62,6 +62,7 @@ const EMPTY_FORM: CrmLeadInput = {
   priority: 'MEDIA',
   produtor: '',
   documento: '',
+  dataNascimento: '',
   telefone: '',
   email: '',
   fazenda: '',
@@ -383,6 +384,9 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
                             <p className="flex items-center gap-1"><MapPin size={11} />{[lead.cidade && `${lead.cidade}${lead.uf ? `/${lead.uf}` : ''}`, lead.areaTotalHa && `${num(lead.areaTotalHa)} ha`].filter(Boolean).join(' · ')}</p>
                           )}
                           {lead.telefone && <p className="flex items-center gap-1"><Phone size={11} />{lead.telefone}</p>}
+                          {lead.dataNascimento && (
+                            <p className="flex items-center gap-1"><Cake size={11} />Nasc. {fmtDate(lead.dataNascimento)}</p>
+                          )}
                           {(lead.responsavel || lead.filialId) && (
                             <p className="flex items-center gap-1"><UserRound size={11} />{[lead.responsavel, branches.length > 1 ? (branchName(lead.filialId) || lead.filialNome) : ''].filter(Boolean).join(' · ')}</p>
                           )}
@@ -489,11 +493,13 @@ const CrmKanban: React.FC<CrmKanbanProps> = ({
                     <input autoFocus value={form.produtor} onChange={e => set('produtor', e.target.value)} className={fieldClass} /></div>
                   <div><label className={labelClass}>CPF / CNPJ</label>
                     <input value={form.documento || ''} onChange={e => set('documento', e.target.value)} className={fieldClass} /></div>
+                  <div><label className={labelClass}>Data de Nascimento (opcional)</label>
+                    <input type="date" value={form.dataNascimento || ''} onChange={e => set('dataNascimento', e.target.value)} className={fieldClass} /></div>
                   <div><label className={labelClass}>Telefone / WhatsApp</label>
                     <input value={form.telefone || ''} onChange={e => set('telefone', e.target.value)} className={fieldClass} /></div>
                   <div><label className={labelClass}>E-mail</label>
                     <input type="email" value={form.email || ''} onChange={e => set('email', e.target.value)} className={fieldClass} /></div>
-                  <div><label className={labelClass}>Origem do contato</label>
+                  <div className="sm:col-span-2"><label className={labelClass}>Origem do contato</label>
                     <input value={form.origem || ''} onChange={e => set('origem', e.target.value)} placeholder="Indicação, feira, WhatsApp..." className={fieldClass} /></div>
                 </div>
               </div>

@@ -126,5 +126,6 @@ describe('PDF de previa do rascunho da NF-e', () => {
       assert.match(text, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
     assert.equal(draftPdfFileName(order), 'RASCUNHO_NFe_1048.pdf');
+    assert.equal(draftPdfFileName(order, 'João Da Silva'), 'RASCUNHO_NFe_1048_Joao_Da_Silva.pdf');
   });
 });
