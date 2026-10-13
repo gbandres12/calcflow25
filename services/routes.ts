@@ -12,6 +12,7 @@ export const ROUTES: RouteConfig[] = [
   { view: 'orders', path: '/vendas', aliases: ['/pedidos', '/orders'], title: 'Vendas & Romaneios' },
   { view: 'quotes', path: '/orcamentos', aliases: ['/quotes'], title: 'Orçamentos' },
   { view: 'loadings', path: '/carregamentos', aliases: ['/loadings'], title: 'Carregamentos' },
+  { view: 'crm', path: '/crm', aliases: ['/produtores', '/funil'], title: 'CRM de Produtores' },
   { view: 'customers', path: '/clientes', aliases: ['/fornecedores', '/customers'], title: 'Clientes & Fornecedores' },
   { view: 'fiscal', path: '/fiscal', aliases: ['/notas', '/notas-fiscais', '/nfe'], title: 'Notas Fiscais' },
   { view: 'fiscal_config', path: '/config-nfe', aliases: ['/fiscal-config'], title: 'Configuração NF-e' },

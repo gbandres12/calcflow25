@@ -28,7 +28,7 @@ export function isViewAllowed(user: User, viewId: string): boolean {
   if (['daily', 'transactions', 'cashflow', 'accounts', 'fiscal_config'].includes(viewId)) return perms.financial;
   if (viewId === 'users') return perms.users;
   if (['inventory', 'milling'].includes(viewId)) return perms.inventory;
-  if (['orders', 'quotes', 'customers', 'transportadores', 'transfers'].includes(viewId)) return perms.orders;
+  if (['orders', 'quotes', 'customers', 'transportadores', 'transfers', 'crm'].includes(viewId)) return perms.orders;
   // yard (balança) fica sempre liberado: é onde o operador da balança lança carregamento.
   return true;
 }

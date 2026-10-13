@@ -708,4 +708,59 @@ export interface TransferShipment {
   stockIntegratedCompanyId?: string;
 }
 
-export type View = 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+// CRM de produtores rurais (kanban comercial)
+export type CrmStage = 'NOVO' | 'CONTATO' | 'VISITA' | 'PROPOSTA' | 'NEGOCIACAO' | 'GANHO' | 'PERDIDO';
+export type CrmOrderType =
+  | 'CALCARIO_DOLOMITICO'
+  | 'CALCARIO_CALCITICO'
+  | 'CALCARIO_FILLER'
+  | 'GESSO_AGRICOLA'
+  | 'BRITA'
+  | 'FRETE'
+  | 'OUTRO';
+export type CrmPriority = 'BAIXA' | 'MEDIA' | 'ALTA';
+
+export interface CrmNote {
+  id: string;
+  text: string;
+  createdAt: string;
+  authorName?: string;
+}
+
+export interface CrmLead {
+  id: string;
+  companyId?: string;
+  stage: CrmStage;
+  priority: CrmPriority;
+  // Produtor
+  produtor: string;
+  documento?: string;
+  telefone?: string;
+  email?: string;
+  // Fazenda
+  fazenda?: string;
+  cidade?: string;
+  uf?: string;
+  localizacao?: string;
+  areaTotalHa?: number;
+  areaPlantadaHa?: number;
+  culturas?: string[];
+  rebanhoCabecas?: number;
+  analiseSolo?: boolean;
+  // Pedido
+  tipoPedido: CrmOrderType;
+  quantidadeT?: number;
+  valorEstimado?: number;
+  previsaoEntrega?: string;
+  proximoContato?: string;
+  origem?: string;
+  responsavel?: string;
+  motivoPerda?: string;
+  customerId?: string;
+  observacoes?: string;
+  notes?: CrmNote[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';

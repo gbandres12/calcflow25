@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, Package, FileText, Users, Wallet, TrendingUp, CreditCard,
   Truck, Fuel, Boxes, UserCog, Settings, LogOut, ShieldCheck, Briefcase, Wrench,
-  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound
+  FileCheck, Calendar, HardHat, X, ArrowRightLeft, Sliders, ClipboardList, Layers, KeyRound, Sprout
 } from 'lucide-react';
 import { View, User } from '../types';
 import { isViewAllowed } from '../services/viewAccess';
@@ -25,6 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, user, onLogo
       { id: 'orders', label: 'Vendas & Romaneios', icon: FileText },
       { id: 'quotes', label: 'Orçamentos', icon: ClipboardList },
       { id: 'loadings', label: 'Carregamentos', icon: Truck },
+      { id: 'crm', label: 'CRM de Produtores', icon: Sprout },
       { id: 'customers', label: 'Clientes & Fornecedores', icon: Users },
       { id: 'fiscal', label: 'Notas Fiscais', icon: FileCheck },
     ]},

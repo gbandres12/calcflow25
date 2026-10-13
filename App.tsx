@@ -18,6 +18,7 @@ const CategorySettings = React.lazy(() => import('./components/CategorySettings'
 const FiscalManagement = React.lazy(() => import('./components/FiscalManagement').then((m) => ({ default: m.FiscalManagement })));
 const FiscalConfigView = React.lazy(() => import('./components/FiscalConfigView').then((m) => ({ default: m.FiscalConfigView })));
 const Transportadores = React.lazy(() => import('./components/Transportadores'));
+const CrmKanban = React.lazy(() => import('./components/CrmKanban'));
 import ErrorBoundary from './components/ErrorBoundary';
 const TransfersPage = React.lazy(() => import('./components/TransfersPage'));
 import Login from './components/Login';
@@ -48,6 +49,7 @@ import {
   Company,
   TransferShipment,
   Transportador,
+  CrmLead,
   UserRole,
   CompanyMembership
 } from './types';
@@ -196,6 +198,7 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [transfers, setTransfers] = useState<TransferShipment[]>([]);
   const [transportadores, setTransportadores] = useState<Transportador[]>([]);
+  const [crmLeads, setCrmLeads] = useState<CrmLead[]>([]);
 
   // Check if current user needs onboarding upon login
   useEffect(() => {
@@ -351,6 +354,7 @@ const App: React.FC = () => {
       setUsers([]);
       setTransfers([]);
       setTransportadores([]);
+      setCrmLeads([]);
     }
     loadedCompanyRef.current = activeCompanyId;
 
@@ -382,7 +386,8 @@ const App: React.FC = () => {
           db.getTable('categories', activeCompanyId),
           userService.getAll(activeCompanyId),
           db.getTable('transfers', activeCompanyId),
-          db.getTable('transportadores', activeCompanyId)
+          db.getTable('transportadores', activeCompanyId),
+          db.getTable('crm_leads', activeCompanyId)
         ]);
 
         let bundle = await fetchAll();
@@ -395,7 +400,7 @@ const App: React.FC = () => {
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers, savedTransportadores
+          savedCategories, savedUsers, savedTransfers, savedTransportadores, savedCrmLeads
         ] = bundle;
 
         if (epoch !== dataEpochRef.current) return;
@@ -447,6 +452,11 @@ const App: React.FC = () => {
         setTransportadores((prev) => adoptFetched(
           'transportadores',
           Array.isArray(savedTransportadores) ? savedTransportadores.filter((t: any) => t && typeof t === 'object' && t.id) : [],
+          prev
+        ));
+        setCrmLeads((prev) => adoptFetched(
+          'crm_leads',
+          Array.isArray(savedCrmLeads) ? savedCrmLeads.filter((t: any) => t && typeof t === 'object' && t.id) : [],
           prev
         ));
 
@@ -747,6 +757,26 @@ const App: React.FC = () => {
   const handleDeleteTransportador = (id: string) => {
     setTransportadores(prev => prev.filter(item => item.id !== id));
     persistDelete('transportadores', id);
+  };
+
+  // CRM de produtores
+  const handleAddCrmLead = (data: Omit<CrmLead, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>): CrmLead => {
+    const now = new Date().toISOString();
+    const lead: CrmLead = { ...data, id: newId('crm'), companyId: activeCompanyId, createdAt: now, updatedAt: now };
+    setCrmLeads(prev => [...prev, lead]);
+    persistCloud('crm_leads', lead);
+    return lead;
+  };
+
+  const handleUpdateCrmLead = (updated: CrmLead) => {
+    const tagged: CrmLead = { ...updated, companyId: updated.companyId || activeCompanyId, updatedAt: new Date().toISOString() };
+    setCrmLeads(prev => prev.map(item => item.id === tagged.id ? tagged : item));
+    persistCloud('crm_leads', tagged);
+  };
+
+  const handleDeleteCrmLead = (id: string) => {
+    setCrmLeads(prev => prev.filter(item => item.id !== id));
+    persistDelete('crm_leads', id);
   };
 
   // Estoque
@@ -1781,6 +1811,15 @@ const App: React.FC = () => {
               onAddCustomer={handleAddCustomer} 
               onUpdateCustomer={handleUpdateCustomer}
               onDeleteCustomer={handleDeleteCustomer}
+            />
+          )}
+          {currentView === 'crm' && (
+            <CrmKanban
+              leads={crmLeads}
+              currentUserName={currentUser?.name}
+              onAdd={handleAddCrmLead}
+              onUpdate={handleUpdateCrmLead}
+              onDelete={handleDeleteCrmLead}
             />
           )}
           {currentView === 'transportadores' && (

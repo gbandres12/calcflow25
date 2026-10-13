@@ -182,7 +182,8 @@ export const ALL_TABLES = [
   'fiscal_config',
   'users',
   'transfers',
-  'transportadores'
+  'transportadores',
+  'crm_leads'
 ];
 
 export const resolveCompanyKey = (companyId?: string | null): string => {
