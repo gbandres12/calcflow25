@@ -6,6 +6,8 @@ import {
   CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight
 } from 'lucide-react';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
+import { CloseWithdrawalsModal } from './CloseWithdrawalsModal';
+import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal } from '../services/domain/orderWithdrawalClose';
 import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
 import { printThermalTicket } from '../services/domain/thermalTicket';
 import { dateISOBR } from "../utils/dateFilterUtils";
@@ -23,6 +25,7 @@ interface YardManagementProps {
   onAddStoreItem: (item: Omit<StoreItem, 'id' | 'companyId'>) => void;
   onUpdateStoreItem: (item: StoreItem) => void;
   onUpdateOrder?: (order: SaleOrder) => void;
+  onCloseOrderWithdrawals?: (result: CloseWithdrawalsResult) => void;
 }
 
 const YardManagement: React.FC<YardManagementProps> = ({ 
@@ -37,7 +40,8 @@ const YardManagement: React.FC<YardManagementProps> = ({
   onAddMaintenance, 
   onAddStoreItem, 
   onUpdateStoreItem,
-  onUpdateOrder
+  onUpdateOrder,
+  onCloseOrderWithdrawals
 }) => {
   const [activeTab, setActiveTab] = useState<'weighbridge' | 'store' | 'maintenance'>('weighbridge');
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
@@ -47,6 +51,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
   
   // Balança / Expedição Modal
   const [selectedOrderForWeigh, setSelectedOrderForWeigh] = useState<SaleOrder | null>(null);
+  const [orderForClosingWithdrawals, setOrderForClosingWithdrawals] = useState<SaleOrder | null>(null);
   const [viewingWithdrawal, setViewingWithdrawal] = useState<{ withdrawal: OrderWithdrawal; order: SaleOrder } | null>(null);
 
   // Formulário Almoxarifado
@@ -148,12 +153,29 @@ const YardManagement: React.FC<YardManagementProps> = ({
     const updatedWithdrawals = exists
       ? existing.map(w => w.id === withdrawal.id ? withdrawal : w)
       : [...existing, withdrawal];
-    const updatedOrder: SaleOrder = {
+
+    const totalContracted = (selectedOrderForWeigh.items || []).reduce((s, it) => s + (it.quantity || 0), 0);
+    const alreadyWithdrawnBefore = existing.filter(w => w.id !== withdrawal.id).reduce((s, w) => s + (w.quantityWithdrawn || 0), 0);
+    const excess = Math.max(0, (alreadyWithdrawnBefore + (withdrawal.quantityWithdrawn || 0)) - totalContracted);
+
+    let baseOrder: SaleOrder = {
       ...selectedOrderForWeigh,
       withdrawals: updatedWithdrawals
     };
-    setSelectedOrderForWeigh(updatedOrder);
-    onUpdateOrder(updatedOrder);
+
+    if (excess > 0.01) {
+      const adj = adjustOrderForOverWithdrawal(
+        baseOrder,
+        withdrawal.quantityWithdrawn,
+        excess,
+        `tx-excesso-${Date.now()}`,
+        dateISOBR()
+      );
+      baseOrder = adj.updatedOrder;
+    }
+
+    setSelectedOrderForWeigh(baseOrder);
+    onUpdateOrder(baseOrder);
   };
 
   const handleSendWhatsAppTicket = (w: OrderWithdrawal, custName?: string) => {
@@ -308,12 +330,23 @@ const YardManagement: React.FC<YardManagementProps> = ({
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 text-xs">
                         <span className="text-slate-500 text-xs">Total: {totalQty} Ton</span>
-                        <button
-                          onClick={() => setSelectedOrderForWeigh(order)}
-                          className="min-h-12 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm whitespace-nowrap shrink-0 active:scale-95"
-                        >
-                          <Scale size={16} /> Pesar carga
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {(order.withdrawals || []).length > 0 && (
+                            <button
+                              onClick={() => setOrderForClosingWithdrawals(order)}
+                              title="Encerrar retiradas com a sobra atual de saldo"
+                              className="min-h-12 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-lg transition-all flex items-center gap-1.5 text-xs whitespace-nowrap active:scale-95"
+                            >
+                              <CheckCircle2 size={14} className="text-amber-700" /> Encerrar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedOrderForWeigh(order)}
+                            className="min-h-12 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm whitespace-nowrap shrink-0 active:scale-95"
+                          >
+                            <Scale size={16} /> Pesar carga
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -845,6 +878,23 @@ const YardManagement: React.FC<YardManagementProps> = ({
           operatorName={operatorName}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setSelectedOrderForWeigh(null)}
+        />
+      )}
+
+      {/* Modal Encerrar Retiradas com Sobra de Saldo */}
+      {orderForClosingWithdrawals && (
+        <CloseWithdrawalsModal
+          order={orderForClosingWithdrawals}
+          operatorName={operatorName}
+          onConfirm={(result) => {
+            if (onCloseOrderWithdrawals) {
+              onCloseOrderWithdrawals(result);
+            } else if (onUpdateOrder) {
+              onUpdateOrder(result.updatedOrder);
+            }
+            setOrderForClosingWithdrawals(null);
+          }}
+          onClose={() => setOrderForClosingWithdrawals(null)}
         />
       )}
 

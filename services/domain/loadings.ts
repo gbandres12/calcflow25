@@ -95,20 +95,24 @@ export function summarizeLoadings(rows: LoadingRow[]) {
 export function orderLoadingProgress(order: SaleOrder) {
   const contracted = sumTons((order.items || []).map((item) => item.quantity));
   const loaded = sumTons((order.withdrawals || []).map((w) => w.quantityWithdrawn));
+  const isClosed = Boolean(order.withdrawalsClosed);
   return {
     contracted,
     loaded,
-    remaining: Math.max(0, roundTons(contracted - loaded)),
+    remaining: isClosed ? 0 : Math.max(0, roundTons(contracted - loaded)),
+    unclosedRemaining: Math.max(0, roundTons(contracted - loaded)),
+    isClosed,
     trips: (order.withdrawals || []).length,
-    percent: contracted > 0 ? Math.min(100, (loaded / contracted) * 100) : 0
+    percent: contracted > 0 ? (isClosed ? 100 : Math.min(100, (loaded / contracted) * 100)) : 0
   };
 }
 
-/** Pedidos que ainda podem receber carregamento (confirmados e com saldo). */
+/** Pedidos que ainda podem receber carregamento (confirmados, não encerrados e com saldo). */
 export function openOrdersForLoading(orders: SaleOrder[], customerId?: string): SaleOrder[] {
   return (orders || []).filter((order) =>
     order
     && order.status === OrderStatus.FINALIZED
+    && !order.withdrawalsClosed
     && (!customerId || order.customerId === customerId)
     && orderLoadingProgress(order).remaining > 0
   );

@@ -63,6 +63,7 @@ import { mergeRecordsByUpdatedAt } from './services/persistSeed';
 import { toPublicUser, isDemoEmail, visibleCompanyUsers } from './services/authLogic';
 import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { buildQuoteFromLead, leadToCustomer } from './services/domain/crmConversion';
+import { CloseWithdrawalsResult } from './services/domain/orderWithdrawalClose';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 const CompanyBranches = lazyWithRetry(() => import('./components/CompanyBranches'));
@@ -1416,6 +1417,32 @@ const App: React.FC = () => {
     return persist;
   };
 
+  const handleCloseOrderWithdrawals = (result: CloseWithdrawalsResult) => {
+    const { updatedOrder, deltaQuantity, updatedTransactions, deletedTransactionIds } = result;
+
+    // 1. Atualizar pedido de venda
+    handleUpdateOrder(updatedOrder);
+
+    // 2. Se houve devolução de sobra física ao estoque (deltaQuantity < 0)
+    if (deltaQuantity < 0 && updatedOrder.items?.[0]?.productId) {
+      const returnQty = Math.abs(deltaQuantity);
+      processStockChange(String(updatedOrder.items[0].productId), returnQty);
+    }
+
+    // 3. Deletar parcelas pendentes canceladas pelo ajuste
+    if (deletedTransactionIds.length > 0) {
+      setTransactions(prev => prev.filter(t => !deletedTransactionIds.includes(t.id)));
+      deletedTransactionIds.forEach(id => persistDelete('transactions', id));
+    }
+
+    // 4. Atualizar parcelas pendentes com saldo reduzido
+    if (updatedTransactions.length > 0) {
+      const idMap = new Map(updatedTransactions.map(t => [t.id, t]));
+      setTransactions(prev => prev.map(t => idMap.get(t.id) || t));
+      updatedTransactions.forEach(t => persistCloud('transactions', t));
+    }
+  };
+
   // Resetar empresa para banco 100% limpo
   const handleResetCompanyDatabase = async () => {
     if (activeCompanyId !== 'matriz-demo' && activeCompanyId !== 'demo') {
@@ -1715,6 +1742,7 @@ const App: React.FC = () => {
                 onPostFinance={handlePostOrderFinance}
                 onPaymentReceived={handlePaymentReceived}
                 onReviseReceipt={handleReviseReceipt}
+                onCloseOrderWithdrawals={handleCloseOrderWithdrawals}
                 mode={currentView === 'quotes' ? 'quotes' : 'orders'}
               />
           )}
@@ -1942,6 +1970,7 @@ const App: React.FC = () => {
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
               onUpdateOrder={handleUpdateOrder}
+              onCloseOrderWithdrawals={handleCloseOrderWithdrawals}
             />
           )}
           {currentView === 'transfers' && (

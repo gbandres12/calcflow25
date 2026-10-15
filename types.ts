@@ -566,6 +566,13 @@ export interface SaleOrder {
   remainingAmount?: number;
   paymentStatus?: 'pago' | 'parcial' | 'pendente';
   withdrawalStatus?: 'aguardando' | 'parcial' | 'total';
+  /** Indica se as retiradas foram encerradas formalmente (mesmo com sobra de saldo). */
+  withdrawalsClosed?: boolean;
+  withdrawalsClosedAt?: string;
+  withdrawalsClosedBy?: string;
+  withdrawalsClosedReason?: string;
+  /** Permite carregar acima do saldo original com ajuste automático da venda. */
+  allowOverWithdrawal?: boolean;
   status: OrderStatus;
   paymentMethod?: string;
   payments: SalePayment[];

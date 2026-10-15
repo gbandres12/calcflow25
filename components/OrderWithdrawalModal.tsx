@@ -49,27 +49,18 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
   const [notes, setNotes] = useState('');
   const [savedWithdrawal, setSavedWithdrawal] = useState<OrderWithdrawal | null>(null);
   const [formError, setFormError] = useState('');
+  const [showOverWithdrawalConfirm, setShowOverWithdrawalConfirm] = useState(false);
 
   const parseTons = (raw: string) => roundTons(parseFloat(String(raw).replace(',', '.')) || 0);
   const qtyNum = parseTons(quantity);
   const netWeightNum = parseTons(netWeight);
+  const isOverWithdrawal = qtyNum > remainingToWithdraw + 0.01;
+  const excessQty = isOverWithdrawal ? roundTons(qtyNum - remainingToWithdraw) : 0;
   const newBalance = Math.max(0, roundTons(remainingToWithdraw - qtyNum));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (qtyNum <= 0) {
-      setFormError('Informe a quantidade da nota em toneladas.');
-      return;
-    }
-    if (netWeightNum <= 0) {
-      setFormError('Informe o peso líquido da balança.');
-      return;
-    }
-    if (qtyNum > remainingToWithdraw + 0.01) {
-      setFormError(`Quantidade da nota (${formatTons(qtyNum)} t) passa do saldo do pedido (${formatTons(remainingToWithdraw)} t).`);
-      return;
-    }
+  const executeSave = () => {
     setFormError('');
+    setShowOverWithdrawalConfirm(false);
 
     const withdrawal: OrderWithdrawal = {
       id: `RET-${Date.now()}`,
@@ -85,15 +76,35 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
       transporterName: transporterName.trim() || undefined,
       productName: order.items[0]?.productName || 'Calcário Agrícola Moído',
       weighTicketNumber: weighTicket.trim(),
-      totalOrderQuantity: totalOrderQty,
+      totalOrderQuantity: isOverWithdrawal ? roundTons(totalOrderQty + excessQty) : totalOrderQty,
       totalWithdrawnSoFar: roundTons(alreadyWithdrawn + qtyNum),
-      remainingBalanceQuantity: newBalance,
+      remainingBalanceQuantity: 0,
       loadedBy: loadedBy.trim(),
-      notes: notes.trim()
+      notes: [
+        notes.trim(),
+        isOverWithdrawal ? `[CARGA EXCEDENTE: +${formatTons(excessQty)} t além do saldo anterior]` : ''
+      ].filter(Boolean).join(' | ')
     };
 
     onSaveWithdrawal(withdrawal);
     setSavedWithdrawal(withdrawal);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (qtyNum <= 0) {
+      setFormError('Informe a quantidade da nota em toneladas.');
+      return;
+    }
+    if (netWeightNum <= 0) {
+      setFormError('Informe o peso líquido da balança.');
+      return;
+    }
+    if (isOverWithdrawal && !showOverWithdrawalConfirm) {
+      setShowOverWithdrawalConfirm(true);
+      return;
+    }
+    executeSave();
   };
 
   const handlePrint = () => {
@@ -543,6 +554,31 @@ export const OrderWithdrawalModal: React.FC<OrderWithdrawalModalProps> = ({
                 />
               </div>
             </div>
+
+            {isOverWithdrawal && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wide">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                  Atenção: Carregamento Excedente (+{formatTons(excessQty)} t)
+                </div>
+                <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                  A quantidade da nota informada ({formatTons(qtyNum)} t) é superior ao saldo restante contratado ({formatTons(remainingToWithdraw)} t).
+                  Ao confirmar, o sistema registrará a carga excedente e atualizará a quantidade do pedido para manter o estoque e o financeiro alinhados.
+                </p>
+                {showOverWithdrawalConfirm && (
+                  <div className="pt-2 flex items-center justify-between gap-3 border-t border-amber-200">
+                    <span className="text-xs font-bold text-amber-900">Deseja autorizar o excesso e registrar?</span>
+                    <button
+                      type="button"
+                      onClick={executeSave}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-sm transition-all"
+                    >
+                      Autorizar e Lançar (+{formatTons(excessQty)} t)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {formError ? <p className="text-xs font-bold text-rose-600">{formError}</p> : null}
           </form>

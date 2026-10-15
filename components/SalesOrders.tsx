@@ -27,6 +27,8 @@ import { RecoverSaleNfeModal } from './RecoverSaleNfeModal';
 import { DanfeModal } from './DanfeModal';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
+import { CloseWithdrawalsModal } from './CloseWithdrawalsModal';
+import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal } from '../services/domain/orderWithdrawalClose';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
@@ -83,6 +85,8 @@ interface SalesOrdersProps {
   onPaymentReceived?: (receipt: PaymentReceipt, updatedOrder: SaleOrder) => void;
   /** Corrige (next) ou exclui (null) um recibo, ajustando pedido e caixa juntos. */
   onReviseReceipt?: (order: SaleOrder, receiptId: string, next: PaymentReceipt | null) => void;
+  /** Encerra retiradas com ou sem ajuste de saldo */
+  onCloseOrderWithdrawals?: (result: CloseWithdrawalsResult) => void;
   mode?: 'orders' | 'quotes';
 }
 
@@ -150,6 +154,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   onPostFinance,
   onPaymentReceived,
   onReviseReceipt,
+  onCloseOrderWithdrawals,
   mode = 'orders'
 }) => {
   const toast = useToast();
@@ -281,6 +286,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   // Modals de Pagamentos e Retiradas
   const [orderForPayment, setOrderForPayment] = useState<SaleOrder | null>(null);
   const [orderForWithdrawal, setOrderForWithdrawal] = useState<SaleOrder | null>(null);
+  const [orderForClosingWithdrawals, setOrderForClosingWithdrawals] = useState<SaleOrder | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<PaymentReceipt | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<SaleOrder | null>(null);
   // O modal guarda uma cópia do pedido; sem isto, corrigir um recibo não
@@ -779,12 +785,29 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
     const updatedWithdrawals = exists
       ? existing.map(w => w.id === withdrawal.id ? withdrawal : w)
       : [...existing, withdrawal];
-    const updatedOrder = {
+
+    const totalContracted = orderForWithdrawal.items.reduce((s, it) => s + (it.quantity || 0), 0);
+    const alreadyWithdrawnBefore = existing.filter(w => w.id !== withdrawal.id).reduce((s, w) => s + (w.quantityWithdrawn || 0), 0);
+    const excess = Math.max(0, (alreadyWithdrawnBefore + (withdrawal.quantityWithdrawn || 0)) - totalContracted);
+
+    let baseOrder: SaleOrder = {
       ...orderForWithdrawal,
       withdrawals: updatedWithdrawals
     };
-    setOrderForWithdrawal(updatedOrder);
-    onUpdateOrder(updatedOrder);
+
+    if (excess > 0.01) {
+      const adj = adjustOrderForOverWithdrawal(
+        baseOrder,
+        withdrawal.quantityWithdrawn,
+        excess,
+        `tx-excesso-${Date.now()}`,
+        dateISOBR()
+      );
+      baseOrder = adj.updatedOrder;
+    }
+
+    setOrderForWithdrawal(baseOrder);
+    onUpdateOrder(baseOrder);
   };
 
   // Métricas Globais de Vendas
@@ -1226,6 +1249,12 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           {order.reference}
                         </span>
 
+                        {order.withdrawalsClosed && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200" title={`Retiradas encerradas${order.withdrawalsClosedReason ? `: ${order.withdrawalsClosedReason}` : ''}`}>
+                            <CheckCircle2 size={10} className="text-sky-600" /> Retiradas Encerradas
+                          </span>
+                        )}
+
                         {isCancelled && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
                             <Ban size={10} /> Inabilitado / Cancelado
@@ -1575,15 +1604,26 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                     <div className="space-y-1 pt-1">
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div 
-                          className={`h-full transition-all duration-500 ${remainingWithdraw === 0 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                          className={`h-full transition-all duration-500 ${order.withdrawalsClosed ? 'bg-sky-500' : remainingWithdraw === 0 ? 'bg-emerald-500' : 'bg-blue-600'}`}
                           style={{ width: `${withdrawalProgress}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
-                        <span>{withdrawalProgress.toFixed(0)}% Carregado</span>
+                        <span>{order.withdrawalsClosed ? '100% Encerrado' : `${withdrawalProgress.toFixed(0)}% Carregado`}</span>
                         <span>{order.withdrawals?.length || 0} Viagens / Caminhões</span>
                       </div>
                     </div>
+
+                    {order.withdrawalsClosed && (
+                      <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 flex items-center justify-between gap-2">
+                        <span>
+                          <b>Retiradas finalizadas</b>{order.withdrawalsClosedReason ? ` (${order.withdrawalsClosedReason})` : ''}
+                        </span>
+                        {order.withdrawalsClosedBy && (
+                          <span className="text-[11px] text-sky-700">Por: {order.withdrawalsClosedBy}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                 </div>
@@ -1638,6 +1678,17 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                         >
                           <Truck size={14} /> <span className="sm:hidden">Carga</span><span className="hidden sm:inline">Registrar Retirada (Caminhão)</span>
                         </button>
+
+                        {!order.withdrawalsClosed && totalWithdrawn > 0 && remainingWithdraw > 0.01 && (
+                          <button
+                            onClick={() => setOrderForClosingWithdrawals(order)}
+                            className="px-3.5 py-2.5 min-h-11 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
+                            title="Encerrar carregamentos deste pedido com a sobra de saldo atual"
+                          >
+                            <CheckCircle2 size={14} className="text-amber-700" />
+                            <span>Encerrar Retiradas</span>
+                          </button>
+                        )}
                       </>
                     )}
 
@@ -2864,6 +2915,24 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
           transportadores={transportadores}
           onSaveWithdrawal={handleSaveWithdrawal}
           onClose={() => setOrderForWithdrawal(null)}
+        />
+      )}
+
+      {/* Modal Encerrar Retiradas com Sobra de Saldo */}
+      {orderForClosingWithdrawals && (
+        <CloseWithdrawalsModal
+          order={orderForClosingWithdrawals}
+          operatorName={currentUser?.name}
+          onConfirm={(result) => {
+            if (onCloseOrderWithdrawals) {
+              onCloseOrderWithdrawals(result);
+            } else {
+              onUpdateOrder(result.updatedOrder);
+            }
+            setOrderForClosingWithdrawals(null);
+            toast.push(`Retiradas do pedido #${result.updatedOrder.reference} dadas por encerradas.`, 'success');
+          }}
+          onClose={() => setOrderForClosingWithdrawals(null)}
         />
       )}
 
