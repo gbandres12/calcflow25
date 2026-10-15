@@ -22,10 +22,11 @@ const Transportadores = lazyWithRetry(() => import('./components/Transportadores
 const CrmKanban = lazyWithRetry(() => import('./components/CrmKanban'));
 import ErrorBoundary from './components/ErrorBoundary';
 const TransfersPage = lazyWithRetry(() => import('./components/TransfersPage'));
+const BargeDischargeModal = lazyWithRetry(() => import('./components/BargeDischargeModal'));
 import Login from './components/Login';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DatabaseStatusModal } from './components/DatabaseStatusModal';
-import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck, Search } from 'lucide-react';
+import { Sparkles, Menu, LayoutDashboard, FileText, Scale, Package, Bell, ChevronDown, MapPin, ArrowRightLeft, FileCheck, Search, Ship } from 'lucide-react';
 import { 
   View, 
   InventoryItem, 
@@ -52,7 +53,9 @@ import {
   Transportador,
   CrmLead,
   UserRole,
-  CompanyMembership
+  CompanyMembership,
+  StockYard,
+  BargeDischargeRecord
 } from './types';
 import {
   INITIAL_COST_CENTERS,
@@ -202,6 +205,9 @@ const App: React.FC = () => {
   const [transfers, setTransfers] = useState<TransferShipment[]>([]);
   const [transportadores, setTransportadores] = useState<Transportador[]>([]);
   const [crmLeads, setCrmLeads] = useState<CrmLead[]>([]);
+  const [stockYards, setStockYards] = useState<StockYard[]>([]);
+  const [bargeDischarges, setBargeDischarges] = useState<BargeDischargeRecord[]>([]);
+  const [isBargeDischargeGlobalOpen, setIsBargeDischargeGlobalOpen] = useState(false);
 
   // Check if current user needs onboarding upon login
   useEffect(() => {
@@ -390,7 +396,9 @@ const App: React.FC = () => {
           userService.getAll(activeCompanyId),
           db.getTable('transfers', activeCompanyId),
           db.getTable('transportadores', activeCompanyId),
-          db.getTable('crm_leads', activeCompanyId)
+          db.getTable('crm_leads', activeCompanyId),
+          db.getTable('stock_yards', activeCompanyId),
+          db.getTable('barge_discharges', activeCompanyId)
         ]);
 
         let bundle = await fetchAll();
@@ -403,7 +411,8 @@ const App: React.FC = () => {
           savedTxs, savedInv, savedCust, 
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
-          savedCategories, savedUsers, savedTransfers, savedTransportadores, savedCrmLeads
+          savedCategories, savedUsers, savedTransfers, savedTransportadores, savedCrmLeads,
+          savedStockYards, savedBargeDischarges
         ] = bundle;
 
         if (epoch !== dataEpochRef.current) return;
@@ -460,6 +469,16 @@ const App: React.FC = () => {
         setCrmLeads((prev) => adoptFetched(
           'crm_leads',
           Array.isArray(savedCrmLeads) ? savedCrmLeads.filter((t: any) => t && typeof t === 'object' && t.id) : [],
+          prev
+        ));
+        setStockYards((prev) => adoptFetched(
+          'stock_yards',
+          Array.isArray(savedStockYards) ? savedStockYards.filter((y: any) => y && typeof y === 'object' && y.id) : [],
+          prev
+        ));
+        setBargeDischarges((prev) => adoptFetched(
+          'barge_discharges',
+          Array.isArray(savedBargeDischarges) ? savedBargeDischarges.filter((d: any) => d && typeof d === 'object' && d.id) : [],
           prev
         ));
 
@@ -760,6 +779,49 @@ const App: React.FC = () => {
   const handleDeleteTransportador = (id: string) => {
     setTransportadores(prev => prev.filter(item => item.id !== id));
     persistDelete('transportadores', id);
+  };
+
+  // Pátios de Estoque
+  const handleAddStockYard = (
+    data: Omit<StockYard, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>
+  ): StockYard => {
+    const now = new Date().toISOString();
+    const yard: StockYard = {
+      ...data,
+      id: newId('yard'),
+      companyId: activeCompanyId,
+      createdAt: now,
+      updatedAt: now
+    };
+    setStockYards(prev => [...prev, yard]);
+    persistCloud('stock_yards', yard);
+    return yard;
+  };
+
+  // Descargas Fluviais de Balsa (Pátio ou Cross-Docking)
+  const handleSaveBargeDischarge = (record: BargeDischargeRecord) => {
+    const tagged: BargeDischargeRecord = {
+      ...record,
+      companyId: record.companyId || activeCompanyId
+    };
+    setBargeDischarges(prev => [tagged, ...prev]);
+    persistCloud('barge_discharges', tagged);
+
+    // Se o destino for PÁTIO, incrementa o estoque do pátio
+    if (tagged.destinationType === 'YARD' && tagged.yardId && tagged.netWeightTons > 0) {
+      setStockYards(prev => prev.map(y => {
+        if (y.id === tagged.yardId) {
+          const updated = {
+            ...y,
+            currentStockTons: Number(((y.currentStockTons || 0) + tagged.netWeightTons).toFixed(3)),
+            updatedAt: new Date().toISOString()
+          };
+          persistCloud('stock_yards', updated);
+          return updated;
+        }
+        return y;
+      }));
+    }
   };
 
   // CRM de produtores
@@ -1630,6 +1692,17 @@ const App: React.FC = () => {
                 )}
               </div>
 
+              <button
+                type="button"
+                onClick={() => setIsBargeDischargeGlobalOpen(true)}
+                className="cf-topbar-pill bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 font-bold"
+                title="Descarga Fluvial / Balsa (Mobile Cross-Docking)"
+                aria-label="Descarga Fluvial / Balsa"
+              >
+                <Ship size={15} className="text-emerald-700" />
+                <span className="whitespace-nowrap">Descarga Balsa</span>
+              </button>
+
               {currentUser.onboardingCompleted === false && (
                 <button
                   onClick={() => setShowOnboardingModal(true)}
@@ -1965,12 +2038,17 @@ const App: React.FC = () => {
               customers={customers}
               company={operatingCompany}
               transportadores={transportadores}
+              stockYards={stockYards}
+              bargeDischarges={bargeDischarges}
               operatorName={currentUser.name}
               onAddMaintenance={handleAddMaintenance} 
               onAddStoreItem={handleAddStoreItem} 
               onUpdateStoreItem={handleUpdateStoreItem} 
               onUpdateOrder={handleUpdateOrder}
               onCloseOrderWithdrawals={handleCloseOrderWithdrawals}
+              onAddStockYard={handleAddStockYard}
+              onAddTransportador={handleAddTransportador}
+              onSaveBargeDischarge={handleSaveBargeDischarge}
             />
           )}
           {currentView === 'transfers' && (
@@ -2111,6 +2189,23 @@ const App: React.FC = () => {
         isAdmin={currentUser?.role === UserRole.ADMIN}
         companyId={activeCompanyId}
       />
+
+      {/* Operação Fluvial / Descarga de Balsa e Cross-Docking Global */}
+      {isBargeDischargeGlobalOpen && (
+        <BargeDischargeModal
+          isOpen={isBargeDischargeGlobalOpen}
+          onClose={() => setIsBargeDischargeGlobalOpen(false)}
+          orders={orders}
+          stockYards={stockYards}
+          transportadores={transportadores}
+          company={operatingCompany}
+          operatorName={currentUser.name}
+          onAddStockYard={handleAddStockYard}
+          onAddTransportador={handleAddTransportador}
+          onSaveDischarge={handleSaveBargeDischarge}
+          onUpdateOrder={handleUpdateOrder}
+        />
+      )}
     </div>
   );
 };

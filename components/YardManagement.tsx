@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company, Transportador } from '../types';
+import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company, Transportador, StockYard, BargeDischargeRecord } from '../types';
 import { 
   Boxes, Plus, Wrench, Search, Package, AlertTriangle, 
   X, Edit, Scale, Truck, Printer, Send, Calendar, 
-  CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight, Trash2
+  CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight, Trash2,
+  Ship, Layers, Anchor
 } from 'lucide-react';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { CloseWithdrawalsModal } from './CloseWithdrawalsModal';
+import { BargeDischargeModal } from './BargeDischargeModal';
+import { QuickStockYardModal } from './QuickStockYardModal';
+import { QuickDriverModal } from './QuickDriverModal';
 import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal } from '../services/domain/orderWithdrawalClose';
 import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
 import { printThermalTicket } from '../services/domain/thermalTicket';
@@ -22,12 +26,17 @@ interface YardManagementProps {
   customers?: Customer[];
   company?: Company;
   transportadores?: Transportador[];
+  stockYards?: StockYard[];
+  bargeDischarges?: BargeDischargeRecord[];
   operatorName?: string;
   onAddMaintenance: (record: Omit<MaintenanceRecord, 'id' | 'companyId'>) => void;
   onAddStoreItem: (item: Omit<StoreItem, 'id' | 'companyId'>) => void;
   onUpdateStoreItem: (item: StoreItem) => void;
   onUpdateOrder?: (order: SaleOrder) => void;
   onCloseOrderWithdrawals?: (result: CloseWithdrawalsResult) => void;
+  onAddStockYard?: (yard: Omit<StockYard, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => StockYard | Promise<StockYard>;
+  onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | Promise<Transportador>;
+  onSaveBargeDischarge?: (record: BargeDischargeRecord) => void;
 }
 
 const YardManagement: React.FC<YardManagementProps> = ({ 
@@ -38,20 +47,29 @@ const YardManagement: React.FC<YardManagementProps> = ({
   customers = [],
   company,
   transportadores = [],
+  stockYards = [],
+  bargeDischarges = [],
   operatorName,
   onAddMaintenance, 
   onAddStoreItem, 
   onUpdateStoreItem,
   onUpdateOrder,
-  onCloseOrderWithdrawals
+  onCloseOrderWithdrawals,
+  onAddStockYard,
+  onAddTransportador,
+  onSaveBargeDischarge
 }) => {
   const toast = useToast();
   const confirmDialog = useConfirm();
-  const [activeTab, setActiveTab] = useState<'weighbridge' | 'store' | 'maintenance'>('weighbridge');
+  const [activeTab, setActiveTab] = useState<'weighbridge' | 'yards' | 'store' | 'maintenance'>('weighbridge');
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [isMaintModalOpen, setIsMaintModalOpen] = useState(false);
   const [editingStoreItem, setEditingStoreItem] = useState<StoreItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modais de Descarga de Balsa e Pátio Rápido
+  const [isBargeModalOpen, setIsBargeModalOpen] = useState(false);
+  const [isQuickYardModalOpen, setIsQuickYardModalOpen] = useState(false);
   
   // Balança / Expedição Modal
   const [selectedOrderForWeigh, setSelectedOrderForWeigh] = useState<SaleOrder | null>(null);
@@ -247,24 +265,41 @@ const YardManagement: React.FC<YardManagementProps> = ({
           </p>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex bg-slate-200/80 p-1 rounded-xl border border-slate-200 w-full sm:w-auto overflow-x-auto">
-          <button 
-            onClick={() => setActiveTab('weighbridge')} 
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'weighbridge' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
+        {/* Actions & Tab Selector */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setIsBargeModalOpen(true)}
+            className="flex-1 sm:flex-initial min-h-11 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2"
           >
-            <Scale size={14} /> Balança & Expedição
+            <Ship size={16} /> Descarga Fluvial / Balsa
           </button>
-          <button 
-            onClick={() => setActiveTab('store')} 
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
-              activeTab === 'store' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Boxes size={14} /> Almoxarifado
-          </button>
+
+          <div className="flex bg-slate-200/80 p-1 rounded-xl border border-slate-200 w-full sm:w-auto overflow-x-auto">
+            <button 
+              onClick={() => setActiveTab('weighbridge')} 
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'weighbridge' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scale size={14} /> Balança & Expedição
+            </button>
+            <button 
+              onClick={() => setActiveTab('yards')} 
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'yards' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers size={14} /> Pátios de Calcário ({stockYards.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('store')} 
+              className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                activeTab === 'store' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Boxes size={14} /> Almoxarifado
+            </button>
           <button 
             onClick={() => setActiveTab('maintenance')} 
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
@@ -273,6 +308,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
           >
             <Wrench size={14} /> Manutenções
           </button>
+          </div>
         </div>
       </header>
 
@@ -563,6 +599,182 @@ const YardManagement: React.FC<YardManagementProps> = ({
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ABA: PÁTIOS DE ESTOQUE & PILHAS */}
+      {activeTab === 'yards' && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <Layers size={18} className="text-emerald-700" /> Pátios de Estoque de Calcário
+                </h3>
+                <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-0.5 rounded-full">
+                  {stockYards.length} Pátios
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Controle de baias, pilhas de calcário moído/dolomítico e capacidade volumétrica de estocagem.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setIsBargeModalOpen(true)}
+                className="flex-1 sm:flex-initial min-h-11 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Ship size={15} /> Descarga de Balsa
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsQuickYardModalOpen(true)}
+                className="flex-1 sm:flex-initial min-h-11 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Plus size={16} /> + Novo Pátio
+              </button>
+            </div>
+          </div>
+
+          {/* Cards dos Pátios */}
+          {stockYards.length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-slate-300 text-slate-500 space-y-3">
+              <Layers size={36} className="mx-auto text-slate-400" />
+              <div>
+                <p className="font-bold text-slate-700 text-sm">Nenhum pátio de estoque cadastrado ainda</p>
+                <p className="text-xs text-slate-400">Cadastre o primeiro pátio para controlar o recebimento de balsas e estocagem.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickYardModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 text-white font-bold text-xs"
+              >
+                <Plus size={14} /> Cadastrar Pátio
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {stockYards.map((yard) => {
+                const stock = yard.currentStockTons || 0;
+                const cap = yard.capacityTons || 0;
+                const perc = cap > 0 ? Math.min(100, Math.round((stock / cap) * 100)) : null;
+
+                return (
+                  <div key={yard.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          {yard.code && (
+                            <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                              {yard.code}
+                            </span>
+                          )}
+                          <h4 className="font-black text-slate-900 text-base mt-1.5">{yard.name}</h4>
+                          <p className="text-xs text-slate-500 font-medium">{yard.materialType || 'Calcário'}</p>
+                        </div>
+                        <span className="bg-emerald-50 text-emerald-800 text-[11px] font-black px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                          Ativo
+                        </span>
+                      </div>
+
+                      {yard.location && (
+                        <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                          <span className="font-bold">Local:</span> {yard.location}
+                        </p>
+                      )}
+
+                      <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs text-slate-500 font-bold uppercase">Estoque Atual</span>
+                          <span className="text-xl font-black text-emerald-700">{formatTons(stock)} t</span>
+                        </div>
+
+                        {cap > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1">
+                              <span>Capacidade: {formatTons(cap)} t</span>
+                              <span>{perc}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  (perc || 0) > 90 ? 'bg-rose-500' : (perc || 0) > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${perc}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsBargeModalOpen(true)}
+                        className="flex-1 min-h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                      >
+                        <Ship size={14} /> Descarregar Aqui
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Histórico Recente de Descargas Fluviais */}
+          {bargeDischarges.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm space-y-3 p-4">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <Ship size={16} className="text-emerald-700" /> Histórico Recente de Descargas de Balsa
+              </h4>
+              <div className="divide-y divide-slate-100">
+                {bargeDischarges.slice(0, 10).map((disc) => (
+                  <div key={disc.id} className="py-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">
+                        {disc.originPortOrBarge} ➔ {disc.destinationType === 'YARD' ? `Pátio: ${disc.yardName}` : `Caminhão ${disc.plateNumber || ''} (${disc.customerName})`}
+                      </p>
+                      <p className="text-slate-500">
+                        Ticket: <span className="font-mono font-bold">{disc.ticketNumber}</span> · Data: {disc.dischargeDate} · {disc.productName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 justify-between sm:justify-end">
+                      <span className="font-black text-emerald-700 text-sm tabular-nums">
+                        {formatTons(disc.netWeightTons)} t
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => printThermalTicket({
+                          companyName: defaultCompany.name,
+                          companyCity: [defaultCompany.city, defaultCompany.state].filter(Boolean).join('-'),
+                          ticketNumber: disc.ticketNumber,
+                          date: disc.dischargeDate,
+                          customerName: disc.customerName || (disc.yardName ? `Pátio: ${disc.yardName}` : 'Cliente'),
+                          customerDocument: disc.driverCpf,
+                          orderReference: disc.orderReference || `DESCARGA BALSA`,
+                          productName: disc.productName,
+                          transporterName: disc.transporterName,
+                          driverName: disc.driverName || 'Operador',
+                          driverCpf: disc.driverCpf,
+                          plateNumber: disc.plateNumber || 'PÁTIO',
+                          quantity: disc.netWeightTons,
+                          netWeight: disc.netWeightTons,
+                          operatorName: disc.operatorName
+                        })}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg flex items-center gap-1"
+                      >
+                        <Printer size={13} /> Ticket
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1021,6 +1233,37 @@ const YardManagement: React.FC<YardManagementProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Descarga Fluvial / Balsa */}
+      <BargeDischargeModal
+        isOpen={isBargeModalOpen}
+        onClose={() => setIsBargeModalOpen(false)}
+        orders={orders}
+        stockYards={stockYards}
+        transportadores={transportadores}
+        company={defaultCompany}
+        operatorName={operatorName}
+        onAddStockYard={onAddStockYard}
+        onAddTransportador={onAddTransportador}
+        onSaveDischarge={(rec) => {
+          if (onSaveBargeDischarge) {
+            onSaveBargeDischarge(rec);
+          }
+          toast.push(`Descarga ${rec.ticketNumber} salva com sucesso!`, 'success');
+        }}
+        onUpdateOrder={onUpdateOrder}
+      />
+
+      {/* Modal Rápido de Pátio */}
+      <QuickStockYardModal
+        isOpen={isQuickYardModalOpen}
+        onClose={() => setIsQuickYardModalOpen(false)}
+        onSuccess={(yard) => {
+          setIsQuickYardModalOpen(false);
+          toast.push(`Pátio "${yard.name}" criado com sucesso!`, 'success');
+        }}
+        onAddStockYard={onAddStockYard}
+      />
     </div>
   );
 };

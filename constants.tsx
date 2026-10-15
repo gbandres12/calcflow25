@@ -19,7 +19,8 @@ import {
   FuelPurchase,
   Category,
   FiscalConfig,
-  TransferShipment
+  TransferShipment,
+  StockYard
 } from './types';
 
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
@@ -847,4 +848,39 @@ export const INITIAL_TRANSFERS: TransferShipment[] = [
   }
 ];
 
+export const INITIAL_STOCK_YARDS: StockYard[] = [
+  {
+    id: 'yard-santarem-fluvial',
+    name: 'Pátio Santarém (Fluvial)',
+    locationType: 'FLUVIAL',
+    city: 'Santarém',
+    state: 'PA',
+    capacityTons: 50000,
+    active: true,
+    companyId: 'matriz-demo',
+    notes: 'Pátio portuário fluvial com capacidade para atracação de balsas e transbordo direto para carretas ou armazenagem em pilhas.'
+  },
+  {
+    id: 'yard-usina-matriz',
+    name: 'Usina Matriz (Fazenda)',
+    locationType: 'USINA',
+    city: 'Itaituba',
+    state: 'PA',
+    capacityTons: 100000,
+    active: true,
+    companyId: 'matriz-demo',
+    notes: 'Pátio industrial principal da usina de calcário com balança rodoviária.'
+  },
+  {
+    id: 'yard-rondon-terrestre',
+    name: 'Pátio Rondon do Pará (Terrestre)',
+    locationType: 'TERRESTRE',
+    city: 'Rondon do Pará',
+    state: 'PA',
+    capacityTons: 30000,
+    active: true,
+    companyId: 'matriz-demo',
+    notes: 'Ponto avançado de distribuição rodoviária e transbordo para produtores da região sul/sudeste.'
+  }
+];
 

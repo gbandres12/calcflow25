@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Database, Menu, RefreshCw, Search, X } from 'lucide-react';
+import { Database, Menu, RefreshCw, Search, X, Ship } from 'lucide-react';
 import { View, User, SaleOrder, TransferShipment, Customer } from '../types';
 
 interface Props {
@@ -13,13 +13,14 @@ interface Props {
   onNavigate: (view: View) => void;
   onOpenMenu: () => void;
   onOpenDatabase: () => void;
+  onOpenBargeDischarge?: () => void;
   onLogout: () => void;
 }
 
 export const AppTopbar: React.FC<Props> = ({
   user, companyLabel, syncing, activeCompanyId,
   orders = [], transfers = [], customers = [],
-  onNavigate, onOpenMenu, onOpenDatabase, onLogout
+  onNavigate, onOpenMenu, onOpenDatabase, onOpenBargeDischarge, onLogout
 }) => {
   const [q, setQ] = useState('');
   const results = useMemo(() => {
@@ -68,6 +69,17 @@ export const AppTopbar: React.FC<Props> = ({
             </div>
           )}
         </div>
+        {onOpenBargeDischarge && (
+          <button
+            type="button"
+            onClick={onOpenBargeDischarge}
+            title="Operação de Descarga Fluvial / Balsa"
+            className="px-3 min-h-11 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0 transition-all"
+          >
+            <Ship size={16} />
+            <span className="hidden sm:inline">Descarga Balsa</span>
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-2 justify-end">
         <button type="button" onClick={onOpenDatabase} className="hidden sm:flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600">

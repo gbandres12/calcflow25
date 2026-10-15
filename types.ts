@@ -229,6 +229,73 @@ export interface StoreItem {
   status?: 'ativo' | 'pendente_cadastro';
 }
 
+// Pátios de Estoque dinâmicos
+export interface StockYard {
+  id: string;
+  name: string;
+  locationType?: 'FLUVIAL' | 'TERRESTRE' | 'USINA';
+  city?: string;
+  state?: string;
+  code?: string;
+  location?: string;
+  capacityTons?: number;
+  currentStockTons?: number;
+  materialType?: string;
+  active: boolean;
+  notes?: string;
+  companyId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Registro de operação de descarga de balsa e transbordo
+export interface BargeDischargeOperation {
+  id: string;
+  companyId?: string;
+  date?: string;
+  dischargeDate?: string; // compatibilidade
+  bargeName?: string;
+  originLocation?: string;
+  originPortOrBarge?: string; // compatibilidade
+  destinationType: 'YARD' | 'TRUCK_DIRECT' | 'TRUCK';
+  destinationYardId?: string;
+  destinationYardName?: string;
+  yardId?: string; // compatibilidade
+  yardName?: string; // compatibilidade
+  isLinkedToSale?: boolean;
+  saleOrderId?: string;
+  orderId?: string; // compatibilidade
+  saleOrderReference?: string;
+  orderReference?: string; // compatibilidade
+  isAvulsa?: boolean; // compatibilidade
+  customerId?: string;
+  customerName?: string;
+  productId?: string;
+  productName: string;
+  driverId?: string;
+  driverName?: string;
+  driverCpf?: string;
+  vehiclePlate?: string;
+  plateNumber?: string; // compatibilidade
+  truckModel?: string; // compatibilidade
+  transporterName?: string;
+  truckPhotoUrl?: string; // base64 ou url de imagem
+  grossWeight?: number;
+  grossWeightTons?: number; // compatibilidade
+  tareWeight?: number;
+  tareWeightTons?: number; // compatibilidade
+  netWeight?: number;
+  netWeightTons?: number; // compatibilidade
+  ticketNumber: string;
+  notes?: string;
+  operatorName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Alias retrocompatível */
+export type BargeDischargeRecord = BargeDischargeOperation;
+
 export interface MaintenanceRecord {
   id: string;
   machineId: string;
@@ -780,3 +847,4 @@ export interface CrmLead {
 }
 
 export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+

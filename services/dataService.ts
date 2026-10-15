@@ -12,9 +12,10 @@ import {
   INITIAL_MAINTENANCES,
   INFLOW_CATEGORIES,
   OUTFLOW_CATEGORIES,
-  DEFAULT_FISCAL_CONFIG
+  DEFAULT_FISCAL_CONFIG,
+  INITIAL_STOCK_YARDS
 } from '../constants';
-import { User, UserRole, CompanyMembership } from '../types';
+import { User, UserRole, CompanyMembership, StockYard, BargeDischargeOperation } from '../types';
 import { getSupabase } from './supabaseClient';
 import { isDemoEmail, isLocalDevHost } from './authLogic';
 import {
@@ -162,7 +163,9 @@ const DEMO_TABLE_DATA: Record<string, any[]> = {
   categories: [
     ...INFLOW_CATEGORIES.map((name, i) => ({ id: `cat-in-${i + 1}`, name, type: 'INFLOW' as const })),
     ...OUTFLOW_CATEGORIES.map((name, i) => ({ id: `cat-out-${i + 1}`, name, type: 'OUTFLOW' as const }))
-  ]
+  ],
+  stock_yards: INITIAL_STOCK_YARDS,
+  barge_discharges: []
 };
 
 // Coleções lógicas no JSONB public.app_records. Não dual-write nas tabelas
@@ -183,7 +186,9 @@ export const ALL_TABLES = [
   'users',
   'transfers',
   'transportadores',
-  'crm_leads'
+  'crm_leads',
+  'stock_yards',
+  'barge_discharges'
 ];
 
 export const resolveCompanyKey = (companyId?: string | null): string => {
@@ -217,6 +222,9 @@ export const getCleanStarterData = (tableName: string): any[] => {
       { id: 'britado', name: 'Calcário Britado (Matéria-Prima)', unit: 'Ton', quantity: 0, minStock: 500, unitPrice: 90 },
       { id: 'filler', name: 'Calcário Filler Ultrafino', unit: 'Ton', quantity: 0, minStock: 50, unitPrice: 240 }
     ];
+  }
+  if (tableName === 'stock_yards') {
+    return INITIAL_STOCK_YARDS;
   }
   return [];
 };
@@ -1420,3 +1428,31 @@ export const orderService = {
     return await db.upsert('sales_orders', companyId, orders);
   }
 };
+
+export const yardService = {
+  async getYards(companyId?: string): Promise<StockYard[]> {
+    return await db.getTable('stock_yards', companyId);
+  },
+  async saveYard(companyId: string, yard: StockYard): Promise<StockYard[]> {
+    return await db.upsert('stock_yards', companyId, yard);
+  },
+  async saveYards(companyId: string, yards: StockYard[]): Promise<StockYard[]> {
+    return await db.upsert('stock_yards', companyId, yards);
+  },
+  async deleteYard(companyId: string, id: string): Promise<void> {
+    await db.delete('stock_yards', companyId, id);
+  }
+};
+
+export const bargeDischargeService = {
+  async getDischarges(companyId?: string): Promise<BargeDischargeOperation[]> {
+    return await db.getTable('barge_discharges', companyId);
+  },
+  async saveDischarge(companyId: string, operation: BargeDischargeOperation): Promise<BargeDischargeOperation[]> {
+    return await db.upsert('barge_discharges', companyId, operation);
+  },
+  async deleteDischarge(companyId: string, id: string): Promise<void> {
+    await db.delete('barge_discharges', companyId, id);
+  }
+};
+
