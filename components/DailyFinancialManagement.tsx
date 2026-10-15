@@ -127,6 +127,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     dayTransactions,
     dayInflowTransactions,
     dayOutflowTransactions,
+    dayDeductionTransactions,
     initialBalance,
     totalDayInflows,
     totalDayOutflows,
@@ -248,6 +249,30 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     });
 
     const dayTxs = transactions.filter(t => dayTxIds.has(t.id));
+
+    // Função utilitária para saber se a transação do dia possui abatimento/desconto na data selecionada
+    const hasDeductionOnTargetDate = (t: Transaction) => {
+      if ((Number(t.discount) || 0) > 0) return true;
+      if (t.payments && t.payments.length > 0) {
+        return t.payments.some(p => {
+          const pDate = p.paymentDate || t.paymentDate || t.date;
+          return pDate === targetDate && (
+            p.isDiscountOrDeduction ||
+            p.paymentMethod?.toLowerCase().includes('abatimento') ||
+            p.paymentMethod?.toLowerCase().includes('desconto') ||
+            p.notes?.toLowerCase().includes('abatimento')
+          );
+        });
+      }
+      return (
+        t.category?.toLowerCase().includes('abatimento') ||
+        t.category?.toLowerCase().includes('devolu') ||
+        t.description?.toLowerCase().includes('abatimento') ||
+        t.paymentMethod?.toLowerCase().includes('abatimento')
+      );
+    };
+
+    const dayDeductions = dayTxs.filter(hasDeductionOnTargetDate);
     const dayInflows = dayTxs.filter(t => t.type === TransactionType.SALE);
     const dayOutflows = dayTxs.filter(t => t.type === TransactionType.EXPENSE || t.type === TransactionType.PURCHASE);
 
@@ -259,6 +284,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
       dayTransactions: dayTxs,
       dayInflowTransactions: dayInflows,
       dayOutflowTransactions: dayOutflows,
+      dayDeductionTransactions: dayDeductions,
       initialBalance: calculatedInitialBalance,
       totalDayInflows: sumInflows,
       totalDayOutflows: sumOutflows,
@@ -277,7 +303,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     } else if (activeTab === 'outflows') {
       list = dayOutflowTransactions;
     } else if (activeTab === 'deductions') {
-      list = dayTransactions.filter(t => (Number(t.discount) || 0) > 0);
+      list = dayDeductionTransactions;
     }
 
     if (!searchQuery.trim()) return list;
@@ -371,6 +397,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     text += `💵 *Saldo Inicial:* R$ ${initialBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `🟢 *Total de Entradas (${dayInflowTransactions.length}):* R$ ${totalDayInflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `🔴 *Total de Saídas (${dayOutflowTransactions.length}):* R$ ${totalDayOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+    if (totalDayDeductions > 0) {
+      text += `🏷️ *Abatimentos/Descontos (${dayDeductionTransactions.length}):* R$ ${totalDayDeductions.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+    }
     text += `⚖️ *Resultado do Dia:* R$ ${netDayResult.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `💰 *Saldo Final do Dia:* R$ ${finalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -496,8 +525,8 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         </div>
       </header>
 
-      {/* KPI Cards: Saldo Inicial, Entradas, Saídas, Resultado e Saldo Final */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* KPI Cards: Saldo Inicial, Entradas, Saídas, Abatimentos, Resultado e Saldo Final */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${totalDayDeductions > 0 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>
         {/* Saldo Inicial */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="flex justify-between items-start mb-2">
@@ -543,6 +572,24 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             {dayOutflowTransactions.length} despesa(s)/pagamento(s)
           </span>
         </div>
+
+        {/* Abatimentos do Dia */}
+        {totalDayDeductions > 0 && (
+          <div className="bg-amber-50/60 p-5 rounded-2xl border border-amber-200 shadow-sm relative overflow-hidden">
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-700">Abatimentos (🏷️)</span>
+              <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                <Percent size={16} />
+              </div>
+            </div>
+            <p className="text-xl font-black text-amber-800 tracking-tight">
+              R$ {totalDayDeductions.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-xs font-bold text-amber-700 mt-1 block">
+              {dayDeductionTransactions.length} desconto(s) concedido(s)
+            </span>
+          </div>
+        )}
 
         {/* Resultado Líquido do Dia */}
         <div className={`p-5 rounded-2xl border shadow-sm relative overflow-hidden ${
@@ -681,7 +728,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             }`}
           >
             <Percent size={14} className="text-amber-600" />
-            Abatimentos / Descontos
+            Abatimentos / Descontos ({dayDeductionTransactions.length})
           </button>
         )}
       </div>
@@ -714,20 +761,52 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                 </tr>
               ) : (
                 filteredList.map(tx => {
-                  const isInflow = tx.type === TransactionType.SALE;
-                  const amt = Number(tx.paidAmount !== undefined ? tx.paidAmount : tx.amount) || 0;
+                  const targetDate = selectedDate;
+                  const hasPayments = Array.isArray(tx.payments) && tx.payments.length > 0;
+                  
+                  // Identificar se nesta data há abatimento nesta transação
+                  const dayPayments = hasPayments 
+                    ? tx.payments!.filter(p => (p.paymentDate || tx.paymentDate || tx.date) === targetDate)
+                    : [];
+                  
+                  const isDeductionItem = (Number(tx.discount) || 0) > 0 ||
+                    dayPayments.some(p => p.isDiscountOrDeduction || p.paymentMethod?.toLowerCase().includes('abatimento')) ||
+                    tx.category?.toLowerCase().includes('abatimento') ||
+                    tx.description?.toLowerCase().includes('abatimento') ||
+                    tx.paymentMethod?.toLowerCase().includes('abatimento');
+
+                  const isInflow = tx.type === TransactionType.SALE && !isDeductionItem;
+
+                  // Valor referente ao dia: se houver pagamentos no dia, soma o valor deles; senão usa paidAmount/amount
+                  let dayAmt = 0;
+                  if (dayPayments.length > 0) {
+                    dayAmt = dayPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+                  } else {
+                    dayAmt = Number(tx.paidAmount !== undefined && tx.paidAmount !== null && tx.paidAmount > 0 ? tx.paidAmount : tx.amount) || 0;
+                  }
 
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                            isInflow ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            isDeductionItem 
+                              ? 'bg-amber-50 text-amber-700' 
+                              : isInflow 
+                                ? 'bg-emerald-50 text-emerald-700' 
+                                : 'bg-rose-50 text-rose-700'
                           }`}>
-                            {isInflow ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                            {isDeductionItem ? <Percent size={15} /> : isInflow ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
                           </div>
                           <div>
-                            <p className="text-xs font-black text-slate-900">{tx.description}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-black text-slate-900">{tx.description}</p>
+                              {isDeductionItem && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                                  Abatimento
+                                </span>
+                              )}
+                            </div>
                             {tx.notes && <p className="text-xs text-slate-500 line-clamp-1">{tx.notes}</p>}
                           </div>
                         </div>
@@ -745,23 +824,31 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                       </td>
                       <td className="px-4 py-4">
                         <span className="text-xs font-bold text-slate-800 block">{getAccountName(tx.accountId)}</span>
-                        <span className="text-xs font-bold text-slate-500 block">{tx.paymentMethod || 'PIX / À Vista'}</span>
+                        <span className="text-xs font-bold text-slate-500 block">
+                          {isDeductionItem ? 'Abatimento / Desconto' : (tx.paymentMethod || 'PIX / À Vista')}
+                        </span>
                       </td>
                       <td className="px-4 py-4">
                         <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase border flex items-center gap-1 w-fit ${
-                          tx.status === TransactionStatus.CONFIRMADO 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                          isDeductionItem
+                            ? 'bg-amber-50 text-amber-700 border-amber-300'
+                            : tx.status === TransactionStatus.CONFIRMADO || tx.status === TransactionStatus.PAGO
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {tx.status === TransactionStatus.CONFIRMADO ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                          {tx.status}
+                          {isDeductionItem ? <Percent size={11} /> : tx.status === TransactionStatus.CONFIRMADO || tx.status === TransactionStatus.PAGO ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                          {isDeductionItem ? 'Abatido' : tx.status}
                         </span>
                       </td>
                       <td className={`px-4 py-4 text-right text-xs font-black ${
-                        isInflow ? 'text-emerald-700' : 'text-rose-700'
+                        isDeductionItem 
+                          ? 'text-amber-700' 
+                          : isInflow 
+                            ? 'text-emerald-700' 
+                            : 'text-rose-700'
                       }`}>
-                        {isInflow ? '+ ' : '- '}
-                        R$ {amt.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {isDeductionItem ? '🏷️ ' : isInflow ? '+ ' : '- '}
+                        R$ {dayAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-5 py-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -1091,7 +1178,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
               </div>
 
               {/* Quadro Resumo Financeiro */}
-              <div className="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className={`grid ${totalDayDeductions > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200`}>
                 <div>
                   <span className="text-[11px] uppercase font-bold text-slate-400 block">Saldo Inicial</span>
                   <p className="font-black text-sm text-slate-800">
@@ -1110,7 +1197,15 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                     R$ {totalDayOutflows.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
-                <div className="col-span-3 pt-3 border-t border-slate-200 flex justify-between items-center">
+                {totalDayDeductions > 0 && (
+                  <div>
+                    <span className="text-[11px] uppercase font-bold text-amber-700 block">Abatimentos / Desc.</span>
+                    <p className="font-black text-sm text-amber-800">
+                      R$ {totalDayDeductions.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                )}
+                <div className={`${totalDayDeductions > 0 ? 'col-span-4' : 'col-span-3'} pt-3 border-t border-slate-200 flex justify-between items-center`}>
                   <span className="font-black text-xs uppercase text-slate-900">Saldo Final em Caixa:</span>
                   <span className="font-black text-base text-slate-900">
                     R$ {finalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -1131,18 +1226,39 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {dayTransactions.map(t => (
-                      <tr key={t.id}>
-                        <td className="py-2 font-bold text-slate-800">{t.description}</td>
-                        <td className="py-2 text-slate-600">{t.contactName || '-'}</td>
-                        <td className="py-2 text-slate-500">{t.paymentMethod || 'PIX'}</td>
-                        <td className={`py-2 text-right font-black ${
-                          t.type === TransactionType.SALE ? 'text-emerald-700' : 'text-rose-700'
-                        }`}>
-                          {t.type === TransactionType.SALE ? '+' : '-'} R$ {Number(t.paidAmount !== undefined ? t.paidAmount : t.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                    {dayTransactions.map(t => {
+                      const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
+                      const dayPayments = hasPayments 
+                        ? t.payments!.filter(p => (p.paymentDate || t.paymentDate || t.date) === selectedDate)
+                        : [];
+                      const isDeduction = (Number(t.discount) || 0) > 0 ||
+                        dayPayments.some(p => p.isDiscountOrDeduction || p.paymentMethod?.toLowerCase().includes('abatimento')) ||
+                        t.category?.toLowerCase().includes('abatimento') ||
+                        t.description?.toLowerCase().includes('abatimento');
+                      
+                      let dayAmt = 0;
+                      if (dayPayments.length > 0) {
+                        dayAmt = dayPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+                      } else {
+                        dayAmt = Number(t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0 ? t.paidAmount : t.amount) || 0;
+                      }
+
+                      return (
+                        <tr key={t.id}>
+                          <td className="py-2 font-bold text-slate-800">
+                            {t.description}
+                            {isDeduction && <span className="ml-2 text-[10px] uppercase font-black text-amber-700 bg-amber-100 px-1 py-0.5 rounded">Abatimento</span>}
+                          </td>
+                          <td className="py-2 text-slate-600">{t.contactName || '-'}</td>
+                          <td className="py-2 text-slate-500">{isDeduction ? 'Abatimento / Desconto' : (t.paymentMethod || 'PIX')}</td>
+                          <td className={`py-2 text-right font-black ${
+                            isDeduction ? 'text-amber-700' : t.type === TransactionType.SALE ? 'text-emerald-700' : 'text-rose-700'
+                          }`}>
+                            {isDeduction ? '🏷️ ' : t.type === TransactionType.SALE ? '+' : '-'} R$ {dayAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
