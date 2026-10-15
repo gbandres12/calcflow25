@@ -2867,9 +2867,38 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-black text-blue-700 text-base">{w.quantityWithdrawn} TON</span>
-                        <p className="text-xs text-slate-500 font-bold">Saldo restante: {w.remainingBalanceQuantity} TON</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="font-black text-blue-700 text-base">{w.quantityWithdrawn} TON</span>
+                          <p className="text-xs text-slate-500 font-bold">Saldo restante: {w.remainingBalanceQuantity} TON</p>
+                        </div>
+                        {!w.nfeNumero && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const confirmed = await confirmDialog({
+                                title: `Excluir Retirada / Ticket ${w.weighTicketNumber || w.plateNumber}?`,
+                                description: `Esta ação removerá o registro de retirada de ${w.quantityWithdrawn} t (Motorista: ${w.driverName || 'N/I'}, Placa: ${w.plateNumber}). O saldo restante deste pedido voltará a ficar disponível.`,
+                                confirmLabel: 'Excluir Retirada',
+                                danger: true
+                              });
+                              if (!confirmed) return;
+                              const updatedWithdrawals = (selectedOrderDetails.withdrawals || []).filter(item => item.id !== w.id);
+                              const updatedOrder: SaleOrder = {
+                                ...selectedOrderDetails,
+                                withdrawals: updatedWithdrawals
+                              };
+                              setSelectedOrderDetails(updatedOrder);
+                              onUpdateOrder(updatedOrder);
+                              toast.push(`Retirada ${w.weighTicketNumber || w.plateNumber} excluída.`, 'success');
+                            }}
+                            title="Excluir este teste/registro de retirada"
+                            aria-label="Excluir retirada"
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

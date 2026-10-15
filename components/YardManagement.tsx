@@ -3,7 +3,7 @@ import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Cust
 import { 
   Boxes, Plus, Wrench, Search, Package, AlertTriangle, 
   X, Edit, Scale, Truck, Printer, Send, Calendar, 
-  CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight
+  CheckCircle2, FileText, UserCheck, ArrowDownRight, ArrowUpRight, Trash2
 } from 'lucide-react';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { CloseWithdrawalsModal } from './CloseWithdrawalsModal';
@@ -11,6 +11,8 @@ import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal } from '../service
 import { formatTons, openOrdersForLoading, orderLoadingProgress, sumTons } from '../services/domain/loadings';
 import { printThermalTicket } from '../services/domain/thermalTicket';
 import { dateISOBR } from "../utils/dateFilterUtils";
+import { useConfirm } from './ui/ConfirmDialog';
+import { useToast } from './ui/Toast';
 
 interface YardManagementProps {
   machines: Machine[];
@@ -43,6 +45,8 @@ const YardManagement: React.FC<YardManagementProps> = ({
   onUpdateOrder,
   onCloseOrderWithdrawals
 }) => {
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [activeTab, setActiveTab] = useState<'weighbridge' | 'store' | 'maintenance'>('weighbridge');
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [isMaintModalOpen, setIsMaintModalOpen] = useState(false);
@@ -176,6 +180,24 @@ const YardManagement: React.FC<YardManagementProps> = ({
 
     setSelectedOrderForWeigh(baseOrder);
     onUpdateOrder(baseOrder);
+  };
+
+  const handleDeleteWithdrawal = async (w: OrderWithdrawal, order: SaleOrder) => {
+    if (!onUpdateOrder) return;
+    const confirmed = await confirmDialog({
+      title: `Excluir Retirada / Ticket ${w.weighTicketNumber || w.plateNumber}?`,
+      description: `Esta ação removerá o registro de pesagem de ${w.quantityWithdrawn} t (Motorista: ${w.driverName || 'N/I'}, Placa: ${w.plateNumber}) do Pedido #${order.reference}. O saldo restante voltará a ficar disponível para carregamento.`,
+      confirmLabel: 'Excluir Retirada',
+      danger: true
+    });
+    if (!confirmed) return;
+    const updatedWithdrawals = (order.withdrawals || []).filter(item => item.id !== w.id);
+    const updatedOrder: SaleOrder = {
+      ...order,
+      withdrawals: updatedWithdrawals
+    };
+    onUpdateOrder(updatedOrder);
+    toast.push(`Retirada ${w.weighTicketNumber || w.plateNumber} excluída com sucesso.`, 'success');
   };
 
   const handleSendWhatsAppTicket = (w: OrderWithdrawal, custName?: string) => {
@@ -412,6 +434,16 @@ const YardManagement: React.FC<YardManagementProps> = ({
                       >
                         <Send size={18} />
                       </button>
+                      {!item.withdrawal.nfeNumero && (
+                        <button
+                          onClick={() => handleDeleteWithdrawal(item.withdrawal, item.order)}
+                          aria-label="Excluir retirada"
+                          title="Excluir este teste/registro de pesagem"
+                          className="min-h-12 min-w-12 inline-flex items-center justify-center text-rose-600 border border-rose-200 bg-rose-50 rounded-lg"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -512,6 +544,16 @@ const YardManagement: React.FC<YardManagementProps> = ({
                             >
                               <Printer size={16} /> Reimprimir
                             </button>
+                            {!item.withdrawal.nfeNumero && (
+                              <button
+                                onClick={() => handleDeleteWithdrawal(item.withdrawal, item.order)}
+                                title="Excluir este teste/registro de pesagem"
+                                aria-label="Excluir retirada"
+                                className="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
