@@ -12,9 +12,9 @@ import {
 } from './companyPermissions';
 
 describe('permissão de filial: acesso total cobre todo módulo que o backfill do banco cobre', () => {
-  it('marca read e write em todos os 15 módulos', () => {
+  it('marca read e write em todos os módulos', () => {
     const full = buildFullAccessPermissions();
-    assert.equal(Object.keys(full).length, 16);
+    assert.equal(Object.keys(full).length, 18);
     Object.values(full).forEach((entry) => {
       assert.equal(entry.read, true);
       assert.equal(entry.write, true);

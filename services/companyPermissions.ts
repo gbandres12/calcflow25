@@ -22,7 +22,9 @@ export const PERMISSION_MODULES = [
   'users',
   'transfers',
   'transportadores',
-  'crm_leads'
+  'crm_leads',
+  'stock_yards',
+  'barge_discharges'
 ] as const;
 
 export type PermissionModule = typeof PERMISSION_MODULES[number];
@@ -37,7 +39,7 @@ export interface PermissionGroup {
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { key: 'comercial', label: 'Comercial & Clientes', modules: ['customers', 'sales_orders', 'transportadores', 'crm_leads'] },
   { key: 'producao', label: 'Produção & Fábrica', modules: ['inventory', 'categories'] },
-  { key: 'frota_patio', label: 'Frota, Pátio & Suprimentos', modules: ['store_items', 'machines', 'maintenance_records', 'fuel_records', 'fuel_purchases', 'transfers'] },
+  { key: 'frota_patio', label: 'Frota, Pátio & Suprimentos', modules: ['store_items', 'machines', 'maintenance_records', 'fuel_records', 'fuel_purchases', 'transfers', 'stock_yards', 'barge_discharges'] },
   { key: 'financeiro', label: 'Financeiro & Caixa', modules: ['transactions', 'financial_accounts', 'fiscal_config'] },
   { key: 'gestao', label: 'Gestão & Sistema', modules: ['users'] }
 ];
