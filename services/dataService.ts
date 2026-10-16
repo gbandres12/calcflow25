@@ -310,6 +310,12 @@ const persistPendingUpserts = async (
     await waitForAuthUser(1500);
   } catch {}
 
+  const wroteToErp = await tryWriteToErp(tableName, companyId, operational);
+  if (wroteToErp) {
+    setPersistError(tableName, companyId, null);
+    return;
+  }
+
   const { error } = await supabase
     .from('app_records')
     .upsert(createSupabaseRows(tableName, companyId, operational), {
@@ -336,6 +342,9 @@ const persistPendingDeletes = async (
   } catch {}
 
   for (const id of ids) {
+    const deletedFromErp = await tryDeleteFromErp(tableName, companyId, String(id));
+    if (deletedFromErp) continue;
+
     const { error } = await supabase
       .from('app_records')
       .delete()
@@ -347,6 +356,7 @@ const persistPendingDeletes = async (
       throw new Error(error.message);
     }
   }
+  setPersistError(tableName, companyId, null);
 };
 
 const writeSeedMeta = async (tableName: string, companyId: string) => {
@@ -367,6 +377,16 @@ const writeSeedMeta = async (tableName: string, companyId: string) => {
 const findStalePending = async (tableName: string, companyId: string, pending: any[]): Promise<any[]> => {
   const supabase = getSupabase();
   if (!supabase || pending.length === 0) return [];
+
+  const erpDirect = await tryReadFromErp(tableName, companyId);
+  if (erpDirect !== null) {
+    const remoteById = new Map(erpDirect.map((row: any) => [String(row.id), row]));
+    return pending.filter((row) => {
+      const remote = remoteById.get(String(row.id));
+      return Boolean(remote) && recordUpdatedAtMs(remote) > recordUpdatedAtMs(row);
+    });
+  }
+
   const ids = pending.map((row) => String(row.id));
   const { data, error } = await supabase
     .from('app_records')
@@ -621,6 +641,12 @@ export const db = {
     const erpDirect = await tryReadFromErp(tableName, compKey);
     if (erpDirect !== null) {
       let filtered = erpDirect;
+      const pendingUpserts = getPendingUpserts(storageKey);
+      const pendingDeletes = getPendingDeleteIds(storageKey);
+      if (pendingUpserts.length > 0 || pendingDeletes.length > 0) {
+        retryUnconfirmed(tableName, compKey, storageKey, filtered, pendingUpserts, pendingDeletes);
+        filtered = composeVisibleRows(filtered, pendingUpserts, pendingDeletes, filtered);
+      }
       if (!isDemoCompany(compKey) && FINANCE_SCOPED_TABLES.has(tableName)) {
         const scope = await getFinanceScope(compKey);
         if (scope) filtered = filtered.filter((row) => isInFinanceScope(tableName, row, scope));

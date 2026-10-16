@@ -65,29 +65,39 @@ export function assembleOrder(
     ...(w.extra || {})
   }));
 
-  const mappedNfes: SaleOrderLinkedNfe[] = nfes.map((n) => ({
-    id: n.id,
-    tipo: n.extra?.tipo || 'pedido',
-    reference: header.reference || '',
-    items: n.extra?.items || mappedItems,
-    subtotal: Number(n.extra?.subtotal || header.subtotal || 0),
-    discount: Number(n.extra?.discount || header.discount || 0),
-    shipping: Number(n.extra?.shipping || header.extra?.shipping || 0),
-    total: Number(n.extra?.total || header.total || 0),
-    nfeStatus: n.status,
-    nfeId: n.id,
-    nfeChave: n.chave,
-    nfeNumero: n.numero,
-    nfeSerie: n.serie,
-    nfeProtocolo: n.protocolo,
-    nfeDanfeUrl: n.danfe_url,
-    nfeXmlUrl: n.xml_url,
-    nfeEmissao: n.emissao,
-    nfePayload: n.nfe_payload,
-    nfeRawResponse: n.nfe_response,
-    createdAt: n.created_at,
-    ...(n.extra || {})
-  }));
+  const extraNfesList = Array.isArray(extra.nfes) ? extra.nfes : [];
+  const mappedNfes: SaleOrderLinkedNfe[] = nfes.map((n) => {
+    const fromHeader = extraNfesList.find(
+      (en: any) =>
+        (en?.id && String(en.id) === String(n.id)) ||
+        (en?.nfeId && String(en.nfeId) === String(n.id)) ||
+        (en?.nfeChave && n.chave && String(en.nfeChave) === String(n.chave))
+    ) || {};
+    const nExtra = { ...fromHeader, ...(n.extra || {}) };
+    return {
+      ...nExtra,
+      id: n.id,
+      tipo: nExtra.tipo || 'pedido',
+      reference: nExtra.reference || header.reference || '',
+      items: nExtra.items || mappedItems,
+      subtotal: Number(nExtra.subtotal != null ? nExtra.subtotal : (header.subtotal || 0)),
+      discount: Number(nExtra.discount != null ? nExtra.discount : (header.discount || 0)),
+      shipping: Number(nExtra.shipping != null ? nExtra.shipping : (header.extra?.shipping || 0)),
+      total: Number(nExtra.total != null ? nExtra.total : (header.total || 0)),
+      nfeStatus: n.status || nExtra.nfeStatus,
+      nfeId: n.id,
+      nfeChave: n.chave || nExtra.nfeChave,
+      nfeNumero: n.numero || nExtra.nfeNumero,
+      nfeSerie: n.serie || nExtra.nfeSerie,
+      nfeProtocolo: n.protocolo || nExtra.nfeProtocolo,
+      nfeDanfeUrl: n.danfe_url || nExtra.nfeDanfeUrl,
+      nfeXmlUrl: n.xml_url || nExtra.nfeXmlUrl,
+      nfeEmissao: n.emissao || nExtra.nfeEmissao,
+      nfePayload: n.nfe_payload || nExtra.nfePayload,
+      nfeRawResponse: n.nfe_response || nExtra.nfeRawResponse,
+      createdAt: n.created_at || nExtra.createdAt
+    };
+  });
 
   return {
     ...extra,
@@ -290,6 +300,11 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
   }
 
   // 2. Upsert do cabeçalho do pedido
+  const headerExtra = {
+    ...(extra || {}),
+    ...(Array.isArray(nfes) ? { nfes } : {})
+  };
+
   const { error: hErr } = await supabase
     .schema('erp')
     .from('sales_orders')
@@ -309,7 +324,7 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
       is_avulsa: Boolean(isAvulsa),
       shipping: shipping != null ? { valor: shipping } : null,
       frete: frete || null,
-      extra: extra || {},
+      extra: headerExtra,
       updated_at: new Date().toISOString()
     }, { onConflict: 'company_id,id' });
 
@@ -466,22 +481,33 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
       };
     });
 
+    const keepIds = wthRows.map((r: any) => r.id);
+    await supabase.schema('erp').from('sales_order_withdrawals').delete()
+      .eq('company_id', companyId)
+      .eq('order_id', String(id))
+      .not('id', 'in', `(${keepIds.map((i: any) => `"${i}"`).join(',')})`);
+
     const { error: wthErr } = await supabase
       .schema('erp')
       .from('sales_order_withdrawals')
       .upsert(wthRows, { onConflict: 'company_id,id' });
 
     if (wthErr) console.warn('[OrdersRepo] Falha ao upsert em sales_order_withdrawals:', wthErr);
+  } else if (Array.isArray(withdrawals) && withdrawals.length === 0) {
+    await supabase.schema('erp').from('sales_order_withdrawals').delete()
+      .eq('company_id', companyId)
+      .eq('order_id', String(id));
   }
 
   // 7. Upsert de nfes
   if (Array.isArray(nfes) && nfes.length > 0) {
-    const nfeRows = nfes.map((n: any, idx: number) => {
+    const nfeRowsWithExtra = nfes.map((n: any, idx: number) => {
       const {
         id: nId, nfeId, chave, nfeChave, numero, nfeNumero,
         serie, nfeSerie, status: nStatus, nfeStatus, emissao, nfeEmissao,
         protocolo, nfeProtocolo, danfeUrl, nfeDanfeUrl, xmlUrl, nfeXmlUrl,
-        nfePayload, nfeRawResponse, nfeResponse, createdAt: nCreated, updatedAt: nUpdated
+        nfePayload, nfeRawResponse, nfeResponse, createdAt: nCreated, updatedAt: nUpdated,
+        ...nfeExtra
       } = n;
       return {
         company_id: companyId,
@@ -497,15 +523,25 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
         xml_url: xmlUrl || nfeXmlUrl || null,
         nfe_payload: nfePayload || null,
         nfe_response: nfeResponse || nfeRawResponse || null,
+        extra: nfeExtra || {},
         created_at: nCreated || new Date().toISOString(),
         updated_at: nUpdated || new Date().toISOString()
       };
     });
 
-    const { error: nfeErr } = await supabase
+    let { error: nfeErr } = await supabase
       .schema('erp')
       .from('sales_order_nfes')
-      .upsert(nfeRows, { onConflict: 'company_id,id' });
+      .upsert(nfeRowsWithExtra, { onConflict: 'company_id,id' });
+
+    if (nfeErr && /extra/i.test(String(nfeErr.message || ''))) {
+      const nfeRowsBase = nfeRowsWithExtra.map(({ extra: _ignored, ...rest }) => rest);
+      const retry = await supabase
+        .schema('erp')
+        .from('sales_order_nfes')
+        .upsert(nfeRowsBase, { onConflict: 'company_id,id' });
+      nfeErr = retry.error;
+    }
 
     if (nfeErr) console.warn('[OrdersRepo] Falha ao upsert em sales_order_nfes:', nfeErr);
   }

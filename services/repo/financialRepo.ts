@@ -19,16 +19,33 @@ export function assembleAccount(row: any): FinancialAccount {
 
 export function assembleTransaction(header: any, payments: any[] = []): Transaction {
   const extra = header.extra || {};
-  const mappedPayments: TransactionPayment[] = payments.map((p) => ({
-    id: p.id,
-    transactionId: p.transaction_id,
-    amount: Number(p.amount || 0),
-    paymentDate: p.payment_date,
-    paymentMethod: p.payment_method || 'PIX',
-    accountId: p.account_id,
-    receiptId: p.receipt_id,
-    notes: p.notes
-  }));
+  const extraPaymentsList = Array.isArray(extra.payments) ? extra.payments : [];
+  const mappedPayments: TransactionPayment[] = payments.map((p) => {
+    const fromHeader = extraPaymentsList.find(
+      (ep: any) =>
+        (ep?.id && String(ep.id) === String(p.id)) ||
+        (ep?.receiptId && p.receipt_id && String(ep.receiptId) === String(p.receipt_id))
+    ) || {};
+    const pExtra = { ...fromHeader, ...(p.extra || {}) };
+    const isDiscount = Boolean(
+      p.is_discount_or_deduction ||
+      pExtra.isDiscountOrDeduction ||
+      /(abatimento|desconto|devolu)/i.test(String(p.payment_method || '')) ||
+      /(abatimento|desconto)/i.test(String(p.notes || ''))
+    );
+    return {
+      ...pExtra,
+      id: p.id,
+      transactionId: p.transaction_id,
+      amount: Number(p.amount || 0),
+      paymentDate: p.payment_date,
+      paymentMethod: p.payment_method || 'PIX',
+      accountId: p.account_id,
+      receiptId: p.receipt_id,
+      notes: p.notes,
+      ...(isDiscount ? { isDiscountOrDeduction: true } : {})
+    };
+  });
 
   return {
     ...extra,
@@ -134,6 +151,11 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
     notes, payments, ...extra
   } = record;
 
+  const txExtra = {
+    ...(extra || {}),
+    ...(Array.isArray(payments) ? { payments } : {})
+  };
+
   const { error: txErr } = await supabase
     .schema('erp')
     .from('transactions')
@@ -155,7 +177,7 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
       cost_center_id: costCenterId || null,
       payment_method: paymentMethod || null,
       notes: notes || null,
-      extra: extra || {},
+      extra: txExtra,
       updated_at: new Date().toISOString()
     }, { onConflict: 'company_id,id' });
 
@@ -163,32 +185,54 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
 
   if (Array.isArray(payments)) {
     if (payments.length > 0) {
-      const paymentRows = payments.map((p: any, idx: number) => {
-        const receiptRef = p.receiptId || p.receipt_id || receiptId || null;
-        const pid = p.id || (receiptRef ? `pmt-${receiptRef}-${id}` : `pmt-${id}-${idx + 1}`);
+      const paymentRowsWithExtra = payments.map((p: any, idx: number) => {
+        const {
+          id: rawPid, transactionId: _tId, amount: pAmt, paymentDate: pDate,
+          paymentMethod: pPm, accountId: pAcc, receiptId: pRec, receipt_id: pRecSnake,
+          notes: pNotes, isDiscountOrDeduction, ...pExtra
+        } = p;
+        const receiptRef = pRec || pRecSnake || receiptId || null;
+        const pid = rawPid || (receiptRef ? `pmt-${receiptRef}-${id}` : `pmt-${id}-${idx + 1}`);
+        const resolvedMethod = pPm || paymentMethod || (isDiscountOrDeduction ? 'Abatimento / Devolução' : 'PIX');
         return {
           company_id: companyId,
           id: String(pid),
           transaction_id: String(id),
-          amount: Number(p.amount || 0),
-          payment_date: p.paymentDate || date || dateISOBR(),
-          payment_method: p.paymentMethod || paymentMethod || 'PIX',
-          account_id: p.accountId || accountId || null,
+          amount: Number(pAmt || 0),
+          payment_date: pDate || date || dateISOBR(),
+          payment_method: resolvedMethod,
+          account_id: pAcc || accountId || null,
           receipt_id: receiptRef ? String(receiptRef) : null,
-          notes: p.notes || null
+          notes: pNotes || null,
+          is_discount_or_deduction: Boolean(isDiscountOrDeduction),
+          extra: {
+            ...(pExtra || {}),
+            ...(isDiscountOrDeduction ? { isDiscountOrDeduction: true } : {})
+          }
         };
       });
 
-      const keepIds = paymentRows.map(r => r.id);
+      const keepIds = paymentRowsWithExtra.map(r => r.id);
       await supabase.schema('erp').from('transaction_payments').delete()
         .eq('company_id', companyId)
         .eq('transaction_id', String(id))
         .not('id', 'in', `(${keepIds.map(i => `"${i}"`).join(',')})`);
 
-      const { error: pErr } = await supabase
+      let { error: pErr } = await supabase
         .schema('erp')
         .from('transaction_payments')
-        .upsert(paymentRows, { onConflict: 'company_id,id' });
+        .upsert(paymentRowsWithExtra, { onConflict: 'company_id,id' });
+
+      if (pErr && /(extra|is_discount_or_deduction)/i.test(String(pErr.message || ''))) {
+        const paymentRowsBase = paymentRowsWithExtra.map(
+          ({ extra: _e, is_discount_or_deduction: _d, ...rest }) => rest
+        );
+        const retry = await supabase
+          .schema('erp')
+          .from('transaction_payments')
+          .upsert(paymentRowsBase, { onConflict: 'company_id,id' });
+        pErr = retry.error;
+      }
 
       if (pErr) console.warn('[FinancialRepo] Falha ao upsert em transaction_payments:', pErr);
     } else {

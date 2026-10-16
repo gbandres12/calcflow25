@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assembleOrder } from './ordersRepo';
+import { assembleOrder, upsertOrderToErp } from './ordersRepo';
 import { assembleCustomer } from './customersRepo';
 import { assembleProduct, assembleStoreItem } from './productsRepo';
-import { assembleTransaction, assembleAccount } from './financialRepo';
+import { assembleTransaction, assembleAccount, upsertTransactionToErp } from './financialRepo';
 import {
   assembleCategory,
   assembleTransportador,
@@ -295,4 +295,171 @@ test('repoAssembler: assembleStoreItem monta item de almoxarifado', () => {
   assert.equal(item.supplierSku, 'FLT-098');
   assert.equal((item as any).customTag, 'Almoxarifado 01');
 });
+
+test('repoAssembler: assembleTransaction reconstrói isDiscountOrDeduction em abatimentos', () => {
+  const txRow = {
+    id: 'tx-abat-1',
+    company_id: 'comp-1',
+    description: 'Venda #PED-2026-0099',
+    type: 'SALE',
+    amount: 5000,
+    paid_amount: 5000,
+    status: 'pago',
+    date: '2026-10-15',
+    extra: {
+      payments: [
+        { id: 'pmt-disc-header', amount: 400, paymentMethod: 'PIX', isDiscountOrDeduction: true }
+      ]
+    }
+  };
+
+  const payments = [
+    {
+      id: 'pmt-disc-header',
+      transaction_id: 'tx-abat-1',
+      amount: 400,
+      payment_date: '2026-10-15',
+      payment_method: 'PIX',
+      notes: 'Ajuste comercial'
+    },
+    {
+      id: 'pmt-disc-col',
+      transaction_id: 'tx-abat-1',
+      amount: 600,
+      payment_date: '2026-10-15',
+      payment_method: 'Abatimento / Devolução',
+      is_discount_or_deduction: true
+    },
+    {
+      id: 'pmt-normal',
+      transaction_id: 'tx-abat-1',
+      amount: 4000,
+      payment_date: '2026-10-15',
+      payment_method: 'PIX'
+    }
+  ];
+
+  const tx = assembleTransaction(txRow, payments);
+  assert.equal(tx.payments?.length, 3);
+  assert.equal(tx.payments?.[0].isDiscountOrDeduction, true);
+  assert.equal(tx.payments?.[1].isDiscountOrDeduction, true);
+  assert.equal(tx.payments?.[2].isDiscountOrDeduction, undefined);
+});
+
+test('repoAssembler: assembleOrder preserva metadados de NF-e parcial (tipo, items, total)', () => {
+  const header = {
+    id: 'ord-nfe-parcial',
+    company_id: 'comp-1',
+    reference: 'PED-2026-0050',
+    customer_id: 'cust-1',
+    date: '2026-10-15T12:00:00Z',
+    status: 'Venda Confirmada',
+    subtotal: 10000,
+    discount: 0,
+    total: 10000,
+    extra: {
+      nfes: [
+        {
+          id: 'nfe-parcial-1',
+          tipo: 'parcial',
+          subtotal: 3000,
+          discount: 0,
+          shipping: 200,
+          total: 3200,
+          items: [{ productId: 'p1', productName: 'Calcário', quantity: 30, unit: 'Ton', unitPrice: 100, discount: 0, total: 3000 }]
+        }
+      ]
+    }
+  };
+
+  const nfes = [
+    {
+      order_id: 'ord-nfe-parcial',
+      id: 'nfe-parcial-1',
+      chave: '15261010375218000265550010000000501000000500',
+      numero: '50',
+      serie: '1',
+      status: 'autorizada'
+    }
+  ];
+
+  const order = assembleOrder(header, [], [], [], [], nfes);
+  assert.equal(order.nfes?.length, 1);
+  assert.equal(order.nfes?.[0].tipo, 'parcial');
+  assert.equal(order.nfes?.[0].subtotal, 3000);
+  assert.equal(order.nfes?.[0].shipping, 200);
+  assert.equal(order.nfes?.[0].total, 3200);
+  assert.equal(order.nfes?.[0].items.length, 1);
+  assert.equal(order.nfes?.[0].items[0].quantity, 30);
+});
+
+test('repoAssembler: upsertOrderToErp remove retiradas excluídas de sales_order_withdrawals', async () => {
+  const deletedCalls: Array<{ table: string; notIn?: string }> = [];
+
+  const mockSupabase = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { name: 'Cliente' } })
+            })
+          })
+        })
+      })
+    }),
+    schema: () => ({
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: { id: 'cust-1' } })
+            })
+          })
+        }),
+        upsert: async () => ({ error: null }),
+        delete: () => ({
+          eq: () => ({
+            eq: () => {
+              const chain: any = {
+                not: (_col: string, _op: string, val: string) => {
+                  deletedCalls.push({ table, notIn: val });
+                  return Promise.resolve({ error: null });
+                },
+                then: (resolve: any) => {
+                  deletedCalls.push({ table });
+                  return Promise.resolve({ error: null }).then(resolve);
+                }
+              };
+              return chain;
+            }
+          })
+        })
+      })
+    })
+  };
+
+  // Caso 1: Pedido com 1 retirada (deve apagar retiradas antigas que não estão em keepIds)
+  await upsertOrderToErp('comp-1', {
+    id: 'ord-1',
+    customerId: 'cust-1',
+    withdrawals: [{ id: 'wth-keep-1', date: '2026-10-15', netWeight: 25 }]
+  }, mockSupabase);
+
+  const wthDeletePartial = deletedCalls.find((c) => c.table === 'sales_order_withdrawals' && c.notIn);
+  assert.ok(wthDeletePartial, 'Deveria ter chamado delete().not(id, in, ...) em sales_order_withdrawals');
+  assert.equal(wthDeletePartial?.notIn, '("wth-keep-1")');
+
+  // Caso 2: Pedido com withdrawals = [] (todas as retiradas foram excluídas)
+  deletedCalls.length = 0;
+  await upsertOrderToErp('comp-1', {
+    id: 'ord-1',
+    customerId: 'cust-1',
+    withdrawals: []
+  }, mockSupabase);
+
+  const wthDeleteAll = deletedCalls.find((c) => c.table === 'sales_order_withdrawals' && !c.notIn);
+  assert.ok(wthDeleteAll, 'Deveria ter chamado delete() total em sales_order_withdrawals quando withdrawals é vazio');
+});
+
 
