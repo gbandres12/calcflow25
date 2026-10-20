@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company, Transportador, StockYard, BargeDischargeRecord } from '../types';
+import { Machine, StoreItem, MaintenanceRecord, SaleOrder, OrderWithdrawal, Customer, Company, Transportador, StockYard, BargeDischargeRecord, Transaction } from '../types';
 import { 
   Boxes, Plus, Wrench, Search, Package, AlertTriangle, 
   X, Edit, Scale, Truck, Printer, Send, Calendar, 
@@ -23,6 +23,7 @@ interface YardManagementProps {
   storeItems: StoreItem[];
   maintenances: MaintenanceRecord[];
   orders?: SaleOrder[];
+  transactions?: Transaction[];
   customers?: Customer[];
   company?: Company;
   transportadores?: Transportador[];
@@ -44,6 +45,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
   storeItems, 
   maintenances, 
   orders = [],
+  transactions = [],
   customers = [],
   company,
   transportadores = [],
@@ -1139,6 +1141,7 @@ const YardManagement: React.FC<YardManagementProps> = ({
       {orderForClosingWithdrawals && (
         <CloseWithdrawalsModal
           order={orderForClosingWithdrawals}
+          transactions={transactions}
           operatorName={operatorName}
           onConfirm={(result) => {
             if (onCloseOrderWithdrawals) {

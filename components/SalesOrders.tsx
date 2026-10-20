@@ -7,6 +7,7 @@ import {
   OrderStatus, 
   Company, 
   SalePayment, 
+  Transaction,
   TransactionStatus, 
   FinancialAccount, 
   FiscalConfig,
@@ -19,7 +20,7 @@ import {
   ShoppingCart, User, Calendar, Package, Clock, ShieldCheck, CreditCard, Trash2, Pencil, AlertTriangle, FileText, Tag, Truck,
   PlusCircle, Banknote, Landmark, Wallet, ChevronRight, Check, Phone, Fingerprint, Send, Eye, DollarSign, Receipt,
   CheckCircle2, ArrowUpRight, Scale, ChevronDown, ListOrdered, Sparkles, Wheat, Zap, UserPlus, Undo2, ArrowRightLeft, Files, Copy,
-  Ban, RotateCcw
+  Ban, RotateCcw, Lock, Unlock
 } from 'lucide-react';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
@@ -28,7 +29,7 @@ import { DanfeModal } from './DanfeModal';
 import { PaymentReceiptModal } from './PaymentReceiptModal';
 import { OrderWithdrawalModal } from './OrderWithdrawalModal';
 import { CloseWithdrawalsModal } from './CloseWithdrawalsModal';
-import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal } from '../services/domain/orderWithdrawalClose';
+import { CloseWithdrawalsResult, adjustOrderForOverWithdrawal, closeOrderWithdrawals } from '../services/domain/orderWithdrawalClose';
 import { RegisterPaymentModal } from './RegisterPaymentModal';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { QuickCustomerModal } from './QuickCustomerModal';
@@ -68,6 +69,7 @@ interface SalesOrdersProps {
   customers: Customer[];
   inventory: InventoryItem[];
   accounts: FinancialAccount[];
+  transactions?: Transaction[];
   company: Company;
   companyId?: string;
   onAddOrder: (order: Omit<SaleOrder, 'id' | 'companyId' | 'reference'>) => void;
@@ -139,6 +141,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   customers: rawCustomers, 
   inventory: rawInventory, 
   accounts: rawAccounts, 
+  transactions = [],
   company,
   companyId,
   onAddOrder, 
@@ -287,6 +290,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   const [orderForPayment, setOrderForPayment] = useState<SaleOrder | null>(null);
   const [orderForWithdrawal, setOrderForWithdrawal] = useState<SaleOrder | null>(null);
   const [orderForClosingWithdrawals, setOrderForClosingWithdrawals] = useState<SaleOrder | null>(null);
+  const [closeModalAction, setCloseModalAction] = useState<'close' | 'increase'>('close');
   const [viewingReceipt, setViewingReceipt] = useState<PaymentReceipt | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<SaleOrder | null>(null);
   // O modal guarda uma cópia do pedido; sem isto, corrigir um recibo não
@@ -553,9 +557,38 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       return;
     }
 
-    if (!isBudget && Math.abs(remainingToProgram) > 0.01 && payments.length > 0) {
-      toast.push(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`, 'danger');
-      return;
+    let finalPayments = [...payments];
+    if (!isBudget && Math.abs(remainingToProgram) > 0.01 && finalPayments.length > 0) {
+      if (editingOrder) {
+        // Quando o Admin edita um pedido existente (ex.: aumenta a tonelagem), ajusta ou adiciona parcela complementar automaticamente
+        if (remainingToProgram > 0.01) {
+          finalPayments.push({
+            id: `pay-comp-${Date.now()}`,
+            amount: Number(remainingToProgram.toFixed(2)),
+            paidAmount: 0,
+            date: dateISOBR(),
+            status: TransactionStatus.PENDENTE,
+            accountId: accounts[0]?.id || '',
+            description: 'Complemento de Aumento do Pedido'
+          });
+        } else {
+          let toCut = Math.abs(remainingToProgram);
+          for (let i = finalPayments.length - 1; i >= 0 && toCut > 0.005; i--) {
+            if (finalPayments[i].status === TransactionStatus.PENDENTE) {
+              if (finalPayments[i].amount <= toCut + 0.01) {
+                toCut -= finalPayments[i].amount;
+                finalPayments.splice(i, 1);
+              } else {
+                finalPayments[i] = { ...finalPayments[i], amount: Number((finalPayments[i].amount - toCut).toFixed(2)) };
+                toCut = 0;
+              }
+            }
+          }
+        }
+      } else {
+        toast.push(`O plano de parcelas deve totalizar ${formatBRL(balanceToSchedule)}. Saldo restante: ${formatBRL(remainingToProgram)}`, 'danger');
+        return;
+      }
     }
 
     const isInter = Boolean(selectedCustomer?.state && selectedCustomer.state !== 'PA');
@@ -616,7 +649,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
       items: builtItems,
       productSheetTitle: productSheetTitle.trim(),
       productSheetBody: sanitizeSalesOrderSheetBody(productSheetBody),
-      payments: payments,
+      payments: finalPayments,
       receipts: generatedReceipts,
       withdrawals: editingOrder?.withdrawals || [],
       notes: isBarter 
@@ -685,9 +718,25 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         toast.push('Adicione ao menos um item com quantidade e preço unitário válidos.', 'danger');
         return;
       }
+      if (editingOrder && payments.length > 0 && Math.abs(remainingToProgram) > 0.01) {
+        if (remainingToProgram > 0.01) {
+          setPayments(prev => [
+            ...prev,
+            {
+              id: `pay-comp-${Date.now()}`,
+              amount: Number(remainingToProgram.toFixed(2)),
+              paidAmount: 0,
+              date: dateISOBR(),
+              status: TransactionStatus.PENDENTE,
+              accountId: accounts[0]?.id || '',
+              description: 'Complemento de Aumento do Pedido'
+            }
+          ]);
+        }
+      }
       setCurrentStep(2);
     } else if (currentStep === 2) {
-      if (!isBudget && payments.length > 0 && Math.abs(remainingToProgram) > 0.05) {
+      if (!isBudget && payments.length > 0 && Math.abs(remainingToProgram) > 0.05 && !editingOrder) {
         toast.push(`O total das parcelas deve coincidir com o saldo a parcelar (${formatBRL(balanceToSchedule)}). Ajuste as parcelas para avançar.`, 'danger');
         return;
       }
@@ -734,13 +783,20 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
   };
 
   const handleCancelOrderClick = async (order: SaleOrder) => {
+    // Se o pedido possui retiradas registradas, redireciona para o Fechamento do Pedido preservando o histórico de retiradas!
+    if ((order.withdrawals || []).length > 0 && order.status === OrderStatus.FINALIZED) {
+      setCloseModalAction('close');
+      setOrderForClosingWithdrawals(order);
+      return;
+    }
+
     if (hasAuthorizedFiscalDocument(order)) {
       toast.push('Esta venda possui NF-e autorizada e não pode ser inabilitada. Cancele o documento fiscal antes.', 'danger');
       return;
     }
     const confirmed = await confirmDialog({
       title: `Inabilitar / Cancelar Pedido ${order.reference}?`,
-      description: `O pedido #${order.reference} será inabilitado e cancelado. A numeração continuará preservada para manter a sincronização da ordem. O estoque e os débitos financeiros vinculados serão estornados.`,
+      description: `O pedido #${order.reference} não possui retiradas registradas e será cancelado. A numeração continuará preservada e os lançamentos pendentes serão estornados.`,
       confirmLabel: 'Inabilitar Pedido',
       danger: true
     });
@@ -1158,7 +1214,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
             const { totalPaid, remainingDebt, financialProgress, paymentStatus } = calculateOrderPayment(order);
 
             // Cálculos de Retiradas de Carga
-            const totalWithdrawn = (order.withdrawals || []).reduce((s, w) => s + (w.quantityWithdrawn || 0), 0);
+            const totalWithdrawn = (order.withdrawals || []).reduce((s, w) => s + Number(w.quantityWithdrawn ?? w.netWeight ?? 0), 0);
             const remainingWithdraw = Math.max(0, totalQty - totalWithdrawn);
             const withdrawalProgress = totalQty > 0 ? Math.min(100, (totalWithdrawn / totalQty) * 100) : 0;
 
@@ -1508,7 +1564,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                 )}
 
                 {isCancelled ? (
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 space-y-2">
+                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 space-y-3">
                     <div className="flex justify-between items-center gap-3">
                       <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
                         <Ban size={14} className="text-slate-500" /> Pedido Inabilitado / Cancelado
@@ -1516,10 +1572,24 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <span className="text-xs font-bold text-slate-500 font-mono">Ref: {order.reference}</span>
                     </div>
                     <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                      Este pedido foi inabilitado e cancelado. A numeração permanece preservada na sequência cronológica para não causar descompasso de numeração ou registros vazios. Ele não gera débitos no contas a receber nem movimenta estoque.
+                      Este pedido foi marcado como inabilitado/cancelado. A numeração permanece preservada na sequência cronológica.
                     </p>
+                    {(order.withdrawals || []).length > 0 && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between text-xs font-black text-amber-900">
+                          <span className="flex items-center gap-1.5">
+                            <Truck size={14} className="text-amber-700" />
+                            Retiradas Registradas neste Pedido ({(order.withdrawals || []).length} viagem/ns = {formatTons(totalWithdrawn)} t)
+                          </span>
+                          <span>Valor equivalente: {formatBRL(totalWithdrawn * (firstItem?.unitPrice || 0))}</span>
+                        </div>
+                        <p className="text-xs text-amber-800">
+                          Deseja manter este pedido como venda encerrada apenas pelo volume que o cliente realmente retirou ({formatTons(totalWithdrawn)} t)? Clique em <strong>"Restaurar e Fechar pelas Retiradas"</strong> abaixo.
+                        </p>
+                      </div>
+                    )}
                     {order.notes && (
-                      <div className="mt-2 p-2.5 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-600">
+                      <div className="mt-2 p-2.5 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-600 whitespace-pre-line">
                         {order.notes}
                       </div>
                     )}
@@ -1543,9 +1613,16 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                         <DollarSign size={14} className="text-emerald-600" /> Controle Financeiro & Pagamentos
                       </span>
-                      <span className="text-xs font-black text-slate-800">
-                        {formatBRL(order.total)}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-xs font-black text-slate-800">
+                          {formatBRL(order.total)}
+                        </span>
+                        {order.originalContractedTotal != null && Math.abs(order.originalContractedTotal - order.total) > 0.01 && (
+                          <span className="block text-[10px] font-bold text-slate-500">
+                            Inicial: {formatBRL(order.originalContractedTotal)}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
@@ -1582,20 +1659,29 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                         <Truck size={14} className="text-blue-600" /> Expedição & Retiradas de Carga
                       </span>
-                      <span className="text-xs font-black text-slate-800">
-                        {formatTons(totalQty)} t
-                      </span>
+                      <div className="text-right">
+                        <span className="text-xs font-black text-slate-800">
+                          {formatTons(totalQty)} t
+                        </span>
+                        {order.originalContractedQuantity != null && Math.abs(order.originalContractedQuantity - totalQty) > 0.001 && (
+                          <span className="block text-[10px] font-bold text-slate-500">
+                            Pedido inicial: {formatTons(order.originalContractedQuantity)} t
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                       <div>
-                        <span className="text-[11px] text-slate-500 font-bold uppercase">Já Retirado</span>
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">Já Retirado ({formatBRL(totalWithdrawn * (firstItem?.unitPrice || 0))})</span>
                         <p className="font-black text-blue-600 text-sm">{formatTons(totalWithdrawn)} t</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-[11px] text-slate-500 font-bold uppercase">Saldo a Retirar</span>
-                        <p className={`font-black text-sm ${remainingWithdraw === 0 ? 'text-emerald-600' : 'text-purple-600'}`}>
-                          {formatTons(remainingWithdraw)} t
+                        <span className="text-[11px] text-slate-500 font-bold uppercase">
+                          {order.withdrawalsClosed ? 'Status do Pedido' : 'Saldo a Retirar'}
+                        </span>
+                        <p className={`font-black text-sm ${order.withdrawalsClosed ? 'text-sky-700' : remainingWithdraw === 0 ? 'text-emerald-600' : 'text-purple-600'}`}>
+                          {order.withdrawalsClosed ? 'Fechado / Concluído' : `${formatTons(remainingWithdraw)} t`}
                         </p>
                       </div>
                     </div>
@@ -1605,22 +1691,42 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div 
                           className={`h-full transition-all duration-500 ${order.withdrawalsClosed ? 'bg-sky-500' : remainingWithdraw === 0 ? 'bg-emerald-500' : 'bg-blue-600'}`}
-                          style={{ width: `${withdrawalProgress}%` }}
+                          style={{ width: `${order.withdrawalsClosed ? 100 : withdrawalProgress}%` }}
                         />
                       </div>
                       <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
-                        <span>{order.withdrawalsClosed ? '100% Encerrado' : `${withdrawalProgress.toFixed(0)}% Carregado`}</span>
+                        <span>{order.withdrawalsClosed ? `Pedido Encerrado (${formatTons(totalWithdrawn)} t retiradas)` : `${withdrawalProgress.toFixed(0)}% Carregado`}</span>
                         <span>{order.withdrawals?.length || 0} Viagens / Caminhões</span>
                       </div>
                     </div>
 
+                    {/* Histórico resumido de retiradas sempre visível no card */}
+                    {(order.withdrawals || []).length > 0 && (
+                      <div className="pt-1 space-y-1 max-h-28 overflow-y-auto pr-1">
+                        {(order.withdrawals || []).map((w, wIdx) => {
+                          const wQty = Number(w.quantityWithdrawn ?? w.netWeight ?? 0);
+                          return (
+                            <div key={w.id || wIdx} className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1 rounded-lg border border-slate-200/80 text-slate-700">
+                              <span className="truncate">
+                                <strong>#{wIdx + 1}</strong> · {w.date ? new Date(w.date).toLocaleDateString('pt-BR') : '-'} · <strong>{w.plateNumber || w.truckPlate || 'S/Placa'}</strong> ({w.driverName || 'Motorista'})
+                              </span>
+                              <span className="font-black text-blue-700 shrink-0 ml-2">
+                                {formatTons(wQty)} t
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {order.withdrawalsClosed && (
                       <div className="p-2.5 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 flex items-center justify-between gap-2">
                         <span>
-                          <b>Retiradas finalizadas</b>{order.withdrawalsClosedReason ? ` (${order.withdrawalsClosedReason})` : ''}
+                          <b>Pedido encerrado</b> · Valor final: <strong>{formatBRL(order.total)}</strong> ({formatTons(totalQty)} t)
+                          {order.withdrawalsClosedReason ? ` — ${order.withdrawalsClosedReason}` : ''}
                         </span>
                         {order.withdrawalsClosedBy && (
-                          <span className="text-[11px] text-sky-700">Por: {order.withdrawalsClosedBy}</span>
+                          <span className="text-[11px] text-sky-700 shrink-0">Por: {order.withdrawalsClosedBy}</span>
                         )}
                       </div>
                     )}
@@ -1635,15 +1741,44 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                   {/* Botões Operacionais Primários */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {isCancelled ? (
-                      onReactivateOrder && (
-                        <button
-                          onClick={() => handleReactivateOrderClick(order)}
-                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                          title="Reativar este pedido como Orçamento para revisão"
-                        >
-                          <RotateCcw size={14} /> Reativar Pedido
-                        </button>
-                      )
+                      <>
+                        {(order.withdrawals || []).length > 0 && (
+                          <button
+                            onClick={() => {
+                              // Restaura o pedido como FINALIZED e abre o modal para fechar pelo total retirado
+                              const restored: SaleOrder = {
+                                ...order,
+                                status: OrderStatus.FINALIZED,
+                                updatedAt: new Date().toISOString()
+                              };
+                              const closeRes = closeOrderWithdrawals(restored, transactions, {
+                                mode: 'adjust_to_withdrawn',
+                                operatorName: currentUser?.name,
+                                reason: 'Pedido restaurado e encerrado pelo volume real retirado',
+                                closedAt: new Date().toISOString()
+                              });
+                              if (onCloseOrderWithdrawals) {
+                                onCloseOrderWithdrawals(closeRes);
+                              } else {
+                                onUpdateOrder(closeRes.updatedOrder);
+                              }
+                            }}
+                            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
+                            title="Restaurar venda e encerrar pelo valor das retiradas realizadas"
+                          >
+                            <CheckCircle2 size={14} /> Restaurar e Fechar pelas Retiradas ({formatTons(totalWithdrawn)} t)
+                          </button>
+                        )}
+                        {onReactivateOrder && (
+                          <button
+                            onClick={() => handleReactivateOrderClick(order)}
+                            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                            title="Reativar este pedido como Orçamento para revisão"
+                          >
+                            <RotateCcw size={14} /> Reativar como Orçamento
+                          </button>
+                        )}
+                      </>
                     ) : order.status === OrderStatus.BUDGET ? (
                       <button
                         onClick={() => handleConvertToSale(order)}
@@ -1671,22 +1806,62 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                           <DollarSign size={14} /> <span className="sm:hidden">Receber</span><span className="hidden sm:inline">Receber Entrada / Abatimento</span>
                         </button>
 
+                        {!order.withdrawalsClosed && (
+                          <button
+                            onClick={() => setOrderForWithdrawal(order)}
+                            className="px-3.5 py-2.5 min-h-11 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
+                            title="Registrar saída de caminhão e emitir ticket"
+                          >
+                            <Truck size={14} /> <span className="sm:hidden">Carga</span><span className="hidden sm:inline">Registrar Retirada (Caminhão)</span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => setOrderForWithdrawal(order)}
-                          className="px-3.5 py-2.5 min-h-11 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5"
-                          title="Registrar saída de caminhão e emitir ticket"
+                          onClick={() => {
+                            setCloseModalAction('increase');
+                            setOrderForClosingWithdrawals(order);
+                          }}
+                          className="px-3.5 py-2.5 min-h-11 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
+                          title="Aumentar a quantidade de calcário deste pedido (Admin)"
                         >
-                          <Truck size={14} /> <span className="sm:hidden">Carga</span><span className="hidden sm:inline">Registrar Retirada (Caminhão)</span>
+                          <PlusCircle size={14} className="text-emerald-700" />
+                          <span>Aumentar Pedido (+ Ton)</span>
                         </button>
 
-                        {!order.withdrawalsClosed && totalWithdrawn > 0 && remainingWithdraw > 0.01 && (
+                        {!order.withdrawalsClosed ? (
                           <button
-                            onClick={() => setOrderForClosingWithdrawals(order)}
+                            onClick={() => {
+                              setCloseModalAction('close');
+                              setOrderForClosingWithdrawals(order);
+                            }}
                             className="px-3.5 py-2.5 min-h-11 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
-                            title="Encerrar carregamentos deste pedido com a sobra de saldo atual"
+                            title="Fechar/encerrar o pedido mantendo o histórico de retiradas e ajustando para o valor retirado (para menos ou para mais)"
                           >
-                            <CheckCircle2 size={14} className="text-amber-700" />
-                            <span>Encerrar Retiradas</span>
+                            <Lock size={14} className="text-amber-700" />
+                            <span>Fechar Pedido / Encerrar</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const reopened: SaleOrder = {
+                                ...order,
+                                withdrawalsClosed: false,
+                                withdrawalsClosedAt: undefined,
+                                withdrawalsClosedBy: undefined,
+                                withdrawalsClosedReason: undefined,
+                                notes: [
+                                  order.notes || '',
+                                  `[RETIRADAS REABERTAS] Pedido reaberto para novas retiradas por ${currentUser?.name || 'Admin'} em ${new Date().toLocaleDateString('pt-BR')}.`
+                                ].filter(Boolean).join('\n')
+                              };
+                              onUpdateOrder(reopened);
+                              toast.push(`Pedido #${order.reference} reaberto para novas retiradas!`, 'success');
+                            }}
+                            className="px-3.5 py-2.5 min-h-11 bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5"
+                            title="Reabrir este pedido para permitir novas retiradas"
+                          >
+                            <Unlock size={14} className="text-sky-700" />
+                            <span>Reabrir Retiradas</span>
                           </button>
                         )}
                       </>
@@ -1724,7 +1899,7 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
                       <button 
                         onClick={() => handleCancelOrderClick(order)} 
                         className="p-2.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-2xl transition-all" 
-                        title="Inabilitar / Cancelar Pedido (mantém numeração sem quebrar a sequência)"
+                        title={(order.withdrawals || []).length > 0 ? "Fechar / Encerrar Pedido mantendo histórico de retiradas" : "Inabilitar / Cancelar Pedido (apenas para pedidos sem retirada)"}
                       >
                         <Ban size={18} />
                       </button>
@@ -2947,11 +3122,13 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
         />
       )}
 
-      {/* Modal Encerrar Retiradas com Sobra de Saldo */}
+      {/* Modal Encerrar / Aumentar Pedido */}
       {orderForClosingWithdrawals && (
         <CloseWithdrawalsModal
           order={orderForClosingWithdrawals}
+          transactions={transactions}
           operatorName={currentUser?.name}
+          initialAction={closeModalAction}
           onConfirm={(result) => {
             if (onCloseOrderWithdrawals) {
               onCloseOrderWithdrawals(result);
@@ -2959,7 +3136,6 @@ const SalesOrders: React.FC<SalesOrdersProps> = ({
               onUpdateOrder(result.updatedOrder);
             }
             setOrderForClosingWithdrawals(null);
-            toast.push(`Retiradas do pedido #${result.updatedOrder.reference} dadas por encerradas.`, 'success');
           }}
           onClose={() => setOrderForClosingWithdrawals(null)}
         />

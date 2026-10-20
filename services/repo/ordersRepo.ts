@@ -52,18 +52,35 @@ export function assembleOrder(
     ...(rec.extra || {})
   }));
 
-  const mappedWithdrawals: OrderWithdrawal[] = withdrawals.map((w) => ({
-    id: w.id,
-    date: w.date,
-    netWeight: Number(w.net_weight || 0),
-    truckPlate: w.truck_plate,
-    driverName: w.driver_name,
-    carrierName: w.carrier_name,
-    ticketNumber: w.ticket_number,
-    notes: w.notes,
-    createdAt: w.created_at,
-    ...(w.extra || {})
-  }));
+  const mappedWithdrawals: OrderWithdrawal[] = withdrawals.map((w) => {
+    const wExtra = w.extra || {};
+    const netWeight = Number(w.net_weight != null ? w.net_weight : (wExtra.netWeight ?? wExtra.quantityWithdrawn ?? 0));
+    const quantityWithdrawn = Number(
+      wExtra.quantityWithdrawn != null
+        ? wExtra.quantityWithdrawn
+        : (wExtra.quantity != null ? wExtra.quantity : netWeight)
+    );
+    const plateNumber = w.truck_plate || wExtra.plateNumber || wExtra.truckPlate || '';
+    const weighTicketNumber = w.ticket_number || wExtra.weighTicketNumber || wExtra.ticketNumber || '';
+    const transporterName = w.carrier_name || wExtra.transporterName || wExtra.carrierName || undefined;
+    return {
+      ...wExtra,
+      id: w.id,
+      orderId: w.order_id || header.id,
+      date: w.date,
+      quantityWithdrawn,
+      netWeight,
+      plateNumber,
+      truckPlate: plateNumber || undefined,
+      driverName: w.driver_name || wExtra.driverName || '',
+      transporterName,
+      carrierName: transporterName,
+      weighTicketNumber,
+      ticketNumber: weighTicketNumber || undefined,
+      notes: w.notes ?? wExtra.notes,
+      createdAt: w.created_at || wExtra.createdAt
+    };
+  });
 
   const extraNfesList = Array.isArray(extra.nfes) ? extra.nfes : [];
   const mappedNfes: SaleOrderLinkedNfe[] = nfes.map((n) => {
@@ -461,23 +478,40 @@ export async function upsertOrderToErp(companyId: string, order: any, supabase: 
   if (Array.isArray(withdrawals) && withdrawals.length > 0) {
     const wthRows = withdrawals.map((w: any, idx: number) => {
       const {
-        id: wId, date: wDate, netWeight, quantity: wQty, truckPlate,
-        driverName, carrierName, ticketNumber, notes: wNotes,
+        id: wId, date: wDate, netWeight, quantity: wQty, quantityWithdrawn,
+        truckPlate, plateNumber, driverName, carrierName, transporterName,
+        ticketNumber, weighTicketNumber, notes: wNotes,
         createdAt: wCreated, ...wExtra
       } = w;
+      const effectiveQty = Number(
+        quantityWithdrawn != null ? quantityWithdrawn : (netWeight != null ? netWeight : (wQty || 0))
+      );
+      const effectiveNet = Number(
+        netWeight != null ? netWeight : effectiveQty
+      );
+      const effectivePlate = plateNumber || truckPlate || null;
+      const effectiveTicket = weighTicketNumber || ticketNumber || null;
+      const effectiveCarrier = transporterName || carrierName || null;
       return {
         company_id: companyId,
         id: String(wId || `${id}_wth_${idx + 1}`),
         order_id: String(id),
         date: wDate || new Date().toISOString(),
-        net_weight: Number(netWeight != null ? netWeight : (wQty || 0)),
-        truck_plate: truckPlate || null,
+        net_weight: effectiveNet,
+        truck_plate: effectivePlate,
         driver_name: driverName || null,
-        carrier_name: carrierName || null,
-        ticket_number: ticketNumber || null,
+        carrier_name: effectiveCarrier,
+        ticket_number: effectiveTicket,
         notes: wNotes || null,
         created_at: wCreated || new Date().toISOString(),
-        extra: wExtra || {}
+        extra: {
+          ...wExtra,
+          quantityWithdrawn: effectiveQty,
+          netWeight: effectiveNet,
+          plateNumber: effectivePlate || '',
+          weighTicketNumber: effectiveTicket || undefined,
+          transporterName: effectiveCarrier || undefined,
+        }
       };
     });
 

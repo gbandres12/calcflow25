@@ -1442,7 +1442,7 @@ const App: React.FC = () => {
     });
   };
 
-  const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean }) => {
+  const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean; skipDiffAdjustment?: boolean }) => {
     const originalOrder = orders.find(o => o.id === updatedOrder.id);
     const tagged = { ...updatedOrder, companyId: updatedOrder.companyId || activeCompanyId };
     if (!originalOrder) {
@@ -1463,8 +1463,7 @@ const App: React.FC = () => {
     }
     setOrders(prev => prev.map(o => o.id === tagged.id ? tagged : o));
     const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
-    // Baixa de estoque só na transição pra "Venda Confirmada" — reenvios
-    // depois (retirada parcial, "Fazer lançamento financeiro") não reaplicam.
+    // Baixa de estoque na transição pra "Venda Confirmada"
     if (tagged.status === OrderStatus.FINALIZED && originalOrder.status !== OrderStatus.FINALIZED) {
       applyOrderStock(tagged);
     }
@@ -1475,20 +1474,124 @@ const App: React.FC = () => {
         (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
       }
     }
+
+    // Se o pedido já era Venda Confirmada e teve aumento/ajuste de quantidade ou valor (via Edição do Admin ou Carga Excedente)
+    if (
+      tagged.status === OrderStatus.FINALIZED &&
+      originalOrder.status === OrderStatus.FINALIZED &&
+      !options?.skipDiffAdjustment
+    ) {
+      // 1. Ajuste proporcional de estoque pela diferença de quantidade de cada item
+      const oldQtyByProd = new Map<string, number>();
+      (originalOrder.items || []).forEach(it => {
+        const pid = String(it.productId || '');
+        if (pid) oldQtyByProd.set(pid, (oldQtyByProd.get(pid) || 0) + Number(it.quantity || 0));
+      });
+      const newQtyByProd = new Map<string, number>();
+      (tagged.items || []).forEach(it => {
+        const pid = String(it.productId || '');
+        if (pid) newQtyByProd.set(pid, (newQtyByProd.get(pid) || 0) + Number(it.quantity || 0));
+      });
+      const allPids = new Set([...oldQtyByProd.keys(), ...newQtyByProd.keys()]);
+      allPids.forEach(pid => {
+        const diffQty = Number(((newQtyByProd.get(pid) || 0) - (oldQtyByProd.get(pid) || 0)).toFixed(4));
+        if (Math.abs(diffQty) > 0.001) {
+          // Se aumentou o pedido (diffQty > 0), baixa mais do estoque (-diffQty); se diminuiu, devolve (+Math.abs(diffQty))
+          processStockChange(pid, -diffQty);
+        }
+      });
+
+      // 2. Ajuste financeiro caso o total do pedido tenha aumentado ou reduzido
+      const deltaTotal = Number(((tagged.total || 0) - (originalOrder.total || 0)).toFixed(2));
+      if (Math.abs(deltaTotal) > 0.01 && !tagged.withoutFinance) {
+        const orderTxs = transactions.filter(t => t.orderId === tagged.id && t.type === TransactionType.SALE);
+        const existingTxSum = Number(orderTxs.reduce((s, t) => s + Number(t.amount || 0), 0).toFixed(2));
+        const missingAmount = Number(((tagged.total || 0) - existingTxSum).toFixed(2));
+
+        if (missingAmount > 0.01) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const oldTotalTons = (originalOrder.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
+          const newTotalTons = (tagged.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
+          const addedTons = Number(Math.max(0, newTotalTons - oldTotalTons).toFixed(2));
+          const extraTx: Transaction = {
+            id: `tx_inc_${tagged.id}_${Date.now()}`,
+            companyId: tagged.companyId || activeCompanyId,
+            accountId: '',
+            costCenterId: 'cc4',
+            date: todayStr,
+            dueDate: todayStr,
+            type: TransactionType.SALE,
+            status: TransactionStatus.PENDENTE,
+            description: addedTons > 0
+              ? `Complemento Pedido #${tagged.reference} (+${addedTons} t)`
+              : `Complemento Pedido #${tagged.reference}`,
+            category: `Venda ${tagged.items?.[0]?.productName || 'Calcário'}`,
+            amount: missingAmount,
+            paidAmount: 0,
+            quantity: addedTons > 0 ? addedTons : undefined,
+            customerId: tagged.customerId,
+            orderId: tagged.id,
+            payments: [],
+            notes: `Lançamento complementar gerado pelo aumento do pedido #${tagged.reference}.`
+          };
+          setTransactions(prev => [extraTx, ...prev]);
+          persistCloud('transactions', extraTx);
+        } else if (missingAmount < -0.01) {
+          let toCut = Math.abs(missingAmount);
+          const pending = orderTxs
+            .filter(t => t.status === TransactionStatus.PENDENTE)
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+          const toDelete: string[] = [];
+          const toUpdate: Transaction[] = [];
+          for (const tx of pending) {
+            if (toCut <= 0.005) break;
+            const amt = Number(tx.amount || 0);
+            if (amt <= toCut + 0.01) {
+              toDelete.push(tx.id);
+              toCut -= amt;
+            } else {
+              const nextAmt = Number((amt - toCut).toFixed(2));
+              toUpdate.push({ ...tx, amount: nextAmt });
+              toCut = 0;
+            }
+          }
+          if (toDelete.length > 0) {
+            setTransactions(prev => prev.filter(t => !toDelete.includes(t.id)));
+            toDelete.forEach(id => persistDelete('transactions', id));
+          }
+          if (toUpdate.length > 0) {
+            const uMap = new Map(toUpdate.map(t => [t.id, t]));
+            setTransactions(prev => prev.map(t => uMap.get(t.id) || t));
+            toUpdate.forEach(t => persistCloud('transactions', t));
+          }
+        }
+      }
+
+      if (Math.abs(deltaTotal) > 0.01 && tagged.customerId) {
+        setCustomers(prev => prev.map(c => {
+          if (c.id !== tagged.customerId) return c;
+          const nextCustomer = { ...c, totalSpent: Math.max(0, Number(((c.totalSpent || 0) + deltaTotal).toFixed(2))) };
+          persistCloud('customers', nextCustomer);
+          return nextCustomer;
+        }));
+      }
+    }
+
     voidCancelledNfeFinance(tagged);
     return persist;
   };
 
   const handleCloseOrderWithdrawals = (result: CloseWithdrawalsResult) => {
-    const { updatedOrder, deltaQuantity, updatedTransactions, deletedTransactionIds } = result;
+    const { updatedOrder, deltaQuantity, deltaMoney, updatedTransactions, deletedTransactionIds, newTransaction } = result;
 
-    // 1. Atualizar pedido de venda
-    handleUpdateOrder(updatedOrder);
+    // 1. Atualizar pedido de venda (usando skipDiffAdjustment pois aplicaremos os deltas exatos abaixo)
+    handleUpdateOrder(updatedOrder, { skipDiffAdjustment: true });
 
-    // 2. Se houve devolução de sobra física ao estoque (deltaQuantity < 0)
-    if (deltaQuantity < 0 && updatedOrder.items?.[0]?.productId) {
-      const returnQty = Math.abs(deltaQuantity);
-      processStockChange(String(updatedOrder.items[0].productId), returnQty);
+    // 2. Ajustar estoque:
+    // Se deltaQuantity < 0 (retirou a menos): devolve a sobra ao estoque (+Math.abs(deltaQuantity))
+    // Se deltaQuantity > 0 (retirou a mais ou aumentou pedido): baixa o adicional do estoque (-deltaQuantity)
+    if (Math.abs(deltaQuantity) > 0.001 && updatedOrder.items?.[0]?.productId) {
+      processStockChange(String(updatedOrder.items[0].productId), -deltaQuantity);
     }
 
     // 3. Deletar parcelas pendentes canceladas pelo ajuste
@@ -1503,6 +1606,31 @@ const App: React.FC = () => {
       setTransactions(prev => prev.map(t => idMap.get(t.id) || t));
       updatedTransactions.forEach(t => persistCloud('transactions', t));
     }
+
+    // 5. Adicionar nova parcela pendente se houve aumento/excedente do pedido
+    if (newTransaction) {
+      const taggedTx = { ...newTransaction, companyId: newTransaction.companyId || activeCompanyId };
+      setTransactions(prev => [taggedTx, ...prev]);
+      persistCloud('transactions', taggedTx);
+    }
+
+    // 6. Atualizar totalSpent do cliente se o valor da venda mudou
+    if (Math.abs(deltaMoney) > 0.01 && updatedOrder.customerId) {
+      setCustomers(prev => prev.map(c => {
+        if (c.id !== updatedOrder.customerId) return c;
+        const nextCustomer = { ...c, totalSpent: Math.max(0, Number(((c.totalSpent || 0) + deltaMoney).toFixed(2))) };
+        persistCloud('customers', nextCustomer);
+        return nextCustomer;
+      }));
+    }
+
+    const finalTons = (updatedOrder.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
+    toast.push(
+      updatedOrder.withdrawalsClosed
+        ? `Pedido #${updatedOrder.reference} encerrado com ${finalTons} t! Histórico de retiradas mantido.`
+        : `Pedido #${updatedOrder.reference} aumentado/ajustado para ${finalTons} t!`,
+      'success'
+    );
   };
 
   // Resetar empresa para banco 100% limpo
@@ -1797,6 +1925,7 @@ const App: React.FC = () => {
               customers={customers} 
               inventory={inventory} 
               accounts={accounts} 
+              transactions={transactions}
               company={operatingCompany}
               companyId={activeCompanyId}
                 onAddOrder={handleAddOrder} 
@@ -2035,6 +2164,7 @@ const App: React.FC = () => {
               storeItems={storeItems} 
               maintenances={maintenances} 
               orders={orders}
+              transactions={transactions}
               customers={customers}
               company={operatingCompany}
               transportadores={transportadores}

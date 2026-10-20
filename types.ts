@@ -640,6 +640,9 @@ export interface SaleOrder {
   withdrawalsClosedReason?: string;
   /** Permite carregar acima do saldo original com ajuste automático da venda. */
   allowOverWithdrawal?: boolean;
+  /** Quantidade e valor originalmente contratados no pedido antes de ajustes de fechamento/aumento. */
+  originalContractedQuantity?: number;
+  originalContractedTotal?: number;
   status: OrderStatus;
   paymentMethod?: string;
   payments: SalePayment[];
