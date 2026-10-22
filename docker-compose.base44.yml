@@ -1,0 +1,52 @@
+# Base44 sandbox runbook — CalcárioFlow ERP (React + Vite SPA + Express /api).
+#
+# Roda o app A PARTIR DO CÓDIGO CLONADO (bind mount + servidor de desenvolvimento
+# com live reload), nunca do build de produção/Vercel:
+#   - `npx tsx server.ts` sobe o Express da porta 3000 com o Vite em modo
+#     middleware (HMR) e as rotas /api/* que na Vercel são funções serverless.
+#   - Dependências são instaladas no boot do container, depois do mount, com o
+#     lockfile do próprio checkout (`npm ci` — não altera package-lock.json).
+#
+# O Supabase é um serviço hospedado (externo). Sem credenciais o app sobe em modo
+# offline/demo e mostra a tela de login; com elas o login e a persistência
+# funcionam. As credenciais chegam pelo env_file da plataforma, por último, para
+# que o valor do dashboard sempre tenha precedência.
+name: calcarioflow
+
+services:
+  web:
+    labels:
+      base44.project: "CalcárioFlow ERP"
+      base44.kind: web
+      base44.port: "3000"
+    image: node:22-bookworm-slim
+    restart: on-failure
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+    command:
+      - sh
+      - -ec
+      - |
+        npm ci --no-audit --no-fund
+        exec npx tsx server.ts
+    environment:
+      - NODE_ENV=development
+      # Repassados da plataforma: BASE44_PREVIEW_MODE libera a ampliação da
+      # allowlist de Host do Vite (ver vite.config.ts) e os dois hosts abaixo
+      # alimentam essa allowlist.
+      - BASE44_PREVIEW_MODE
+      - BASE44_PUBLIC_HOST_SUFFIX
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+    env_file:
+      - /run/base44/app.env
+    healthcheck:
+      # Endpoint que já existe no app (server.ts). O node da imagem já tem fetch.
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(function(r){process.exit(r.ok?0:1)}).catch(function(){process.exit(1)})\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 240s

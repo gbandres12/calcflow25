@@ -1,0 +1,52 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/api/health",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "VITE_SUPABASE_URL",
+      "description": "URL do projeto Supabase (https://<ref>.supabase.co). Lida pelo frontend no boot do Vite e também pelo servidor. Sem ela o app sobe em modo offline/demo: a tela de login aparece, mas nenhuma conta autentica nem grava.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "VITE_SUPABASE_ANON_KEY",
+      "description": "Anon/publishable key do projeto Supabase. Necessária para o login (Supabase Auth) e para as leituras do app_records.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "SUPABASE_SERVICE_ROLE_KEY",
+      "description": "Service role key, usada só no servidor (/api/nfe/*, /api/users/invite, webhook NotaAs, agente do Telegram). Nunca vai para o frontend.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "NOTAAS_API_KEY",
+      "description": "Chave da API NotaAs para emissão/consulta de NF-e (server-side). Opcional: sem ela o restante do ERP funciona.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "NOTAAS_WEBHOOK_SECRET",
+      "description": "Segredo do webhook NotaAs (/api/webhooks/notaas). Opcional.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "TELEGRAM_BOT_TOKEN",
+      "description": "Token do bot do agente financeiro (BotFather). Opcional.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "TELEGRAM_WEBHOOK_SECRET",
+      "description": "Segredo conferido no header X-Telegram-Bot-Api-Secret-Token do webhook do Telegram. Opcional.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "TELEGRAM_BOT_USERNAME",
+      "description": "Username do bot (sem @) usado no link t.me do card de pareamento. Opcional.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Chave do Gemini usada pelo agente do Telegram no servidor. Opcional.",
+      "requiredAtBoot": false
+    }
+  ]
+}
