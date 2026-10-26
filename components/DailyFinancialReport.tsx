@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { dateISOBR } from "../utils/dateFilterUtils";
+import { isNonCashPaymentMethod, isNonCashTransactionFallback } from '../services/receiptLink';
 import { 
   Printer, Share2, Calendar, TrendingUp, TrendingDown, 
   DollarSign, CheckCircle2, Tag, ArrowUpRight, ArrowDownLeft,
@@ -69,10 +70,12 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
             }
 
             const acc = accounts.find(a => a.id === p.accountId);
-            const isDeduction = p.isDiscountOrDeduction || 
+            const isDeduction = Boolean(
+              p.isDiscountOrDeduction || 
               t.category?.toLowerCase().includes('abatimento') || 
               t.category?.toLowerCase().includes('devolu') ||
-              p.paymentMethod?.toLowerCase().includes('abatimento');
+              isNonCashPaymentMethod(p.paymentMethod)
+            );
 
             let itemType: 'INCOME' | 'EXPENSE' | 'DEDUCTION' = 'INCOME';
             if (isDeduction) {
@@ -106,9 +109,7 @@ export const DailyFinancialReport: React.FC<DailyFinancialReportProps> = ({
           }
 
           const acc = accounts.find(a => a.id === t.accountId);
-          const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-            t.category?.toLowerCase().includes('devolu') || 
-            t.description?.toLowerCase().includes('abatimento');
+          const isDeduction = isNonCashTransactionFallback(t);
 
           let itemType: 'INCOME' | 'EXPENSE' | 'DEDUCTION' = 'INCOME';
           if (isDeduction) {

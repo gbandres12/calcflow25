@@ -3,7 +3,7 @@ import {
   Plus, Search, ArrowUpRight, ArrowDownLeft, DollarSign, Calendar, 
   CreditCard, Tag, Landmark, User, Sparkles, Filter, CheckCircle2, 
   Clock, AlertCircle, Trash2, Pencil, RotateCcw, CalendarRange, 
-  Receipt, FileText, Zap, ShieldCheck
+  Receipt, FileText, Zap, ShieldCheck, FileUp
 } from 'lucide-react';
 import { 
   Transaction, 
@@ -25,6 +25,7 @@ import { QuickEntryDialog } from './QuickEntryDialog';
 import { ReceivePayDialog } from './ReceivePayDialog';
 import { DailyFinancialReport } from './DailyFinancialReport';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
+import { NfPayableImportModal } from './NfPayableImportModal';
 import { dateISOBR, getDatePresetRange } from '../utils/dateFilterUtils';
 
 interface TransactionsProps {
@@ -64,6 +65,7 @@ export const Transactions: React.FC<TransactionsProps> = ({
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
+  const [isNfPayableOpen, setIsNfPayableOpen] = useState(false);
   const [isReceivePayOpen, setIsReceivePayOpen] = useState(false);
   const [selectedTxForSettlement, setSelectedTxForSettlement] = useState<Transaction | null>(null);
 
@@ -292,6 +294,15 @@ export const Transactions: React.FC<TransactionsProps> = ({
         
         {/* Barra de Ações Rápidas */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Importar NF-e (XML / PDF) -> Contas a Pagar */}
+          <button
+            onClick={() => setIsNfPayableOpen(true)}
+            className="bg-[#0F5948] hover:bg-[#163C35] text-white px-4 py-2.5 rounded-2xl font-black transition-all flex items-center gap-2 shadow-lg text-xs active:scale-95"
+            title="Importar Nota Fiscal (XML ou PDF) e gerar duplicatas a pagar"
+          >
+            <FileUp size={15} /> 📄 Entrada NF (XML/PDF)
+          </button>
+
           {/* Lançamento Rápido Express */}
           <button 
             onClick={() => setIsQuickEntryOpen(true)} 
@@ -716,6 +727,19 @@ export const Transactions: React.FC<TransactionsProps> = ({
         orders={orders}
         onLinkedReceipt={handleLinkedReceipt}
         onSave={handleSaveForm}
+      />
+
+      {/* Modal de Importação de NF-e (XML / PDF) -> Contas a Pagar */}
+      <NfPayableImportModal
+        isOpen={isNfPayableOpen}
+        onClose={() => setIsNfPayableOpen(false)}
+        transactions={transactions}
+        accounts={accounts}
+        costCenters={costCenters}
+        categories={categories}
+        customers={customers}
+        company={company}
+        onAddTransaction={onAddTransaction}
       />
 
       {/* Diálogo de Lançamento Rápido 1-Click */}

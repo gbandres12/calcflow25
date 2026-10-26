@@ -11,6 +11,7 @@ const MillingProcess = lazyWithRetry(() => import('./components/MillingProcess')
 const FinancialAccounts = lazyWithRetry(() => import('./components/FinancialAccounts'));
 const SalesOrders = lazyWithRetry(() => import('./components/SalesOrders'));
 const TransactionsArea = lazyWithRetry(() => import('./components/Transactions'));
+const AccountsPayableReceivable = lazyWithRetry(() => import('./components/AccountsPayableReceivable'));
 const FleetManagement = lazyWithRetry(() => import('./components/FleetManagement'));
 const YardManagement = lazyWithRetry(() => import('./components/YardManagement'));
 const FuelManagement = lazyWithRetry(() => import('./components/FuelManagement'));
@@ -68,6 +69,7 @@ import { newId, nextAvulsaReference, nextOrderReference } from './services/ids';
 import { buildQuoteFromLead, leadToCustomer } from './services/domain/crmConversion';
 import { CloseWithdrawalsResult } from './services/domain/orderWithdrawalClose';
 import { hasAuthorizedFiscalDocument, isFiscalOnlyOrder, hasCancelledNfe, cancelledNfeAmountKeys } from './services/saleNfe';
+import { isReceiptNonCashDeduction } from './services/receiptLink';
 import { applyStoreIntegration, StoreIntegrationIncoming } from './services/storeItemMatch';
 const CompanyBranches = lazyWithRetry(() => import('./components/CompanyBranches'));
 import SetNewPassword from './components/SetNewPassword';
@@ -193,7 +195,11 @@ const App: React.FC = () => {
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const transactionsRef = useRef<Transaction[]>(transactions);
+  transactionsRef.current = transactions;
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const customersRef = useRef<Customer[]>(customers);
+  customersRef.current = customers;
   const [orders, setOrders] = useState<SaleOrder[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -672,14 +678,16 @@ const App: React.FC = () => {
       companyId: activeCompanyId,
       payments: (newTx.payments || []).map(payment => ({ ...payment, transactionId: id }))
     };
-    setTransactions(prev => [tx, ...prev]);
+    const nextList = [tx, ...transactionsRef.current];
+    transactionsRef.current = nextList;
+    setTransactions(nextList);
     return persistCloud('transactions', tx, options);
   };
 
   const handleUpdateTransaction = (updatedTx: Transaction) => {
     // Valor recebido que veio de recibo de pedido só muda pelo pedido: mexer
     // aqui deixava o caixa diferente do saldo devedor do cliente.
-    const original = transactions.find(t => t.id === updatedTx.id);
+    const original = transactionsRef.current.find(t => t.id === updatedTx.id);
     const fromReceipt = Boolean(original?.orderId) && (
       Boolean(original?.receiptId) || (original?.payments || []).some(p => p.receiptId)
     );
@@ -699,18 +707,22 @@ const App: React.FC = () => {
       }
     }
     const tagged = { ...updatedTx, companyId: updatedTx.companyId || activeCompanyId };
-    setTransactions(prev => prev.map(t => t.id === tagged.id ? tagged : t));
+    const nextList = transactionsRef.current.map(t => t.id === tagged.id ? tagged : t);
+    transactionsRef.current = nextList;
+    setTransactions(nextList);
     persistCloud('transactions', tagged);
   };
 
   const handleDeleteTransaction = (id: string) => {
-    const original = transactions.find(t => t.id === id);
+    const original = transactionsRef.current.find(t => t.id === id);
     if (original?.orderId && (original.receiptId || (original.payments || []).some(p => p.receiptId))) {
       const ref = orders.find(o => o.id === original.orderId)?.reference || 'do pedido';
       toast.push(`Este lançamento tem recibo do ${ref}. Exclua o recibo pelo pedido (Vendas → Histórico) para o saldo do cliente voltar certo.`, 'danger');
       return;
     }
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    const nextList = transactionsRef.current.filter(t => t.id !== id);
+    transactionsRef.current = nextList;
+    setTransactions(nextList);
     persistDelete('transactions', id);
   };
 
@@ -972,7 +984,7 @@ const App: React.FC = () => {
     persistCloud('sales_orders', newOrder);
     if (newOrder.status === OrderStatus.FINALIZED) {
       finalizeSale(newOrder, newOrder.payments || []);
-      if (!newOrder.withoutFinance) {
+      if (newOrder.withoutFinance) {
         (newOrder.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, newOrder));
       }
     }
@@ -1002,219 +1014,6 @@ const App: React.FC = () => {
         );
       }
     });
-  };
-
-  // Cria as parcelas, os lançamentos financeiros e atualiza o saldo do
-  // cliente. Só roda quando o pedido pede lançamento financeiro (checkbox
-  // "Fazer lançamento financeiro" marcada) — ou quando alguém clica nesse
-  // botão depois, num pedido que nasceu sem isso (ver handlePostOrderFinance).
-  // Todas as gravações disparam juntas, sem esperar uma pela outra — só
-  // esperamos elas confirmarem (ou não) antes de decidir a mensagem do
-  // banner, que agora aponta exatamente o que ficou pendente.
-  const postSaleFinance = async (order: SaleOrder, payments: SalePayment[]) => {
-    const failures: string[] = [];
-    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
-      if (!result.ok) failures.push(label);
-    };
-
-    const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
-    const financialSchedule: SalePayment[] = [
-      ...(payments || []).map((payment) => ({
-        ...payment,
-        paidAmount: 0,
-        status: TransactionStatus.PENDENTE
-      })),
-      ...(balanceWithoutSchedule > 0.01 ? [{
-        id: newId('pay'),
-        amount: balanceWithoutSchedule,
-        paidAmount: 0,
-        date: order.date,
-        status: TransactionStatus.PENDENTE,
-        // A receber não pertence a caixa nenhum: o caixa só é escolhido no recebimento.
-        accountId: '',
-        description: 'Saldo em aberto da venda'
-      }] : [])
-    ];
-
-    const transactionWrites = financialSchedule.map((payment, index) => {
-      const accId = payment.accountId || '';
-      return handleAddTransaction({
-        accountId: accId,
-        costCenterId: 'cc4',
-        date: payment.date,
-        type: TransactionType.SALE,
-        status: TransactionStatus.PENDENTE,
-        description: `Venda Faturada #${order.reference}`,
-        category: 'Venda Calcário Moído Granel',
-        amount: payment.amount,
-        paidAmount: 0,
-        customerId: order.customerId,
-        orderId: order.id,
-        payments: []
-      }, { onResult: noteFailure(`parcela ${index + 1}/${financialSchedule.length}`) });
-    });
-
-    let customerWrite: Promise<void> = Promise.resolve();
-    setCustomers(prev => {
-      const updatedList = prev
-        .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
-        .map(c => {
-          if (c.id === order.customerId) {
-            const updatedCustomer = {
-              ...c,
-              totalSpent: Number(c.totalSpent || 0) + Number(order.total || 0),
-              status: 'Ativo' as const
-            };
-            customerWrite = persistCloud('customers', updatedCustomer, { onResult: noteFailure('saldo do cliente') });
-            return updatedCustomer;
-          }
-          return c;
-        });
-      return updatedList;
-    });
-    const finalizedOrder = {
-      ...order,
-      payments: financialSchedule,
-      status: OrderStatus.FINALIZED,
-      withoutFinance: false,
-      companyId: order.companyId || activeCompanyId
-    };
-    setOrders(prev => {
-      const exists = prev.some(o => o.id === order.id);
-      return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
-    });
-    const orderWrite = persistCloud('sales_orders', finalizedOrder, { onResult: noteFailure('o próprio pedido') });
-
-    await Promise.all([...transactionWrites, customerWrite, orderWrite]);
-
-    if (failures.length > 0) {
-      setPersistError(
-        `O lançamento financeiro da venda #${order.reference} ficou salvo neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
-        'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
-      );
-    }
-  };
-
-  // Orquestra a primeira finalização de uma venda: sempre baixa o estoque
-  // (o produto saiu, independente de lançar no financeiro ou não); só cria
-  // parcelas/transações quando o pedido não pediu pra ficar "sem financeiro".
-  // Quem chama isso decide se é de fato a primeira vez que o pedido finaliza
-  // (ver os pontos que chamam finalizeSale em handleAddOrder/handleUpdateOrder)
-  // — chamar de novo depois (retirada parcial, edição) não deve reaplicar.
-  const finalizeSale = async (order: SaleOrder, payments: SalePayment[]) => {
-    applyOrderStock(order);
-    if (!order.withoutFinance) {
-      await postSaleFinance(order, payments);
-    }
-  };
-
-  // Ação explícita do botão "Fazer lançamento financeiro" num pedido que
-  // nasceu sem isso. Não toca em estoque — o produto já saiu na finalização.
-  const handlePostOrderFinance = (order: SaleOrder) => {
-    const alreadyPosted = transactions.some((t) => t.orderId === order.id);
-    if (alreadyPosted || !order.withoutFinance) return;
-    postSaleFinance(order, order.payments || []);
-  };
-
-  const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
-    const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
-    setTransactions(prev => {
-      // Trava de duplicidade: o recibo pode já ter entrado em qualquer
-      // lançamento, mesmo que depois outro recibo tenha sobrescrito o
-      // receiptId dele. Checa cada pagamento (e o texto dos antigos, que
-      // ainda não guardavam o receiptId).
-      const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
-      const alreadyApplied = prev.some(t =>
-        t.receiptId === receipt.id ||
-        (t.payments || []).some(p =>
-          p.receiptId === receipt.id ||
-          (!p.receiptId && t.orderId === (receipt.orderId || order.id) && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01)
-        )
-      );
-      if (alreadyApplied) return prev;
-
-      let remainingReceipt = Number(receipt.amount || 0);
-      const updatedTransactions = prev.map(transaction => {
-        if (transaction.orderId !== (receipt.orderId || order.id) || transaction.type !== TransactionType.SALE || remainingReceipt <= 0.01) {
-          return transaction;
-        }
-
-        const outstanding = Math.max(0, Number(transaction.amount || 0) - Number(transaction.paidAmount || 0));
-        if (outstanding <= 0.01) return transaction;
-
-        const appliedAmount = Math.min(outstanding, remainingReceipt);
-        remainingReceipt -= appliedAmount;
-        const paidAmount = Number(transaction.paidAmount || 0) + appliedAmount;
-        const isDeduction = receipt.type === 'ABATIMENTO';
-        const updated: Transaction = {
-          ...transaction,
-          paidAmount,
-          status: paidAmount >= Number(transaction.amount || 0) - 0.01 ? TransactionStatus.PAGO : TransactionStatus.PARCIAL,
-          receiptId: receipt.id,
-          paymentDate: receipt.date,
-          paymentMethod: receipt.paymentMethod || transaction.paymentMethod,
-          payments: [
-            ...(transaction.payments || []),
-            {
-              // id fixo por recibo+lançamento: se o updater rodar de novo, a
-              // gravação repete o mesmo registro em vez de criar outro.
-              id: `pmt-${receipt.id}-${transaction.id}`,
-              transactionId: transaction.id,
-              amount: appliedAmount,
-              paymentDate: receipt.date,
-              accountId: accId,
-              paymentMethod: receipt.paymentMethod || 'PIX',
-              notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
-              receiptId: receipt.id,
-              isDiscountOrDeduction: isDeduction
-            }
-          ]
-        };
-        persistCloud('transactions', updated);
-        return updated;
-      });
-
-      if (remainingReceipt <= 0.01) return updatedTransactions;
-
-      const isDeduction = receipt.type === 'ABATIMENTO';
-      const tx: Transaction = {
-        id: `tx-rcpt-${receipt.id}`,
-        accountId: accId,
-        costCenterId: 'cc4',
-        date: receipt.date,
-        type: TransactionType.SALE,
-        status: TransactionStatus.CONFIRMADO,
-        description: `${receipt.description} - ${receipt.customerName}`,
-        category: isDeduction ? 'Abatimentos e Descontos Concedidos' : 'Venda Calcário Moído Granel',
-        amount: remainingReceipt,
-        paidAmount: remainingReceipt,
-        customerId: receipt.customerId,
-        orderId: receipt.orderId || order.id,
-        receiptId: receipt.id,
-        paymentMethod: receipt.paymentMethod,
-        notes: receipt.notes,
-        companyId: activeCompanyId,
-        payments: [{
-          id: `pmt-${receipt.id}`,
-          transactionId: '',
-          amount: remainingReceipt,
-          paymentDate: receipt.date,
-          accountId: accId,
-          paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`,
-          receiptId: receipt.id,
-          isDiscountOrDeduction: isDeduction
-        }]
-      };
-      tx.payments![0].transactionId = tx.id;
-      persistCloud('transactions', tx);
-      return [tx, ...updatedTransactions];
-    });
-  };
-
-  const handlePaymentReceived = (receipt: PaymentReceipt, updatedOrder: SaleOrder) => {
-    applyReceiptToFinance(receipt, updatedOrder);
   };
 
   // Tira do financeiro tudo que um recibo lançou: a parcela dele dentro do
@@ -1260,20 +1059,33 @@ const App: React.FC = () => {
     return { next, deleted, changed };
   };
 
-  // Lança um recibo no caixa (mesma regra de applyReceiptToFinance), sem efeito colateral.
+  // Lança um recibo no caixa (função 100% pura, sem efeito colateral).
+  // Importante: `receipt.type === 'ABATIMENTO'` no ERP significa pagamento parcial
+  // do pedido (após a 1ª entrada); só é desconto não-financeiro quando `isReceiptNonCashDeduction(receipt)` é true.
   const placeReceiptFinance = (list: Transaction[], receipt: PaymentReceipt, orderId: string) => {
+    const targetOrderId = receipt.orderId || orderId;
+    const legacyNote = `Recibo #${receipt.id.slice(-6)}`;
+    const alreadyApplied = list.some(t =>
+      t.receiptId === receipt.id ||
+      (t.payments || []).some(p =>
+        p.receiptId === receipt.id ||
+        (!p.receiptId && t.orderId === targetOrderId && p.notes === legacyNote && Math.abs(Number(p.amount) - Number(receipt.amount)) < 0.01)
+      )
+    );
+    if (alreadyApplied) return { next: list, changed: [] as Transaction[] };
+
     const accId = receipt.accountId || accounts[0]?.id || 'acc-1';
+    const isDeduction = isReceiptNonCashDeduction(receipt);
     const changed: Transaction[] = [];
     let remaining = Number(receipt.amount || 0);
     const next = list.map(tx => {
-      if (tx.orderId !== orderId || tx.type !== TransactionType.SALE || remaining <= 0.01) return tx;
+      if (tx.orderId !== targetOrderId || tx.type !== TransactionType.SALE || remaining <= 0.01) return tx;
       if (tx.status === TransactionStatus.CONFIRMADO && tx.receiptId) return tx; // avulso de outro recibo
       const outstanding = Math.max(0, Number(tx.amount || 0) - Number(tx.paidAmount || 0));
       if (outstanding <= 0.01) return tx;
       const applied = Math.min(outstanding, remaining);
       remaining -= applied;
       const paidAmount = Number(tx.paidAmount || 0) + applied;
-      const isDeduction = receipt.type === 'ABATIMENTO';
       const updated: Transaction = {
         ...tx,
         paidAmount,
@@ -1282,9 +1094,14 @@ const App: React.FC = () => {
         paymentDate: receipt.date,
         paymentMethod: receipt.paymentMethod || tx.paymentMethod,
         payments: [...(tx.payments || []), {
-          id: receipt.id ? `pmt-${receipt.id}-${tx.id}` : newId('pmt'), transactionId: tx.id, amount: applied, paymentDate: receipt.date,
-          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id,
+          id: receipt.id ? `pmt-${receipt.id}-${tx.id}` : newId('pmt'),
+          transactionId: tx.id,
+          amount: applied,
+          paymentDate: receipt.date,
+          accountId: accId,
+          paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || legacyNote,
+          receiptId: receipt.id,
           isDiscountOrDeduction: isDeduction
         }]
       };
@@ -1292,20 +1109,35 @@ const App: React.FC = () => {
       return updated;
     });
     if (remaining > 0.01) {
-      const id = newId('tx');
-      const isDeduction = receipt.type === 'ABATIMENTO';
+      const id = receipt.id ? `tx-rcpt-${receipt.id}` : newId('tx');
       const tx: Transaction = {
-        id, accountId: accId, costCenterId: 'cc4', date: receipt.date,
-        type: TransactionType.SALE, status: TransactionStatus.CONFIRMADO,
+        id,
+        accountId: accId,
+        costCenterId: 'cc4',
+        date: receipt.date,
+        dueDate: receipt.date,
+        paymentDate: receipt.date,
+        type: TransactionType.SALE,
+        status: TransactionStatus.CONFIRMADO,
         description: `${receipt.description} - ${receipt.customerName}`,
         category: isDeduction ? 'Abatimentos e Descontos Concedidos' : 'Venda Calcário Moído Granel',
-        amount: remaining, paidAmount: remaining,
-        customerId: receipt.customerId, orderId, receiptId: receipt.id,
-        paymentMethod: receipt.paymentMethod, notes: receipt.notes, companyId: activeCompanyId,
+        amount: remaining,
+        paidAmount: remaining,
+        customerId: receipt.customerId,
+        orderId: targetOrderId,
+        receiptId: receipt.id,
+        paymentMethod: receipt.paymentMethod,
+        notes: receipt.notes,
+        companyId: activeCompanyId,
         payments: [{
-          id: receipt.id ? `pmt-${receipt.id}-${id}` : newId('pmt'), transactionId: id, amount: remaining, paymentDate: receipt.date,
-          accountId: accId, paymentMethod: receipt.paymentMethod || 'PIX',
-          notes: receipt.notes || `Recibo #${receipt.id.slice(-6)}`, receiptId: receipt.id,
+          id: receipt.id ? `pmt-${receipt.id}` : newId('pmt'),
+          transactionId: id,
+          amount: remaining,
+          paymentDate: receipt.date,
+          accountId: accId,
+          paymentMethod: receipt.paymentMethod || 'PIX',
+          notes: receipt.notes || legacyNote,
+          receiptId: receipt.id,
           isDiscountOrDeduction: isDeduction
         }]
       };
@@ -1313,6 +1145,170 @@ const App: React.FC = () => {
       return { next: [tx, ...next], changed };
     }
     return { next, changed };
+  };
+
+  const applyReceiptToFinance = (receipt: PaymentReceipt, order: SaleOrder) => {
+    const placed = placeReceiptFinance(transactionsRef.current, receipt, receipt.orderId || order.id);
+    if (placed.changed.length === 0) return;
+    transactionsRef.current = placed.next;
+    setTransactions(placed.next);
+    placed.changed.forEach(tx => persistCloud('transactions', tx));
+  };
+
+  // Cria as parcelas, os lançamentos financeiros e atualiza o saldo do
+  // cliente. Aplica em memória todos os recibos já existentes no pedido
+  // antes de gravar no banco para evitar condição de corrida entre a criação
+  // da parcela pendente e a baixa imediata do recibo.
+  const postSaleFinance = async (order: SaleOrder, payments: SalePayment[]) => {
+    const failures: string[] = [];
+    const noteFailure = (label: string) => (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) failures.push(label);
+    };
+
+    const scheduledTotal = (payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const balanceWithoutSchedule = Math.max(0, Number(order.total || 0) - scheduledTotal);
+    const unscheduledEntry: SalePayment[] = balanceWithoutSchedule > 0.01 ? [{
+      id: newId('pay'),
+      amount: balanceWithoutSchedule,
+      paidAmount: 0,
+      date: order.date,
+      status: TransactionStatus.PENDENTE,
+      accountId: '',
+      description: 'Saldo em aberto da venda'
+    }] : [];
+    const scheduledEntries: SalePayment[] = (payments || []).map((payment) => ({
+      ...payment,
+      paidAmount: 0,
+      status: TransactionStatus.PENDENTE
+    }));
+
+    // Se o pedido já tem recibo de entrada, posiciona a parcela imediata (order.date)
+    // primeiro para que a entrada abata o valor à vista e preserve as parcelas futuras.
+    const hasReceipts = (order.receipts || []).length > 0;
+    const financialSchedule: SalePayment[] = hasReceipts
+      ? [...unscheduledEntry, ...scheduledEntries]
+      : [...scheduledEntries, ...unscheduledEntry];
+
+    const createdTxs: Transaction[] = financialSchedule.map((payment, index) => {
+      const id = newId('tx');
+      const accId = payment.accountId || '';
+      const parcelSuffix = financialSchedule.length > 1 ? ` (Parcela ${index + 1}/${financialSchedule.length})` : '';
+      return {
+        id,
+        companyId: order.companyId || activeCompanyId,
+        accountId: accId,
+        costCenterId: 'cc4',
+        date: payment.date,
+        dueDate: payment.date,
+        type: TransactionType.SALE,
+        status: TransactionStatus.PENDENTE,
+        description: `Venda Faturada #${order.reference}${parcelSuffix}`,
+        category: 'Venda Calcário Moído Granel',
+        amount: payment.amount,
+        paidAmount: 0,
+        customerId: order.customerId,
+        contactName: order.customerName,
+        orderId: order.id,
+        nfeNumero: order.nfeNumero,
+        nfeChave: order.nfeChave,
+        installmentNumber: index + 1,
+        installmentTotal: financialSchedule.length,
+        paymentMethod: payment.paymentMethod || order.paymentMethod,
+        payments: []
+      };
+    });
+
+    // Se o pedido nasceu "sem financeiro", mas já tinha recibos avulsos (tx-rcpt-*),
+    // absorvemos esses recibos nas parcelas oficiais da venda para não duplicar caixa nem receita.
+    const absorbedStandaloneIds: string[] = [];
+    const baseList = transactionsRef.current.filter(tx => {
+      if (tx.orderId === order.id && tx.status === TransactionStatus.CONFIRMADO && Boolean(tx.receiptId)) {
+        absorbedStandaloneIds.push(tx.id);
+        return false;
+      }
+      return true;
+    });
+
+    let workingList = [...createdTxs, ...baseList];
+    const toSaveMap = new Map<string, Transaction>(createdTxs.map(tx => [tx.id, tx]));
+
+    (order.receipts || []).forEach(receipt => {
+      const placed = placeReceiptFinance(workingList, receipt, order.id);
+      workingList = placed.next;
+      placed.changed.forEach(tx => toSaveMap.set(tx.id, tx));
+    });
+
+    transactionsRef.current = workingList;
+    setTransactions(workingList);
+    absorbedStandaloneIds.forEach(id => persistDelete('transactions', id));
+
+    const finalTxsToSave = Array.from(toSaveMap.values());
+    const transactionWrites = finalTxsToSave.map((tx, index) =>
+      persistCloud('transactions', tx, { onResult: noteFailure(`parcela ${index + 1}/${finalTxsToSave.length}`) })
+    );
+
+    let customerWrite: Promise<void> = Promise.resolve();
+    const targetCustomer = customersRef.current.find(c => c && c.id === order.customerId);
+    if (targetCustomer) {
+      const updatedCustomer: Customer = {
+        ...targetCustomer,
+        totalSpent: Number(targetCustomer.totalSpent || 0) + Number(order.total || 0),
+        status: 'Ativo' as const
+      };
+      const nextCustomers = customersRef.current
+        .filter((c): c is Customer => Boolean(c && typeof c === 'object' && c.id))
+        .map(c => (c.id === order.customerId ? updatedCustomer : c));
+      customersRef.current = nextCustomers;
+      setCustomers(nextCustomers);
+      customerWrite = persistCloud('customers', updatedCustomer, { onResult: noteFailure('saldo do cliente') });
+    }
+
+    const finalizedOrder = {
+      ...order,
+      payments: financialSchedule,
+      status: OrderStatus.FINALIZED,
+      withoutFinance: false,
+      companyId: order.companyId || activeCompanyId
+    };
+    setOrders(prev => {
+      const exists = prev.some(o => o.id === order.id);
+      return exists ? prev.map(o => o.id === order.id ? finalizedOrder : o) : [...prev, finalizedOrder];
+    });
+    const orderWrite = persistCloud('sales_orders', finalizedOrder, { onResult: noteFailure('o próprio pedido') });
+
+    await Promise.all([...transactionWrites, customerWrite, orderWrite]);
+
+    if (failures.length > 0) {
+      setPersistError(
+        `O lançamento financeiro da venda #${order.reference} ficou salvo neste aparelho, mas o banco ainda não confirmou: ${failures.join(', ')}. ` +
+        'A fila vai reenviar sozinha — não limpe os dados deste navegador até confirmar.'
+      );
+    }
+  };
+
+  // Orquestra a primeira finalização de uma venda: sempre baixa o estoque
+  // (o produto saiu, independente de lançar no financeiro ou não); só cria
+  // parcelas/transações quando o pedido não pediu pra ficar "sem financeiro".
+  const finalizeSale = async (order: SaleOrder, payments: SalePayment[]) => {
+    applyOrderStock(order);
+    if (!order.withoutFinance) {
+      await postSaleFinance(order, payments);
+    }
+  };
+
+  // Ação explícita do botão "Fazer lançamento financeiro" num pedido que
+  // nasceu sem isso. Ignora lançamentos avulsos de recibo (tx-rcpt-*) que
+  // serão absorvidos pelas parcelas oficiais da venda em postSaleFinance.
+  const handlePostOrderFinance = (order: SaleOrder) => {
+    const alreadyPosted = transactionsRef.current.some(
+      (t) => t.orderId === order.id && !(t.status === TransactionStatus.CONFIRMADO && Boolean(t.receiptId))
+    );
+    if (alreadyPosted || !order.withoutFinance) return;
+    postSaleFinance(order, order.payments || []);
+  };
+
+  const handlePaymentReceived = (receipt: PaymentReceipt, updatedOrder: SaleOrder) => {
+    applyReceiptToFinance(receipt, updatedOrder);
   };
 
   // Corrige (next = recibo novo) ou exclui (next = null) um recibo do pedido.
@@ -1332,16 +1328,17 @@ const App: React.FC = () => {
     });
     const updatedOrder: SaleOrder = { ...order, receipts: recalculated };
 
-    const stripped = stripReceiptFinance(transactions, current, order.id);
+    const stripped = stripReceiptFinance(transactionsRef.current, current, order.id);
     let finalList = stripped.next;
     const toSave = new Map<string, Transaction>(stripped.changed.map(t => [t.id, t]));
     const revised = recalculated.find(r => r.id === receiptId);
-    if (revised && !order.withoutFinance) {
+    if (revised) {
       const placed = placeReceiptFinance(finalList, revised, order.id);
       finalList = placed.next;
       placed.changed.forEach(t => toSave.set(t.id, t));
     }
 
+    transactionsRef.current = finalList;
     setTransactions(finalList);
     stripped.deleted.forEach(id => persistDelete('transactions', id));
     toSave.forEach(tx => persistCloud('transactions', tx));
@@ -1361,8 +1358,10 @@ const App: React.FC = () => {
 
     if (order.status === OrderStatus.FINALIZED) {
       order.items.forEach(item => processStockChange(item.productId, item.quantity));
-      const linkedTransactions = transactions.filter(transaction => transaction.orderId === orderId);
-      setTransactions(prev => prev.filter(transaction => transaction.orderId !== orderId));
+      const linkedTransactions = transactionsRef.current.filter(transaction => transaction.orderId === orderId);
+      const nextList = transactionsRef.current.filter(transaction => transaction.orderId !== orderId);
+      transactionsRef.current = nextList;
+      setTransactions(nextList);
       linkedTransactions.forEach(transaction => {
         persistDelete('transactions', transaction.id);
       });
@@ -1384,8 +1383,10 @@ const App: React.FC = () => {
       // Devolve o estoque das mercadorias
       order.items.forEach(item => processStockChange(item.productId, item.quantity));
       // Cancela/remove transações financeiras vinculadas
-      const linkedTransactions = transactions.filter(transaction => transaction.orderId === orderId);
-      setTransactions(prev => prev.filter(transaction => transaction.orderId !== orderId));
+      const linkedTransactions = transactionsRef.current.filter(transaction => transaction.orderId === orderId);
+      const nextList = transactionsRef.current.filter(transaction => transaction.orderId !== orderId);
+      transactionsRef.current = nextList;
+      setTransactions(nextList);
       linkedTransactions.forEach(transaction => {
         persistDelete('transactions', transaction.id);
       });
@@ -1427,19 +1428,22 @@ const App: React.FC = () => {
     if (!hasCancelledNfe(order)) return;
     const fiscalOnly = isFiscalOnlyOrder(order);
     const amountKeys = new Set(cancelledNfeAmountKeys(order));
-    setTransactions(prev => {
-      const next = prev.filter(transaction => {
-        if (transaction.type !== TransactionType.SALE) return true;
-        if (transaction.receiptId) return true;
-        if (transaction.orderId !== order.id) return true;
-        const amountKey = Math.round((Number(transaction.amount) || 0) * 100);
-        const drop = fiscalOnly || amountKeys.has(amountKey);
-        if (!drop) return true;
-        persistDelete('transactions', transaction.id);
-        return false;
-      });
-      return next;
+    const toDeleteIds: string[] = [];
+    const next = transactionsRef.current.filter(transaction => {
+      if (transaction.type !== TransactionType.SALE) return true;
+      if (transaction.receiptId) return true;
+      if (transaction.orderId !== order.id) return true;
+      const amountKey = Math.round((Number(transaction.amount) || 0) * 100);
+      const drop = fiscalOnly || amountKeys.has(amountKey);
+      if (!drop) return true;
+      toDeleteIds.push(transaction.id);
+      return false;
     });
+    if (toDeleteIds.length > 0) {
+      transactionsRef.current = next;
+      setTransactions(next);
+      toDeleteIds.forEach(id => persistDelete('transactions', id));
+    }
   };
 
   const handleUpdateOrder = (updatedOrder: SaleOrder, options?: { waitForCloud?: boolean; skipDiffAdjustment?: boolean }) => {
@@ -1450,11 +1454,15 @@ const App: React.FC = () => {
       voidCancelledNfeFinance(tagged);
       const persist = persistCloud('sales_orders', tagged, { required: options?.waitForCloud });
       if (tagged.status === OrderStatus.FINALIZED) {
-        const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
+        const hasTx = transactionsRef.current.some(
+          t => (t.orderId === tagged.id && !(t.status === TransactionStatus.CONFIRMADO && Boolean(t.receiptId))) ||
+               (tagged.reference && t.description?.includes(tagged.reference) && !t.receiptId)
+        );
         if (!hasTx) {
           applyOrderStock(tagged);
           if (!tagged.withoutFinance) {
             postSaleFinance(tagged, tagged.payments || []);
+          } else {
             (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
           }
         }
@@ -1468,10 +1476,12 @@ const App: React.FC = () => {
       applyOrderStock(tagged);
     }
     if (tagged.status === OrderStatus.FINALIZED && !tagged.withoutFinance) {
-      const hasTx = transactions.some(t => t.orderId === tagged.id || (tagged.reference && t.description?.includes(tagged.reference)));
+      const hasTx = transactionsRef.current.some(
+        t => (t.orderId === tagged.id && !(t.status === TransactionStatus.CONFIRMADO && Boolean(t.receiptId))) ||
+             (tagged.reference && t.description?.includes(tagged.reference) && !t.receiptId)
+      );
       if (!hasTx || originalOrder.status === OrderStatus.BUDGET) {
         postSaleFinance(tagged, tagged.payments || []);
-        (tagged.receipts || []).forEach((receipt) => applyReceiptToFinance(receipt, tagged));
       }
     }
 
@@ -1504,7 +1514,7 @@ const App: React.FC = () => {
       // 2. Ajuste financeiro caso o total do pedido tenha aumentado ou reduzido
       const deltaTotal = Number(((tagged.total || 0) - (originalOrder.total || 0)).toFixed(2));
       if (Math.abs(deltaTotal) > 0.01 && !tagged.withoutFinance) {
-        const orderTxs = transactions.filter(t => t.orderId === tagged.id && t.type === TransactionType.SALE);
+        const orderTxs = transactionsRef.current.filter(t => t.orderId === tagged.id && t.type === TransactionType.SALE);
         const existingTxSum = Number(orderTxs.reduce((s, t) => s + Number(t.amount || 0), 0).toFixed(2));
         const missingAmount = Number(((tagged.total || 0) - existingTxSum).toFixed(2));
 
@@ -1534,7 +1544,9 @@ const App: React.FC = () => {
             payments: [],
             notes: `Lançamento complementar gerado pelo aumento do pedido #${tagged.reference}.`
           };
-          setTransactions(prev => [extraTx, ...prev]);
+          const nextTxs = [extraTx, ...transactionsRef.current];
+          transactionsRef.current = nextTxs;
+          setTransactions(nextTxs);
           persistCloud('transactions', extraTx);
         } else if (missingAmount < -0.01) {
           let toCut = Math.abs(missingAmount);
@@ -1556,24 +1568,30 @@ const App: React.FC = () => {
             }
           }
           if (toDelete.length > 0) {
-            setTransactions(prev => prev.filter(t => !toDelete.includes(t.id)));
+            const nextTxs = transactionsRef.current.filter(t => !toDelete.includes(t.id));
+            transactionsRef.current = nextTxs;
+            setTransactions(nextTxs);
             toDelete.forEach(id => persistDelete('transactions', id));
           }
           if (toUpdate.length > 0) {
             const uMap = new Map(toUpdate.map(t => [t.id, t]));
-            setTransactions(prev => prev.map(t => uMap.get(t.id) || t));
+            const nextTxs = transactionsRef.current.map(t => uMap.get(t.id) || t);
+            transactionsRef.current = nextTxs;
+            setTransactions(nextTxs);
             toUpdate.forEach(t => persistCloud('transactions', t));
           }
         }
       }
 
       if (Math.abs(deltaTotal) > 0.01 && tagged.customerId) {
-        setCustomers(prev => prev.map(c => {
-          if (c.id !== tagged.customerId) return c;
-          const nextCustomer = { ...c, totalSpent: Math.max(0, Number(((c.totalSpent || 0) + deltaTotal).toFixed(2))) };
+        const targetCust = customersRef.current.find(c => c.id === tagged.customerId);
+        if (targetCust) {
+          const nextCustomer = { ...targetCust, totalSpent: Math.max(0, Number(((targetCust.totalSpent || 0) + deltaTotal).toFixed(2))) };
+          const nextCustomers = customersRef.current.map(c => (c.id === tagged.customerId ? nextCustomer : c));
+          customersRef.current = nextCustomers;
+          setCustomers(nextCustomers);
           persistCloud('customers', nextCustomer);
-          return nextCustomer;
-        }));
+        }
       }
     }
 
@@ -1596,32 +1614,40 @@ const App: React.FC = () => {
 
     // 3. Deletar parcelas pendentes canceladas pelo ajuste
     if (deletedTransactionIds.length > 0) {
-      setTransactions(prev => prev.filter(t => !deletedTransactionIds.includes(t.id)));
+      const nextTxs = transactionsRef.current.filter(t => !deletedTransactionIds.includes(t.id));
+      transactionsRef.current = nextTxs;
+      setTransactions(nextTxs);
       deletedTransactionIds.forEach(id => persistDelete('transactions', id));
     }
 
     // 4. Atualizar parcelas pendentes com saldo reduzido
     if (updatedTransactions.length > 0) {
       const idMap = new Map(updatedTransactions.map(t => [t.id, t]));
-      setTransactions(prev => prev.map(t => idMap.get(t.id) || t));
+      const nextTxs = transactionsRef.current.map(t => idMap.get(t.id) || t);
+      transactionsRef.current = nextTxs;
+      setTransactions(nextTxs);
       updatedTransactions.forEach(t => persistCloud('transactions', t));
     }
 
     // 5. Adicionar nova parcela pendente se houve aumento/excedente do pedido
     if (newTransaction) {
       const taggedTx = { ...newTransaction, companyId: newTransaction.companyId || activeCompanyId };
-      setTransactions(prev => [taggedTx, ...prev]);
+      const nextTxs = [taggedTx, ...transactionsRef.current];
+      transactionsRef.current = nextTxs;
+      setTransactions(nextTxs);
       persistCloud('transactions', taggedTx);
     }
 
     // 6. Atualizar totalSpent do cliente se o valor da venda mudou
     if (Math.abs(deltaMoney) > 0.01 && updatedOrder.customerId) {
-      setCustomers(prev => prev.map(c => {
-        if (c.id !== updatedOrder.customerId) return c;
-        const nextCustomer = { ...c, totalSpent: Math.max(0, Number(((c.totalSpent || 0) + deltaMoney).toFixed(2))) };
+      const targetCust = customersRef.current.find(c => c.id === updatedOrder.customerId);
+      if (targetCust) {
+        const nextCustomer = { ...targetCust, totalSpent: Math.max(0, Number(((targetCust.totalSpent || 0) + deltaMoney).toFixed(2))) };
+        const nextCustomers = customersRef.current.map(c => (c.id === updatedOrder.customerId ? nextCustomer : c));
+        customersRef.current = nextCustomers;
+        setCustomers(nextCustomers);
         persistCloud('customers', nextCustomer);
-        return nextCustomer;
-      }));
+      }
     }
 
     const finalTons = (updatedOrder.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
@@ -2045,6 +2071,33 @@ const App: React.FC = () => {
               onUpdateAccount={handleUpdateAccount} 
               onAddTransaction={handleAddTransaction} 
               onVerifyPassword={verifyCurrentUserPassword}
+            />
+          )}
+          {currentView === 'payables_receivables' && (
+            <AccountsPayableReceivable
+              transactions={transactions}
+              accounts={accounts}
+              costCenters={costCenters}
+              categories={categories}
+              customers={customers}
+              orders={orders}
+              storeItems={storeItems}
+              transfers={transfers}
+              currentUser={currentUser || undefined}
+              company={operatingCompany}
+              onAddTransaction={handleAddTransaction}
+              onUpdateTransaction={handleUpdateTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
+              onAddCustomer={handleAddCustomer}
+              onUpsertStoreItem={(item) => {
+                const exists = storeItems.some((s) => s.id === item.id);
+                if (exists) handleUpdateStoreItem(item);
+                else handleAddStoreItem(item);
+              }}
+              onAddTransfer={handleAddTransfer}
+              onPostOrderFinance={handlePostOrderFinance}
+              onReceiptForOrder={(receipt, updatedOrder) => { handleUpdateOrder(updatedOrder); handlePaymentReceived(receipt, updatedOrder); }}
+              onVerifyDeletionPassword={verifyCurrentUserPassword}
             />
           )}
           {currentView === 'transactions' && (

@@ -16,6 +16,7 @@ import {
 import { CategorySuggestion } from './CategorySuggestion';
 import { CostCenterSuggestion } from './CostCenterSuggestion';
 import { INFLOW_CATEGORIES, OUTFLOW_CATEGORIES } from '../constants';
+import { isNonCashTransactionFallback } from '../services/receiptLink';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface QuickEntryDialogProps {
@@ -73,9 +74,7 @@ export const QuickEntryDialog: React.FC<QuickEntryDialogProps> = ({
       const isPaid = numAmount > 0;
       const initialStatus = isPaid ? TransactionStatus.PAGO : TransactionStatus.PENDENTE;
       
-      const isDeduction = category?.toLowerCase().includes('abatimento') || 
-        category?.toLowerCase().includes('devolu') ||
-        description?.toLowerCase().includes('abatimento');
+      const isDeduction = isNonCashTransactionFallback({ category, description, paymentMethod });
 
       const newPayments: TransactionPayment[] = isPaid ? [{
         id: `pmt-${Date.now()}`,

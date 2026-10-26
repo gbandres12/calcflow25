@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, CostCenter, Category } from '../types';
 import { INITIAL_COST_CENTERS } from '../constants';
+import { isNonCashTransactionFallback } from '../services/receiptLink';
 import { dateISOBR } from "../utils/dateFilterUtils";
 import { 
   TrendingUp, 
@@ -45,7 +46,11 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const txDate = t.paymentDate || t.date;
-      const dateMatch = (!startDate || txDate >= startDate) && (!endDate || txDate <= endDate);
+      const hasMatchingPaymentDate = Array.isArray(t.payments) && t.payments.some(p => {
+        const pDate = p.paymentDate || txDate;
+        return (!startDate || pDate >= startDate) && (!endDate || pDate <= endDate);
+      });
+      const dateMatch = hasMatchingPaymentDate || ((!startDate || txDate >= startDate) && (!endDate || txDate <= endDate));
       const categoryMatch = selectedCategory === 'Todas' || t.category === selectedCategory;
       let ccMatch = selectedCCId === 'Todos';
       if (!ccMatch) {
@@ -95,10 +100,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
           t.status === TransactionStatus.PARCIAL;
         if (!isPaid) return;
 
-        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-          t.category?.toLowerCase().includes('devolu') ||
-          t.description?.toLowerCase().includes('abatimento');
-        if (isDeduction) return;
+        if (isNonCashTransactionFallback(t)) return;
 
         const paidAmt = Number(
           t.paidAmount !== undefined && t.paidAmount !== null && t.paidAmount > 0
@@ -121,6 +123,9 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
   const todayTransactions = useMemo(() => {
     return transactions.filter(t => {
+      if (Array.isArray(t.payments) && t.payments.length > 0) {
+        return t.payments.some(p => !p.isDiscountOrDeduction && (p.paymentDate || t.paymentDate || t.date) === todayStr);
+      }
       const txDate = t.paymentDate || t.date;
       if (txDate !== todayStr) return false;
       return t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO || t.status === TransactionStatus.PARCIAL;
@@ -137,10 +142,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
             .reduce((s, p) => s + Number(p.amount || 0), 0);
           return acc + sum;
         }
-        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-          t.category?.toLowerCase().includes('devolu') ||
-          t.description?.toLowerCase().includes('abatimento');
-        if (isDeduction) return acc;
+        if (isNonCashTransactionFallback(t)) return acc;
         return acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0);
       }, 0)
   , [todayTransactions, todayStr]);
@@ -155,10 +157,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
             .reduce((s, p) => s + Number(p.amount || 0), 0);
           return acc + sum;
         }
-        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-          t.category?.toLowerCase().includes('devolu') ||
-          t.description?.toLowerCase().includes('abatimento');
-        if (isDeduction) return acc;
+        if (isNonCashTransactionFallback(t)) return acc;
         return acc + Number(t.paidAmount !== undefined && t.paidAmount > 0 ? t.paidAmount : t.amount || 0);
       }, 0)
   , [todayTransactions, todayStr]);
@@ -174,7 +173,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
   const handleWhatsAppClosure = () => {
     const dateFormatted = new Date().toLocaleDateString('pt-BR');
-    const message = `*FECHAMENTO DE CAIXA DIÁRIO* 📊%0A*Empresa:* Calcário Amazônia%0A*Data:* ${dateFormatted}%0A%0A----------------------------%0A🟢 *ENTRADAS:* R$ ${todayIn.toLocaleString('pt-BR')}%0A🔴 *SAÍDAS:* R$ ${todayOut.toLocaleString('pt-BR')}%0A💰 *SALDO LÍQUIDO:* R$ ${todayBalance.toLocaleString('pt-BR')}%0A----------------------------%0A%0A*Resumo de Transações:*%0A${todayTransactions.map(t => `- ${t.description}: R$ ${t.paidAmount.toLocaleString('pt-BR')}`).join('%0A')}%0A%0A_Enviado via CalcárioFlow ERP_`;
+    const message = `*FECHAMENTO DE CAIXA DIÁRIO* 📊%0A*Empresa:* Calcário Amazônia%0A*Data:* ${dateFormatted}%0A%0A----------------------------%0A🟢 *ENTRADAS:* R$ ${todayIn.toLocaleString('pt-BR')}%0A🔴 *SAÍDAS:* R$ ${todayOut.toLocaleString('pt-BR')}%0A💰 *SALDO LÍQUIDO:* R$ ${todayBalance.toLocaleString('pt-BR')}%0A----------------------------%0A%0A*Resumo de Transações:*%0A${todayTransactions.map(t => `- ${t.description}: R$ ${Number(t.paidAmount ?? t.amount ?? 0).toLocaleString('pt-BR')}`).join('%0A')}%0A%0A_Enviado via CalcárioFlow ERP_`;
     window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
   };
 

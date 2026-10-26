@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildOrderReceipt, openOrdersForReceipt, openReceivables, orderOpenBalance, settleReceivable } from './receiptLink';
+import {
+  buildOrderReceipt,
+  isNonCashPaymentMethod,
+  isNonCashTransactionFallback,
+  isReceiptNonCashDeduction,
+  openOrdersForReceipt,
+  openReceivables,
+  orderOpenBalance,
+  settleReceivable
+} from './receiptLink';
 import { OrderStatus, TransactionStatus, TransactionType } from '../types';
 
 const order = (over: any = {}) => ({
@@ -20,16 +29,55 @@ describe('vínculo de recebimento com venda/conta', () => {
     assert.deepEqual(list.map(o => o.id), ['a']);
   });
 
-  it('recibo: primeiro é ENTRADA, depois ABATIMENTO, e calcula saldo', () => {
+  it('recibo: primeiro é ENTRADA, depois ABATIMENTO, e calcula saldo sem marcar PIX como desconto sem caixa', () => {
     const r1 = buildOrderReceipt(order(), undefined, { amount: 400, date: '2026-10-05', paymentMethod: 'PIX', accountId: 'acc' });
     assert.equal(r1.type, 'ENTRADA');
     assert.equal(r1.remainingDebt, 600);
     assert.equal(r1.totalPaidSoFar, 400);
+    assert.equal(r1.isDiscountOrDeduction, false);
+    assert.equal(isReceiptNonCashDeduction(r1), false);
     const o2 = order({ receipts: [r1] });
     assert.equal(orderOpenBalance(o2), 600);
     const r2 = buildOrderReceipt(o2, undefined, { amount: 600, date: '2026-10-06', paymentMethod: 'PIX', accountId: 'acc' });
     assert.equal(r2.type, 'ABATIMENTO');
     assert.equal(r2.remainingDebt, 0);
+    // 2º pagamento parcial via PIX tem type === 'ABATIMENTO', mas movimenta caixa normalmente
+    assert.equal(r2.isDiscountOrDeduction, false);
+    assert.equal(isReceiptNonCashDeduction(r2), false);
+
+    // Quando o meio de pagamento é realmente sem caixa (desconto/devolução/permuta), marca isDiscountOrDeduction = true
+    const r3 = buildOrderReceipt(order(), undefined, {
+      amount: 100,
+      date: '2026-10-06',
+      paymentMethod: 'Abatimento / Desconto / Permuta (Sem Caixa)',
+      accountId: 'acc'
+    });
+    assert.equal(r3.isDiscountOrDeduction, true);
+    assert.equal(isReceiptNonCashDeduction(r3), true);
+  });
+
+  it('isNonCashTransactionFallback não confunde descrição "Abatimento Pedido #..." paga via PIX com desconto sem caixa', () => {
+    assert.equal(isNonCashPaymentMethod('PIX'), false);
+    assert.equal(isNonCashPaymentMethod('Transferência / TED'), false);
+    assert.equal(isNonCashPaymentMethod('Abatimento / Devolução'), true);
+
+    const cashTxWithAbatimentoDesc = {
+      id: 'tx-1',
+      description: 'Abatimento Pedido #PED-2026-0059 - Cliente X',
+      category: 'Recebimento de Clientes',
+      paymentMethod: 'PIX',
+      discount: 0
+    };
+    assert.equal(isNonCashTransactionFallback(cashTxWithAbatimentoDesc), false);
+
+    const trueNonCashTx = {
+      id: 'tx-2',
+      description: 'Abatimento concedido por avaria',
+      category: 'Abatimentos e Descontos Concedidos',
+      paymentMethod: 'Abatimento / Desconto',
+      discount: 150
+    };
+    assert.equal(isNonCashTransactionFallback(trueNonCashTx), true);
   });
 
   it('contas a receber: só avulsas com saldo (as de venda entram pela venda)', () => {
@@ -66,3 +114,4 @@ describe('vínculo de recebimento com venda/conta', () => {
     assert.equal(res.payments?.[0].isDiscountOrDeduction, true);
   });
 });
+

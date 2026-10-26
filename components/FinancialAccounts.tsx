@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { FinancialAccount, Transaction, TransactionStatus, TransactionType, AccountType } from '../types';
+import { isNonCashTransactionFallback } from '../services/receiptLink';
 import { 
   CreditCard, Settings, Wallet, TrendingUp, TrendingDown, 
   Info, X, Lock, ShieldAlert, CheckCircle2, Building, Scale, AlertTriangle 
@@ -54,10 +55,7 @@ const FinancialAccounts: React.FC<AccountsProps> = ({ accounts, transactions, on
           }
         });
       } else if (isPaidOrConfirmed) {
-        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-          t.category?.toLowerCase().includes('devolu') ||
-          t.description?.toLowerCase().includes('abatimento');
-        if (isDeduction) return;
+        if (isNonCashTransactionFallback(t)) return;
 
         if (t.accountId === account.id) {
           const paidAmt = Number(

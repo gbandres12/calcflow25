@@ -7,6 +7,7 @@ import {
 import { ArrowRight, Package, Scale, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { isFiscalOnlyOrder, orderReceiptsPaid } from '../services/saleNfe';
+import { isNonCashTransactionFallback } from '../services/receiptLink';
 import { dateISOBR } from "../utils/dateFilterUtils";
 
 interface DashboardProps {
@@ -55,10 +56,16 @@ const Dashboard: React.FC<DashboardProps> = ({
     o.status === OrderStatus.FINALIZED && (!o.nfeStatus || o.nfeStatus === 'nao_emitida' || o.nfeStatus === 'processando' || o.nfeStatus === 'rascunho')
   ).slice(0, 5);
   const rejectedNfe = commercialOrders.filter((o) => o.nfeStatus === 'rejeitada').slice(0, 4);
-  const getTxRealizedAmount = (t: Transaction): number => {
+  const getTxRealizedOnDate = (t: Transaction, targetDate?: string, upToDate?: string): number => {
     if (Array.isArray(t.payments) && t.payments.length > 0) {
       return t.payments
-        .filter((p) => !p.isDiscountOrDeduction)
+        .filter((p) => {
+          if (p.isDiscountOrDeduction) return false;
+          const pDate = (p.paymentDate || t.paymentDate || t.date || '').slice(0, 10);
+          if (targetDate && pDate !== targetDate) return false;
+          if (upToDate && pDate && pDate > upToDate) return false;
+          return true;
+        })
         .reduce((sum, p) => sum + Number(p.amount || 0), 0);
     }
     const isPaidOrConfirmed =
@@ -66,10 +73,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       t.status === TransactionStatus.PAGO ||
       t.status === TransactionStatus.PARCIAL;
     if (!isPaidOrConfirmed) return 0;
-    const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-      t.category?.toLowerCase().includes('devolu') ||
-      t.description?.toLowerCase().includes('abatimento');
-    if (isDeduction) return 0;
+    if (isNonCashTransactionFallback(t)) return 0;
+    const txDate = (t.paymentDate || t.date || '').slice(0, 10);
+    if (targetDate && txDate !== targetDate) return 0;
+    if (upToDate && txDate && txDate > upToDate) return 0;
     if (t.paidAmount !== undefined && t.paidAmount !== null && Number(t.paidAmount) > 0) {
       return Number(t.paidAmount);
     }
@@ -79,18 +86,13 @@ const Dashboard: React.FC<DashboardProps> = ({
     return 0;
   };
 
-  const dayTx = transactions.filter((t) => {
-    const txDate = (t.paymentDate || t.date || '').slice(0, 10);
-    return txDate === today;
-  });
-  const entradas = dayTx.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + getTxRealizedAmount(t), 0);
-  const saidas = dayTx.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + getTxRealizedAmount(t), 0);
+  const dayTx = transactions.filter((t) => getTxRealizedOnDate(t, today) > 0);
+  const entradas = transactions.filter((t) => t.type === TransactionType.SALE).reduce((s, t) => s + getTxRealizedOnDate(t, today), 0);
+  const saidas = transactions.filter((t) => t.type !== TransactionType.SALE).reduce((s, t) => s + getTxRealizedOnDate(t, today), 0);
   const saldoContas = accounts.reduce((s, a) => s + Number(a.initialBalance || 0), 0);
   // Saldo real = saldo inicial das contas + todo histórico realizado até hoje (inclui pagamentos e baixas)
   const saldoDia = saldoContas + transactions.reduce((s, t) => {
-    const txDate = (t.paymentDate || t.date || '').slice(0, 10);
-    if (txDate && txDate > today) return s;
-    const v = getTxRealizedAmount(t);
+    const v = getTxRealizedOnDate(t, undefined, today);
     return t.type === TransactionType.SALE ? s + v : s - v;
   }, 0);
   const custName = (id?: string) => customers.find((c) => c.id === id)?.name || 'Cliente';
@@ -103,11 +105,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     const openReceivable = Math.max(0, soldValue - received);
     const chart = Array.from({ length: 7 }, (_, index) => {
       const date = isoDaysAgo(6 - index);
-      const daily = transactions.filter((tx) => (tx.paymentDate || tx.date || '').slice(0, 10) === date);
-      const receivedDay = daily.filter((tx) => tx.type === TransactionType.SALE)
-        .reduce((sum, tx) => sum + getTxRealizedAmount(tx), 0);
-      const spentDay = daily.filter((tx) => tx.type !== TransactionType.SALE)
-        .reduce((sum, tx) => sum + getTxRealizedAmount(tx), 0);
+      const receivedDay = transactions.filter((tx) => tx.type === TransactionType.SALE)
+        .reduce((sum, tx) => sum + getTxRealizedOnDate(tx, date), 0);
+      const spentDay = transactions.filter((tx) => tx.type !== TransactionType.SALE)
+        .reduce((sum, tx) => sum + getTxRealizedOnDate(tx, date), 0);
       return { day: new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''), entradas: receivedDay, saidas: spentDay };
     });
     return {

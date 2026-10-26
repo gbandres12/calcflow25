@@ -27,7 +27,7 @@ import {
   reconcileReceiptsAgainstPayments,
   stockAfterSale
 } from '../domain/telegramWrites.js';
-import { buildSalesOrderPdf } from '../domain/salesOrderPdf.js';
+import { buildOrderPdfTitle, buildSalesOrderPdf } from '../domain/salesOrderPdf.js';
 import {
   applyEmitToOrder,
   emitNfeOnNotaAs,
@@ -1045,7 +1045,7 @@ export async function commitAction(
             : undefined
       });
       document = {
-        filename: `Pedido-${order.reference}.pdf`,
+        filename: `${buildOrderPdfTitle(order, nextCustomer)}.pdf`,
         bytes,
         caption: `Pedido ${order.reference} · ${customer.name} · ${formatBRL(order.total)}\nBaixe e encaminhe no WhatsApp.`
       };

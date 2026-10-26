@@ -3,7 +3,8 @@ import { inflateSync } from 'node:zlib';
 import { describe, it } from 'node:test';
 import { PDFDocument } from 'pdf-lib';
 import { OrderStatus, SaleOrder } from '../../types';
-import { buildSalesOrderPdf } from './salesOrderPdf';
+import { buildOrderPdfTitle, buildSalesOrderPdf } from './salesOrderPdf';
+import { buildOrderPdfTitle as buildUiOrderPdfTitle } from '../../components/sales-order-print/format';
 
 function inflatePdfStreams(bytes: Uint8Array): string {
   const raw = Buffer.from(bytes);
@@ -94,6 +95,7 @@ describe('PDF do pedido: layout oficial do ERP', () => {
     assert.equal(Buffer.from(bytes.subarray(0, 4)).toString(), '%PDF');
     const loaded = await PDFDocument.load(bytes);
     assert.equal(loaded.getPageCount(), 1);
+    assert.equal(loaded.getTitle(), 'Fazenda Boa Vista - 50 TON - PED-2026-0008');
     const size = loaded.getPage(0).getSize();
     assert.ok(Math.abs(size.width - 595.28) < 1);
     assert.ok(Math.abs(size.height - 841.89) < 1);
@@ -112,5 +114,32 @@ describe('PDF do pedido: layout oficial do ERP', () => {
     ]) {
       assert.match(text, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
+  });
+
+  it('monta nome do arquivo PDF com nome do cliente, quantidade total e número do pedido', () => {
+    const title = buildOrderPdfTitle(
+      {
+        reference: 'PED-2026-0059',
+        items: [
+          { quantity: 120, unit: 'Ton' },
+          { quantity: 30.5, unit: 'Ton' }
+        ]
+      },
+      { name: 'Agropecuária Santa Fé / Filial 2' }
+    );
+    assert.equal(title, 'Agropecuária Santa Fé Filial 2 - 150,5 TON - PED-2026-0059');
+    assert.equal(
+      buildUiOrderPdfTitle(
+        {
+          reference: 'PED-2026-0059',
+          items: [
+            { quantity: 120, unit: 'Ton' },
+            { quantity: 30.5, unit: 'Ton' }
+          ]
+        },
+        { name: 'Agropecuária Santa Fé / Filial 2' }
+      ),
+      'Agropecuária Santa Fé Filial 2 - 150,5 TON - PED-2026-0059'
+    );
   });
 });

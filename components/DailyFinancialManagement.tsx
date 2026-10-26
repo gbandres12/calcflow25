@@ -38,6 +38,7 @@ import {
 import { COMPANY_INFO, INFLOW_CATEGORIES, OUTFLOW_CATEGORIES, INITIAL_COST_CENTERS } from '../constants';
 import { DeletionPasswordModal } from './DeletionPasswordModal';
 import { ReceivePayDialog } from './ReceivePayDialog';
+import { isNonCashPaymentMethod, isNonCashTransactionFallback } from '../services/receiptLink';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface DailyFinancialManagementProps {
@@ -210,9 +211,7 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
             : (t.status === TransactionStatus.CONFIRMADO || t.status === TransactionStatus.PAGO ? t.amount : 0)
         ) || 0;
 
-        const isDeduction = t.category?.toLowerCase().includes('abatimento') || 
-          t.category?.toLowerCase().includes('devolu') ||
-          t.description?.toLowerCase().includes('abatimento');
+        const isDeduction = isNonCashTransactionFallback(t);
 
         if (txDate < targetDate) {
           if (!isDeduction) {
@@ -257,19 +256,12 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
         return t.payments.some(p => {
           const pDate = p.paymentDate || t.paymentDate || t.date;
           return pDate === targetDate && (
-            p.isDiscountOrDeduction ||
-            p.paymentMethod?.toLowerCase().includes('abatimento') ||
-            p.paymentMethod?.toLowerCase().includes('desconto') ||
-            p.notes?.toLowerCase().includes('abatimento')
+            Boolean(p.isDiscountOrDeduction) ||
+            isNonCashPaymentMethod(p.paymentMethod)
           );
         });
       }
-      return (
-        t.category?.toLowerCase().includes('abatimento') ||
-        t.category?.toLowerCase().includes('devolu') ||
-        t.description?.toLowerCase().includes('abatimento') ||
-        t.paymentMethod?.toLowerCase().includes('abatimento')
-      );
+      return isNonCashTransactionFallback(t);
     };
 
     const dayDeductions = dayTxs.filter(hasDeductionOnTargetDate);
@@ -330,22 +322,40 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
     const resolvedCc = (costCenters || INITIAL_COST_CENTERS).find(c => c.id === quickForm.costCenterId || c.name === quickForm.costCenter);
     const resolvedCcId = resolvedCc?.id || quickForm.costCenterId || 'cc1';
     const resolvedCcName = resolvedCc?.name || quickForm.costCenter || 'Geral';
+    const desc = quickForm.description || (quickEntryType === TransactionType.SALE ? 'Recebimento Balança / Venda' : 'Despesa Operacional');
+    const isSettled = quickForm.status === TransactionStatus.CONFIRMADO || quickForm.status === TransactionStatus.PAGO;
+    const isDeduction = isNonCashTransactionFallback({
+      category: quickForm.category,
+      description: desc,
+      paymentMethod: quickForm.paymentMethod
+    });
 
     onAddTransaction({
-      description: quickForm.description || (quickEntryType === TransactionType.SALE ? 'Recebimento Balança / Venda' : 'Despesa Operacional'),
+      description: desc,
       amount: val,
-      paidAmount: quickForm.status === TransactionStatus.CONFIRMADO ? val : 0,
+      paidAmount: isSettled ? val : 0,
       type: quickEntryType,
       status: quickForm.status,
       category: quickForm.category,
       accountId: quickForm.accountId,
       date: selectedDate,
-      paymentDate: quickForm.status === TransactionStatus.CONFIRMADO ? selectedDate : undefined,
+      dueDate: selectedDate,
+      paymentDate: isSettled ? selectedDate : undefined,
       costCenterId: resolvedCcId,
       costCenter: resolvedCcName,
       contactName: quickForm.contactName,
       paymentMethod: quickForm.paymentMethod,
-      notes: quickForm.notes
+      notes: quickForm.notes,
+      payments: isSettled ? [{
+        id: `pmt-${Date.now()}`,
+        transactionId: '',
+        amount: val,
+        paymentDate: selectedDate,
+        accountId: quickForm.accountId,
+        paymentMethod: quickForm.paymentMethod,
+        notes: quickForm.notes || 'Lançamento rápido no Caixa Diário',
+        isDiscountOrDeduction: isDeduction
+      }] : []
     });
 
     setIsQuickEntryOpen(false);
@@ -769,11 +779,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                     ? tx.payments!.filter(p => (p.paymentDate || tx.paymentDate || tx.date) === targetDate)
                     : [];
                   
-                  const isDeductionItem = (Number(tx.discount) || 0) > 0 ||
-                    dayPayments.some(p => p.isDiscountOrDeduction || p.paymentMethod?.toLowerCase().includes('abatimento')) ||
-                    tx.category?.toLowerCase().includes('abatimento') ||
-                    tx.description?.toLowerCase().includes('abatimento') ||
-                    tx.paymentMethod?.toLowerCase().includes('abatimento');
+                  const isDeductionItem = dayPayments.length > 0
+                    ? dayPayments.every(p => p.isDiscountOrDeduction || isNonCashPaymentMethod(p.paymentMethod))
+                    : isNonCashTransactionFallback(tx);
 
                   const isInflow = tx.type === TransactionType.SALE && !isDeductionItem;
 
@@ -1231,10 +1239,9 @@ export const DailyFinancialManagement: React.FC<DailyFinancialManagementProps> =
                       const dayPayments = hasPayments 
                         ? t.payments!.filter(p => (p.paymentDate || t.paymentDate || t.date) === selectedDate)
                         : [];
-                      const isDeduction = (Number(t.discount) || 0) > 0 ||
-                        dayPayments.some(p => p.isDiscountOrDeduction || p.paymentMethod?.toLowerCase().includes('abatimento')) ||
-                        t.category?.toLowerCase().includes('abatimento') ||
-                        t.description?.toLowerCase().includes('abatimento');
+                      const isDeduction = dayPayments.length > 0
+                        ? dayPayments.every(p => p.isDiscountOrDeduction || isNonCashPaymentMethod(p.paymentMethod))
+                        : isNonCashTransactionFallback(t);
                       
                       let dayAmt = 0;
                       if (dayPayments.length > 0) {

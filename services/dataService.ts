@@ -640,13 +640,19 @@ export const db = {
 
     const erpDirect = await tryReadFromErp(tableName, compKey);
     if (erpDirect !== null) {
+      const localCache = storage.get(storageKey);
       let filtered = erpDirect;
       const pendingUpserts = getPendingUpserts(storageKey);
       const pendingDeletes = getPendingDeleteIds(storageKey);
       if (pendingUpserts.length > 0 || pendingDeletes.length > 0) {
         retryUnconfirmed(tableName, compKey, storageKey, filtered, pendingUpserts, pendingDeletes);
-        filtered = composeVisibleRows(filtered, pendingUpserts, pendingDeletes, filtered);
       }
+      filtered = composeVisibleRows(
+        filtered,
+        pendingUpserts,
+        pendingDeletes,
+        Array.isArray(localCache) ? localCache : filtered
+      );
       if (!isDemoCompany(compKey) && FINANCE_SCOPED_TABLES.has(tableName)) {
         const scope = await getFinanceScope(compKey);
         if (scope) filtered = filtered.filter((row) => isInFinanceScope(tableName, row, scope));
@@ -824,9 +830,11 @@ export const db = {
     const operational = stripSeedDocs(normalizedRecords);
     const updated = mergeRecordsById(current, operational);
     storage.set(storageKey, updated);
+    queuePendingUpserts(storageKey, operational);
 
     const wroteToErp = await tryWriteToErp(tableName, compKey, operational);
     if (wroteToErp) {
+      confirmPendingUpserts(storageKey, operational);
       return updated;
     }
 
@@ -840,7 +848,6 @@ export const db = {
       return updated;
     }
 
-    queuePendingUpserts(storageKey, operational);
     try {
       await persistPendingUpserts(tableName, compKey, operational);
       confirmPendingUpserts(storageKey, operational);

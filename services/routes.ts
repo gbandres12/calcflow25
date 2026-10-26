@@ -24,6 +24,7 @@ export const ROUTES: RouteConfig[] = [
   { view: 'fleet', path: '/frota', aliases: ['/fleet'], title: 'Frota e Maquinário' },
   { view: 'fuel', path: '/combustivel', aliases: ['/fuel'], title: 'Combustível' },
   { view: 'daily', path: '/caixa', aliases: ['/diario', '/movimentacao-diaria', '/daily'], title: 'Movimentação Diária' },
+  { view: 'payables_receivables', path: '/contas-pagar-receber', aliases: ['/projecao', '/contas-a-pagar', '/contas-a-receber', '/payables'], title: 'Contas a Pagar & Receber' },
   { view: 'transactions', path: '/lancamentos', aliases: ['/transacoes', '/extrato', '/transactions'], title: 'Lançamentos / Extrato' },
   { view: 'cashflow', path: '/fluxo-caixa', aliases: ['/fluxo', '/cashflow'], title: 'Fluxo de Caixa' },
   { view: 'accounts', path: '/contas', aliases: ['/accounts'], title: 'Contas Bancárias' },

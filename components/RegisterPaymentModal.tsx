@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SaleOrder, Customer, FinancialAccount, PaymentReceipt, Company } from '../types';
 import { orderReceiptsPaid } from '../services/saleNfe';
+import { isNonCashPaymentMethod } from '../services/receiptLink';
 import { CheckCircle } from 'lucide-react';
 import { FlowSheet } from './ui/FlowSheet';
 import { dateISOBR } from "../utils/dateFilterUtils";
@@ -57,6 +58,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
 
     const receiptId = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const selectedAccount = accounts.find(a => a.id === accountId);
+    const isNonCash = isNonCashPaymentMethod(paymentMethod);
 
     const newReceipt: PaymentReceipt = {
       id: receiptId,
@@ -80,7 +82,8 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
       notes: notes.trim(),
       createdById: currentUser?.id,
       createdByName: currentUser?.name || currentUser?.email,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...(isNonCash ? { isDiscountOrDeduction: true } : {})
     };
 
     const updatedReceipts = [...(order.receipts || []), newReceipt];
@@ -201,6 +204,7 @@ export const RegisterPaymentModal: React.FC<RegisterPaymentModalProps> = ({
                 <option value="Cartão de Débito">Cartão de Débito</option>
                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                 <option value="Cheque">Cheque</option>
+                <option value="Abatimento / Desconto (Sem Caixa)">Abatimento / Desconto / Permuta (Sem Caixa)</option>
               </select>
             </div>
 

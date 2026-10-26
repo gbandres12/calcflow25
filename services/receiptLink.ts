@@ -47,12 +47,58 @@ export interface ReceiptInput {
   isDeduction?: boolean;
 }
 
+/**
+ * Retorna true apenas quando a forma de pagamento indica um abatimento comercial,
+ * desconto, devolução ou permuta SEM movimentação financeira em conta/caixa.
+ * Pagamentos reais (PIX, Dinheiro, TED/DOC, Boleto, Cartão, Cheque) retornam false.
+ */
+export function isNonCashPaymentMethod(paymentMethod?: string | null): boolean {
+  const pm = String(paymentMethod || '').trim();
+  if (!pm) return false;
+  return /(abatimento|desconto|devolu[cç][aã]o|quebra|permuta|barter|sem\s*caixa)/i.test(pm);
+}
+
+/**
+ * Determina se um recibo de pedido (PaymentReceipt) representa um desconto/abatimento
+ * não-financeiro (que reduz o saldo do pedido sem entrar dinheiro na conta bancária).
+ * Nota: no ERP, `receipt.type === 'ABATIMENTO'` é usado para todo pagamento parcial
+ * após a 1ª entrada (inclusive via PIX/TED/Dinheiro), portanto NÃO significa desconto sem caixa
+ * a menos que `isDiscountOrDeduction` seja true ou a forma de pagamento seja não-financeira.
+ */
+export function isReceiptNonCashDeduction(
+  receipt: Pick<PaymentReceipt, 'type' | 'paymentMethod' | 'notes'> & { isDiscountOrDeduction?: boolean }
+): boolean {
+  if (Boolean(receipt.isDiscountOrDeduction)) return true;
+  if (isNonCashPaymentMethod(receipt.paymentMethod)) return true;
+  return false;
+}
+
+/**
+ * Fallback para transações antigas/avulsas que não possuem array `payments[]`.
+ * Ignora a expressão "Abatimento Pedido #..." na descrição quando a forma de pagamento
+ * é financeira (PIX, Dinheiro, TED, Boleto, etc.) e a categoria não é de desconto/devolução.
+ */
+export function isNonCashTransactionFallback(
+  tx: Pick<Transaction, 'category' | 'description' | 'paymentMethod'>
+): boolean {
+  if (isNonCashPaymentMethod(tx.paymentMethod)) return true;
+  const cat = String(tx.category || '').toLowerCase();
+  if (cat.includes('abatimento') || cat.includes('desconto') || cat.includes('devolu')) return true;
+  const pm = String(tx.paymentMethod || '').trim();
+  const isCashMethod = /^(pix|dinheiro|transfer[eê]ncia|ted|doc|boleto|cart[aã]o|cheque|dep[oó]sito)/i.test(pm);
+  if (isCashMethod) return false;
+  const desc = String(tx.description || '').toLowerCase();
+  if (/^abatimento\s+pedido\s+#/i.test(desc.trim())) return false;
+  return desc.includes('abatimento') || desc.includes('devolu');
+}
+
 /** Mesmo recibo que a tela "Receber entrada / abatimento" da venda gera. */
 export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefined, input: ReceiptInput, now = new Date()): PaymentReceipt {
   const paidBefore = orderReceiptsPaid(order);
   const debtBefore = orderOpenBalance(order);
   const isFirst = (order.receipts || []).length === 0;
-  const kind = input.isDeduction ? 'ABATIMENTO' : (isFirst ? 'ENTRADA' : 'ABATIMENTO');
+  const isDeduction = Boolean(input.isDeduction || isNonCashPaymentMethod(input.paymentMethod));
+  const kind = isDeduction ? 'ABATIMENTO' : (isFirst ? 'ENTRADA' : 'ABATIMENTO');
   const id = `REC-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
   return {
     id,
@@ -67,12 +113,14 @@ export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefin
     accountId: input.accountId,
     accountName: input.accountName || 'Caixa Geral',
     receivedBy: input.receivedBy || 'Setor Financeiro / Caixa',
-    description: `${isFirst && !input.isDeduction ? 'Entrada' : 'Abatimento'} Pedido #${order.reference}`,
+    description: `${isFirst && !isDeduction ? 'Entrada' : 'Abatimento'} Pedido #${order.reference}`,
     type: kind,
+    isDiscountOrDeduction: isDeduction,
     totalOrderAmount: order.total,
     totalPaidSoFar: paidBefore + input.amount,
     remainingDebt: Math.max(0, debtBefore - input.amount),
-    notes: (input.notes || '').trim()
+    notes: (input.notes || '').trim(),
+    ...(isDeduction ? { isDiscountOrDeduction: true } : {})
   };
 }
 
@@ -80,7 +128,7 @@ export function buildOrderReceipt(order: SaleOrder, customer: Customer | undefin
 export function settleReceivable(tx: Transaction, input: ReceiptInput, now = new Date()): Transaction {
   const paidAfter = Number(tx.paidAmount || 0) + input.amount;
   const remaining = Math.max(0, Number(tx.amount || 0) - paidAfter);
-  const isDeduction = Boolean(input.isDeduction || input.paymentMethod?.toLowerCase().includes('abatimento'));
+  const isDeduction = Boolean(input.isDeduction || isNonCashPaymentMethod(input.paymentMethod));
   const payment: TransactionPayment = {
     id: `pmt-${now.getTime()}`,
     transactionId: tx.id,

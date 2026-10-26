@@ -40,6 +40,32 @@ const dash = (value?: string | number | null): string => {
 const formatQty = (value: number): string =>
   (value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 
+const sanitizeFilenamePart = (value: string): string =>
+  String(value || '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export function buildOrderPdfTitle(
+  order: {
+    reference?: string;
+    customerName?: string;
+    items?: Array<{ quantity?: number; unit?: string }>;
+  },
+  customer?: { name?: string } | null
+): string {
+  const customerName = sanitizeFilenamePart(
+    customer?.name || order?.customerName || 'Cliente'
+  );
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const totalQty = items.reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0);
+  const rawUnit = sanitizeFilenamePart(items[0]?.unit || 'TON').toUpperCase() || 'TON';
+  const qtyPart = `${formatQty(totalQty)} ${rawUnit}`;
+  const refPart = sanitizeFilenamePart(order?.reference || '');
+
+  return [customerName, qtyPart, refPart].filter(Boolean).join(' - ');
+}
+
 const formatDate = (value?: string): string => {
   if (!value) return '-';
   const raw = String(value).trim();
@@ -59,6 +85,7 @@ const formatDate = (value?: string): string => {
  */
 export async function buildSalesOrderPdf(input: SalesOrderPdfInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
+  pdf.setTitle(buildOrderPdfTitle(input.order, input.customer));
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const page = pdf.addPage([PAGE_W, PAGE_H]);

@@ -8,7 +8,8 @@ export function assembleCategory(row: any) {
     id: row.id,
     companyId: row.company_id,
     name: row.name,
-    type: row.type
+    type: row.type,
+    updatedAt: row.updated_at || row.extra?.updatedAt
   };
 }
 

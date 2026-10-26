@@ -2,7 +2,7 @@ import React from 'react';
 import { SaleOrder, Customer, Company } from '../types';
 import { Printer, X, Copy, Check } from 'lucide-react';
 import { SalesOrderPrintDocument } from './sales-order-print/SalesOrderPrintDocument';
-import { formatBRL } from './sales-order-print/format';
+import { formatBRL, buildOrderPdfTitle } from './sales-order-print/format';
 import { SO } from './sales-order-print/theme';
 
 interface SalesOrderPdfModalProps {
@@ -21,8 +21,21 @@ export const SalesOrderPdfModal: React.FC<SalesOrderPdfModalProps> = ({
   const [copied, setCopied] = React.useState(false);
   const printedAt = React.useMemo(() => new Date().toLocaleString('pt-BR'), []);
   const isBudget = order.status === 'Orçamento';
+  const pdfTitle = React.useMemo(() => buildOrderPdfTitle(order, customer), [order, customer]);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const previousTitle = document.title;
+    document.title = pdfTitle;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [pdfTitle]);
 
   const handlePrint = () => {
+    if (typeof document !== 'undefined') {
+      document.title = pdfTitle;
+    }
     window.print();
   };
 
@@ -52,11 +65,13 @@ _CBA Mineração_`;
       <div className="bg-white w-full max-w-[210mm] rounded-2xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:w-full print:max-w-none print:rounded-none">
 
         <div className="no-print text-white p-4 px-6 flex items-center justify-between shrink-0 print:hidden" style={{ background: SO.navy }}>
-          <div>
+          <div className="min-w-0 pr-3">
             <h3 className="font-bold text-sm tracking-tight text-white">
               {isBudget ? 'Orçamento Comercial' : 'Pedido de Venda'}
             </h3>
-            <p className="text-xs text-slate-300">Layout A4 para impressão e PDF · {order.reference}</p>
+            <p className="text-xs text-slate-300 truncate" title={`${pdfTitle}.pdf`}>
+              Arquivo PDF: {pdfTitle}.pdf
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button

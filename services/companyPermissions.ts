@@ -93,9 +93,15 @@ export const setFinanceAccountScope = (
   };
 };
 
-/** Mesma regra da RLS: lançamento pelo accountId, conta pelo próprio id. */
+/** Mesma regra da RLS: lançamento pelo accountId (ou baixa na conta do escopo), conta pelo próprio id. */
 export const isInFinanceScope = (tableName: string, record: any, scope: string[]): boolean => {
-  if (tableName === 'transactions') return scope.includes(String(record?.accountId || ''));
+  if (tableName === 'transactions') {
+    if (scope.includes(String(record?.accountId || ''))) return true;
+    if (Array.isArray(record?.payments)) {
+      return record.payments.some((p: any) => scope.includes(String(p?.accountId || '')));
+    }
+    return false;
+  }
   if (tableName === 'financial_accounts') return scope.includes(String(record?.id || ''));
   return true;
 };

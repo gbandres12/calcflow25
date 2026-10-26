@@ -13,7 +13,8 @@ export function assembleAccount(row: any): FinancialAccount {
     agency: row.agency || extra.agency || undefined,
     accountNumber: row.account_number || extra.accountNumber || undefined,
     initialBalance: Number(row.initial_balance != null ? row.initial_balance : (extra.initialBalance || 0)),
-    currentBalance: Number(row.current_balance != null ? row.current_balance : (row.initial_balance || extra.currentBalance || extra.initialBalance || 0))
+    currentBalance: Number(row.current_balance != null ? row.current_balance : (row.initial_balance || extra.currentBalance || extra.initialBalance || 0)),
+    updatedAt: row.updated_at || extra.updatedAt
   };
 }
 
@@ -27,11 +28,12 @@ export function assembleTransaction(header: any, payments: any[] = []): Transact
         (ep?.receiptId && p.receipt_id && String(ep.receiptId) === String(p.receipt_id))
     ) || {};
     const pExtra = { ...fromHeader, ...(p.extra || {}) };
+    const isCashMethod = /^(pix|dinheiro|transfer[eê]ncia|ted|doc|boleto|cart[aã]o|cheque|dep[oó]sito)/i.test(String(p.payment_method || '').trim());
     const isDiscount = Boolean(
       p.is_discount_or_deduction ||
       pExtra.isDiscountOrDeduction ||
-      /(abatimento|desconto|devolu)/i.test(String(p.payment_method || '')) ||
-      /(abatimento|desconto)/i.test(String(p.notes || ''))
+      /(abatimento|desconto|devolu|permuta|barter|sem\s*caixa)/i.test(String(p.payment_method || '')) ||
+      (!isCashMethod && /(abatimento|desconto)/i.test(String(p.notes || '')) && !/abatimento\s+pedido\s+#/i.test(String(p.notes || '')))
     );
     return {
       ...pExtra,
@@ -41,7 +43,7 @@ export function assembleTransaction(header: any, payments: any[] = []): Transact
       paymentDate: p.payment_date,
       paymentMethod: p.payment_method || 'PIX',
       accountId: p.account_id,
-      receiptId: p.receipt_id,
+      receiptId: p.receipt_id || pExtra.receiptId,
       notes: p.notes,
       ...(isDiscount ? { isDiscountOrDeduction: true } : {})
     };
@@ -66,7 +68,8 @@ export function assembleTransaction(header: any, payments: any[] = []): Transact
     costCenterId: header.cost_center_id || extra.costCenterId || undefined,
     paymentMethod: header.payment_method || extra.paymentMethod || undefined,
     notes: header.notes || extra.notes || undefined,
-    payments: mappedPayments.length > 0 ? mappedPayments : extra.payments
+    payments: mappedPayments.length > 0 ? mappedPayments : extra.payments,
+    updatedAt: header.updated_at || extra.updatedAt
   };
 }
 
@@ -185,14 +188,19 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
 
   if (Array.isArray(payments)) {
     if (payments.length > 0) {
+      const seenReceipts = new Set<string>();
       const paymentRowsWithExtra = payments.map((p: any, idx: number) => {
         const {
           id: rawPid, transactionId: _tId, amount: pAmt, paymentDate: pDate,
           paymentMethod: pPm, accountId: pAcc, receiptId: pRec, receipt_id: pRecSnake,
           notes: pNotes, isDiscountOrDeduction, ...pExtra
         } = p;
-        const receiptRef = pRec || pRecSnake || receiptId || null;
-        const pid = rawPid || (receiptRef ? `pmt-${receiptRef}-${id}` : `pmt-${id}-${idx + 1}`);
+        const rawReceiptRef = pRec || pRecSnake || (payments.length === 1 ? receiptId : null) || null;
+        const receiptKey = rawReceiptRef ? String(rawReceiptRef) : null;
+        const uniqueReceiptRef = receiptKey && !seenReceipts.has(receiptKey) ? receiptKey : null;
+        if (receiptKey) seenReceipts.add(receiptKey);
+
+        const pid = rawPid || (uniqueReceiptRef ? `pmt-${uniqueReceiptRef}-${id}` : `pmt-${id}-${idx + 1}`);
         const resolvedMethod = pPm || paymentMethod || (isDiscountOrDeduction ? 'Abatimento / Devolução' : 'PIX');
         return {
           company_id: companyId,
@@ -202,11 +210,12 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
           payment_date: pDate || date || dateISOBR(),
           payment_method: resolvedMethod,
           account_id: pAcc || accountId || null,
-          receipt_id: receiptRef ? String(receiptRef) : null,
+          receipt_id: uniqueReceiptRef,
           notes: pNotes || null,
           is_discount_or_deduction: Boolean(isDiscountOrDeduction),
           extra: {
             ...(pExtra || {}),
+            ...(receiptKey ? { receiptId: receiptKey } : {}),
             ...(isDiscountOrDeduction ? { isDiscountOrDeduction: true } : {})
           }
         };
@@ -234,12 +243,38 @@ export async function upsertTransactionToErp(companyId: string, record: any, sup
         pErr = retry.error;
       }
 
+      if (pErr && /uq_transaction_payments_receipt/i.test(String(pErr.message || ''))) {
+        const paymentRowsNoReceipt = paymentRowsWithExtra.map(
+          ({ extra: _e, is_discount_or_deduction: _d, ...rest }) => ({ ...rest, receipt_id: null })
+        );
+        const retry2 = await supabase
+          .schema('erp')
+          .from('transaction_payments')
+          .upsert(paymentRowsNoReceipt, { onConflict: 'company_id,id' });
+        pErr = retry2.error;
+      }
+
       if (pErr) console.warn('[FinancialRepo] Falha ao upsert em transaction_payments:', pErr);
     } else {
       await supabase.schema('erp').from('transaction_payments').delete()
         .eq('company_id', companyId)
         .eq('transaction_id', String(id));
     }
+
+    // Re-sincroniza o cabeçalho em depth=0 após atualizar transaction_payments para garantir
+    // que paid_amount/status respeitem descontos e que a projeção reversa (trg_transactions_reverse_proj)
+    // grave o array completo de payments em public.app_records.
+    await supabase
+      .schema('erp')
+      .from('transactions')
+      .update({
+        paid_amount: Number(paidAmount || 0),
+        status: status || 'pendente',
+        extra: txExtra,
+        updated_at: new Date().toISOString()
+      })
+      .eq('company_id', companyId)
+      .eq('id', String(id));
   }
 }
 

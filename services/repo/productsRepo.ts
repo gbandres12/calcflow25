@@ -22,7 +22,8 @@ export function assembleProduct(row: any): Product {
     aliquotaPis: row.aliquota_pis != null ? Number(row.aliquota_pis) : (extra.aliquotaPis != null ? Number(extra.aliquotaPis) : undefined),
     aliquotaCofins: row.aliquota_cofins != null ? Number(row.aliquota_cofins) : (extra.aliquotaCofins != null ? Number(extra.aliquotaCofins) : undefined),
     unidadeTributavel: row.unidade_tributavel || extra.unidadeTributavel || undefined,
-    observacoesFiscais: row.observacoes_fiscais || extra.observacoesFiscais || undefined
+    observacoesFiscais: row.observacoes_fiscais || extra.observacoesFiscais || undefined,
+    updatedAt: row.updated_at || extra.updatedAt
   };
 }
 
@@ -69,7 +70,7 @@ export async function upsertProductToErp(companyId: string, record: any, supabas
       aliquota_pis: aliquotaPis != null ? Number(aliquotaPis) : null,
       aliquota_cofins: aliquotaCofins != null ? Number(aliquotaCofins) : null,
       unidade_tributavel: unidadeTributavel || null,
-      observacoes_fiscais: observacoesFiscais || null,
+      observacoesFiscais: observacoesFiscais || null,
       extra: extra || {},
       updated_at: new Date().toISOString()
     }, { onConflict: 'company_id,id' });
@@ -103,7 +104,8 @@ export function assembleStoreItem(row: any): StoreItem {
     supplierSku: row.supplier_sku || extra.supplierSku || undefined,
     supplierCnpj: row.supplier_cnpj || extra.supplierCnpj || undefined,
     ncm: row.ncm || extra.ncm || undefined,
-    status: row.status || extra.status || 'ativo'
+    status: row.status || extra.status || 'ativo',
+    updatedAt: row.updated_at || extra.updatedAt
   };
 }
 

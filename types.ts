@@ -146,6 +146,7 @@ export interface Customer {
   email: string;
   phone: string;
   totalSpent: number;
+  status?: 'Ativo' | 'Inativo' | string;
   companyId?: string;
   tipoPessoa?: 'PJ' | 'PF' | 'PRODUTOR';
   ie?: string;
@@ -345,6 +346,8 @@ export interface PaymentReceipt {
   receivedBy?: string;
   description: string;
   type: 'ENTRADA' | 'PARCELA' | 'ABATIMENTO' | 'AVULSO';
+  /** Indica se é um desconto/abatimento comercial/devolução sem movimentação financeira em caixa/banco. */
+  isDiscountOrDeduction?: boolean;
   totalOrderAmount?: number;
   totalPaidSoFar?: number;
   remainingDebt?: number;
@@ -448,6 +451,14 @@ export interface Transaction {
   receiptId?: string;
   paymentMethod?: string;
   payments?: TransactionPayment[];
+  /** Metadados fiscais e de parcelamento (Contas a Pagar / Receber) */
+  nfeChave?: string;
+  nfeNumero?: string;
+  nfeSerie?: string;
+  documentNumber?: string;
+  installmentNumber?: number;
+  installmentTotal?: number;
+  supplierCnpj?: string;
 }
 
 export type NfeStatus = 'nao_emitida' | 'rascunho' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
@@ -849,5 +860,5 @@ export interface CrmLead {
   updatedAt: string;
 }
 
-export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'payables_receivables' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
 

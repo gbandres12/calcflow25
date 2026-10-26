@@ -17,7 +17,7 @@ import {
 import { CategorySuggestion } from './CategorySuggestion';
 import { CostCenterSuggestion } from './CostCenterSuggestion';
 import { INFLOW_CATEGORIES, OUTFLOW_CATEGORIES } from '../constants';
-import { openOrdersForReceipt, openReceivables, orderOpenBalance, transactionOpenBalance, ReceiptInput } from '../services/receiptLink';
+import { openOrdersForReceipt, openReceivables, orderOpenBalance, transactionOpenBalance, isNonCashTransactionFallback, ReceiptInput } from '../services/receiptLink';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
 export type ReceiptLink = { kind: 'order' | 'receivable'; id: string };
@@ -223,9 +223,7 @@ export const TransactionFormDialog: React.FC<TransactionFormDialogProps> = ({
       // Cria ou atualiza pagamentos
       let paymentsList: TransactionPayment[] = editingTransaction?.payments || [];
       if (paymentsList.length === 0 && paidNum > 0) {
-        const isDeduction = category?.toLowerCase().includes('abatimento') || 
-          category?.toLowerCase().includes('devolu') ||
-          description?.toLowerCase().includes('abatimento');
+        const isDeduction = isNonCashTransactionFallback({ category, description, paymentMethod });
 
         paymentsList = [{
           id: `pmt-${Date.now()}`,

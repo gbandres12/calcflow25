@@ -19,9 +19,31 @@ export type ParsedNfItem = {
 
 export type ParsedNfParty = {
   name?: string;
+  tradeName?: string;
   document?: string;
   ie?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
   city?: string;
+  state?: string;
+  zipCode?: string;
+  ibgeCode?: string;
+  phone?: string;
+  email?: string;
+};
+
+export type ParsedNfDuplicata = {
+  nDup: string;
+  dVenc: string; // YYYY-MM-DD
+  vDup: number;
+};
+
+export type ParsedNfFatura = {
+  nFat?: string;
+  vOrig?: number;
+  vDesc?: number;
+  vLiq?: number;
 };
 
 export type ParsedNfDocument = {
@@ -31,9 +53,18 @@ export type ParsedNfDocument = {
   issuedAt?: string;
   nature?: string;
   supplier?: string;
+  supplierTradeName?: string;
   supplierDocument?: string;
   supplierIe?: string;
   supplierCity?: string;
+  supplierState?: string;
+  supplierStreet?: string;
+  supplierNumber?: string;
+  supplierNeighborhood?: string;
+  supplierZipCode?: string;
+  supplierIbgeCode?: string;
+  supplierPhone?: string;
+  supplierEmail?: string;
   destName?: string;
   destDocument?: string;
   accessKey?: string;
@@ -41,7 +72,13 @@ export type ParsedNfDocument = {
   vehiclePlate?: string;
   vProd?: number;
   vFrete?: number;
+  vDesc?: number;
   vNF?: number;
+  fatura?: ParsedNfFatura;
+  duplicatas?: ParsedNfDuplicata[];
+  paymentMethod?: string;
+  suggestedCategory?: string;
+  suggestedCostCenterId?: string;
   items: ParsedNfItem[];
   rawXml?: string;
   rawPreview?: string;
@@ -58,9 +95,78 @@ const guessCategory = (name: string): StoreItemCategory => {
   return 'Outros';
 };
 
+export const suggestNfFinancialClassification = (
+  items: ParsedNfItem[],
+  nature?: string,
+  supplierName?: string
+): { category: string; costCenterId: string } => {
+  const corpus = [
+    nature || '',
+    supplierName || '',
+    ...items.map((i) => i.productName || '')
+  ].join(' ').toLowerCase();
+
+  if (/diesel|s10|s-10|s500|gasolina|combust|arl\s*32|arla/.test(corpus)) {
+    return { category: 'Combustível (Diesel S10 / S500)', costCenterId: 'cc3' };
+  }
+  if (/lubrific|graxa|oleo hidraul|óleo hidrául|oleo motor|óleo motor/.test(corpus)) {
+    return { category: 'Lubrificantes e Graxas Industriais', costCenterId: 'cc5' };
+  }
+  if (/mandibula|mandíbula|martelo|peneira|tela|britador|moinho|rolamento|correia/.test(corpus)) {
+    return { category: 'Peças de Desgaste e Telas', costCenterId: 'cc2' };
+  }
+  if (/pneu|caminh|trator|escavadeira|pa carregadeira|pá carregadeira|filtro|freio|amortecedor/.test(corpus)) {
+    return { category: 'Manutenção de Veículos e Pás', costCenterId: 'cc3' };
+  }
+  if (/epi|luva|bota|capacete|oculos|óculos|protetor auricular|mascara|máscara/.test(corpus)) {
+    return { category: 'EPIs e Segurança do Trabalho', costCenterId: 'cc2' };
+  }
+  if (/frete|transporte|balsa|transbordo/.test(corpus)) {
+    return { category: 'Frete e Logística de Transporte', costCenterId: 'cc6' };
+  }
+  if (/energia|eletrica|elétrica|equatorial|celpa/.test(corpus)) {
+    return { category: 'Energia Elétrica (Alta Tensão)', costCenterId: 'cc2' };
+  }
+  if (/brita|minerio|minério|calcario|calcário|explosiv|deton/.test(corpus)) {
+    return { category: 'Compra de Brita / Minério Bruto', costCenterId: 'cc2' };
+  }
+  if (/alimento|refeic|refeiç|mercado|supermercado|agua mineral|água mineral/.test(corpus)) {
+    return { category: 'Alimentação e Refeitório Pátio', costCenterId: 'cc1' };
+  }
+  if (/informatica|informática|computador|impressora|papel|toner|escritorio|escritório/.test(corpus)) {
+    return { category: 'Material de Escritório e TI', costCenterId: 'cc1' };
+  }
+  if (items.some((i) => i.category === 'Peças' || i.category === 'Ferramentas')) {
+    return { category: 'Manutenção de Britador e Moinho', costCenterId: 'cc5' };
+  }
+  return { category: 'Outras Despesas Operacionais', costCenterId: 'cc1' };
+};
+
+const mapSefazPaymentCode = (tPag?: string): string => {
+  switch ((tPag || '').trim()) {
+    case '01': return 'Dinheiro Físico';
+    case '02': return 'Cheque';
+    case '03': return 'Cartão de Crédito';
+    case '04': return 'Cartão de Débito';
+    case '14':
+    case '15': return 'Boleto Bancário';
+    case '16':
+    case '18': return 'Transferência Bancária (TED)';
+    case '17':
+    case '20': return 'PIX';
+    default: return 'Boleto Bancário';
+  }
+};
+
 const num = (value?: string | null) => {
   if (!value) return 0;
-  const n = Number(String(value).replace(',', '.'));
+  const cleaned = String(value).trim();
+  // Se vier no formato brasileiro "1.234,56", remove pontos de milhar e troca vírgula por ponto
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+  const n = Number(cleaned.replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
 };
 
@@ -81,9 +187,18 @@ const attr = (xml: string, name: string) => {
 
 const parseParty = (block: string): ParsedNfParty => ({
   name: tag(block, 'xNome') || undefined,
+  tradeName: tag(block, 'xFant') || undefined,
   document: tag(block, 'CNPJ') || tag(block, 'CPF') || undefined,
   ie: tag(block, 'IE') || undefined,
-  city: tag(block, 'xMun') || undefined
+  street: tag(block, 'xLgr') || undefined,
+  number: tag(block, 'nro') || undefined,
+  neighborhood: tag(block, 'xBairro') || undefined,
+  city: tag(block, 'xMun') || undefined,
+  state: tag(block, 'UF') || undefined,
+  zipCode: tag(block, 'CEP') || undefined,
+  ibgeCode: tag(block, 'cMun') || undefined,
+  phone: tag(block, 'fone') || undefined,
+  email: tag(block, 'email') || undefined
 });
 
 const accessKeyFromInfNfe = (xml: string) => {
@@ -102,6 +217,8 @@ export const parseNfeXml = (xml: string): ParsedNfDocument => {
   const dest = allTags(infNFe, 'dest')[0] || '';
   const transp = allTags(infNFe, 'transp')[0] || '';
   const total = allTags(infNFe, 'total')[0] || '';
+  const cobr = allTags(infNFe, 'cobr')[0] || '';
+  const pag = allTags(infNFe, 'pag')[0] || '';
   const icmsTot = allTags(total, 'ICMSTot')[0] || total;
   const emitente = parseParty(emit);
   const destinatario = parseParty(dest);
@@ -133,16 +250,57 @@ export const parseNfeXml = (xml: string): ParsedNfDocument => {
     };
   }).filter((it) => it.productName);
 
+  // Extrai Fatura e Duplicatas (<cobr><fat> e <cobr><dup>)
+  const fatBlock = allTags(cobr, 'fat')[0] || '';
+  const fatura: ParsedNfFatura | undefined = fatBlock
+    ? {
+        nFat: tag(fatBlock, 'nFat') || undefined,
+        vOrig: num(tag(fatBlock, 'vOrig')) || undefined,
+        vDesc: num(tag(fatBlock, 'vDesc')) || undefined,
+        vLiq: num(tag(fatBlock, 'vLiq')) || undefined
+      }
+    : undefined;
+
+  const dupBlocks = allTags(cobr, 'dup');
+  const duplicatas: ParsedNfDuplicata[] = dupBlocks
+    .map((dup, index) => {
+      const dVencRaw = tag(dup, 'dVenc');
+      const vDup = num(tag(dup, 'vDup'));
+      return {
+        nDup: tag(dup, 'nDup') || String(index + 1).padStart(3, '0'),
+        dVenc: dVencRaw ? dVencRaw.slice(0, 10) : '',
+        vDup
+      };
+    })
+    .filter((d) => d.vDup > 0);
+
+  // Extrai Forma de Pagamento (<pag><detPag><tPag>)
+  const detPagBlock = allTags(pag, 'detPag')[0] || pag;
+  const tPagCode = tag(detPagBlock, 'tPag');
+  const paymentMethod = tPagCode ? mapSefazPaymentCode(tPagCode) : (duplicatas.length > 0 ? 'Boleto Bancário' : 'PIX');
+
+  const nature = tag(ide, 'natOp') || undefined;
+  const suggested = suggestNfFinancialClassification(items, nature, emitente.name);
+
   return {
     source: 'xml',
     nfNumber: tag(ide, 'nNF') || undefined,
     series: tag(ide, 'serie') || undefined,
     issuedAt: tag(ide, 'dhEmi') || tag(ide, 'dEmi') || undefined,
-    nature: tag(ide, 'natOp') || undefined,
+    nature,
     supplier: emitente.name,
+    supplierTradeName: emitente.tradeName,
     supplierDocument: emitente.document,
     supplierIe: emitente.ie,
     supplierCity: emitente.city,
+    supplierState: emitente.state,
+    supplierStreet: emitente.street,
+    supplierNumber: emitente.number,
+    supplierNeighborhood: emitente.neighborhood,
+    supplierZipCode: emitente.zipCode,
+    supplierIbgeCode: emitente.ibgeCode,
+    supplierPhone: emitente.phone,
+    supplierEmail: emitente.email,
     destName: destinatario.name,
     destDocument: destinatario.document,
     accessKey: accessKeyFromInfNfe(xml),
@@ -150,7 +308,13 @@ export const parseNfeXml = (xml: string): ParsedNfDocument => {
     vehiclePlate: (tag(transp, 'placa') || '').toUpperCase() || undefined,
     vProd: num(tag(icmsTot, 'vProd')) || undefined,
     vFrete: num(tag(icmsTot, 'vFrete')) || undefined,
-    vNF: num(tag(icmsTot, 'vNF')) || undefined,
+    vDesc: num(tag(icmsTot, 'vDesc')) || fatura?.vDesc || undefined,
+    vNF: num(tag(icmsTot, 'vNF')) || fatura?.vLiq || undefined,
+    fatura,
+    duplicatas,
+    paymentMethod,
+    suggestedCategory: suggested.category,
+    suggestedCostCenterId: suggested.costCenterId,
     items,
     rawXml: xml,
     rawPreview: xml.slice(0, 400)
@@ -206,11 +370,26 @@ const extractCompressedPdfText = async (buffer: ArrayBuffer): Promise<string> =>
   return chunks.join(' ').replace(/\s+/g, ' ').trim();
 };
 
+const brDateToIso = (d: string): string => {
+  const m = d.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return d;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+};
+
 export const parseDanfeText = (text: string): ParsedNfDocument => {
   const accessKey = text.replace(/\s/g, '').match(/\d{44}/)?.[0];
-  const nfNumber = text.match(/N[ºo°]\s*[:.]?\s*(\d{1,9})/i)?.[1] || text.match(/NF-e\s*(\d+)/i)?.[1];
-  const supplier = text.match(/RECEBEMOS DE\s+([^0-9]{8,80})/i)?.[1]?.trim()
-    || text.match(/EMITENTE[:\s]+([^\n]{8,80})/i)?.[1]?.trim();
+  const nfNumber = text.match(/N[ºo°]\s*[:.]?\s*([\d.]{1,11})/i)?.[1]?.replace(/\./g, '') || text.match(/NF-e\s*(\d+)/i)?.[1];
+  const supplier = text.match(/RECEBEMOS DE\s+([^0-9]{4,80}?)(?:\s+OS PRODUTOS|\s+NF-e|\s+CNPJ|$)/i)?.[1]?.trim()
+    || text.match(/RAZ[ÃA]O SOCIAL[:\s]+([^\n]{4,80})/i)?.[1]?.trim()
+    || text.match(/EMITENTE[:\s]+([^\n]{4,80})/i)?.[1]?.trim();
+  const cnpjMatch = text.match(/\b(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/);
+  const supplierDocument = cnpjMatch?.[1]?.replace(/\D/g, '');
+
+  const vnfMatch =
+    text.match(/VALOR TOTAL DA NOTA[\s:R$]*([\d.]+,\d{2})/i) ||
+    text.match(/V\.?\s*TOTAL DA NOTA[\s:R$]*([\d.]+,\d{2})/i) ||
+    text.match(/VALOR TOTAL[\s:R$]*([\d.]+,\d{2})/i);
+
   const items: ParsedNfItem[] = [];
   const lineRe = /(\d{8,10})\s+(.+?)\s+(\d+[.,]?\d*)\s+([A-Z]{2,6})\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})/g;
   let row: RegExpExecArray | null;
@@ -228,15 +407,44 @@ export const parseDanfeText = (text: string): ParsedNfDocument => {
       category: guessCategory(name)
     });
   }
-  const warnings: string[] = [];
-  if (!items.length || !accessKey) {
-    warnings.push('O PDF não trouxe itens ou a chave da NF com segurança. Envie o XML da mesma nota.');
+
+  // Tenta extrair duplicatas do texto do DANFE (ex: "001 15/11/2026 4.500,00" ou "15/11/2026 R$ 4.500,00")
+  const duplicatas: ParsedNfDuplicata[] = [];
+  const dupRe = /(?:(\d{1,4})\s+)?(\d{2}\/\d{2}\/\d{4})\s+(?:R\$\s*)?([\d.]+,\d{2})/g;
+  let dupMatch: RegExpExecArray | null;
+  while ((dupMatch = dupRe.exec(text))) {
+    const val = num(dupMatch[3]);
+    if (val > 0) {
+      duplicatas.push({
+        nDup: dupMatch[1] || String(duplicatas.length + 1).padStart(3, '0'),
+        dVenc: brDateToIso(dupMatch[2]),
+        vDup: val
+      });
+    }
   }
+
+  const itemsSum = items.reduce((s, it) => s + (it.totalCost || 0), 0);
+  const dupSum = duplicatas.reduce((s, d) => s + d.vDup, 0);
+  const vNF = (vnfMatch ? num(vnfMatch[1]) : 0) || dupSum || itemsSum || undefined;
+
+  const warnings: string[] = [];
+  if (!items.length && !vNF) {
+    warnings.push('O PDF não trouxe todos os campos estruturados. Você pode preencher manualmente abaixo ou enviar o arquivo XML da nota.');
+  }
+
+  const suggested = suggestNfFinancialClassification(items, undefined, supplier);
+
   return {
     source: 'text',
     nfNumber,
     supplier,
+    supplierDocument,
     accessKey,
+    vNF,
+    duplicatas,
+    paymentMethod: duplicatas.length > 0 ? 'Boleto Bancário' : 'PIX',
+    suggestedCategory: suggested.category,
+    suggestedCostCenterId: suggested.costCenterId,
     items,
     rawPreview: text.slice(0, 500),
     warnings
@@ -256,3 +464,4 @@ export const parseNfeFileContent = async (file: File): Promise<ParsedNfDocument>
   const text = (await extractCompressedPdfText(buffer)) || extractPdfLatinText(buffer) || raw.replace(/[^\x20-\x7EÀ-ÿ\n]/g, ' ');
   return { ...parseDanfeText(text), source: 'pdf', rawPreview: text.slice(0, 500) };
 };
+
