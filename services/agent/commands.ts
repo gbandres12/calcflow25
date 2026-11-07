@@ -1,4 +1,4 @@
-import { AgentContext, ToolOutcome, executeTool } from './tools.js';
+import { AgentContext, ToolDocument, ToolOutcome, executeTool } from './tools.js';
 import { formatBRL } from '../domain/telegramWrites.js';
 
 /**
@@ -12,6 +12,7 @@ import { formatBRL } from '../domain/telegramWrites.js';
 export interface CommandReply {
   text: string;
   pending?: { action: string; payload: any; summary: string };
+  document?: ToolDocument;
 }
 
 export const HELP_TEXT = [
@@ -27,6 +28,7 @@ export const HELP_TEXT = [
   '/resumo — entradas e saídas de hoje',
   '/conferir — procura divergência entre recibos e baixas',
   '/nfe <pedido> — prepara NF-e do pedido de venda',
+  '/danfe <pedido> — baixa e envia o PDF do DANFE da NF-e',
   '/ajuda — esta lista'
 ].join('\n');
 
@@ -153,7 +155,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
 
       case '/nfe': {
         if (!argument) {
-          return { text: 'Use assim: /nfe PED-2026-0001. Para nota avulsa, peça em texto: nota avulsa para o cliente X, 10 ton de calcário.' };
+          return { text: 'Use assim: /nfe PED-2026-0001. Ou me diga em texto: quero emitir uma nota fiscal pro cliente X, que vamos montando juntos passo a passo.' };
         }
         const outcome = await executeTool('emitir_nfe_pedido', { pedidoRef: argument }, ctx);
         if (outcome.kind !== 'confirm') {
@@ -163,6 +165,19 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
         return {
           text: outcome.summary,
           pending: { action: outcome.action, payload: outcome.payload, summary: outcome.summary }
+        };
+      }
+
+      case '/danfe': {
+        if (!argument) {
+          return { text: 'Use assim: /danfe PED-2026-0001 para receber o PDF da NF-e autorizada.' };
+        }
+        const [pedidoRef, numeroNota] = rest;
+        const outcome = await executeTool('enviar_danfe_nfe', { pedidoRef, numeroNota }, ctx);
+        const data = dataOf(outcome);
+        return {
+          text: `DANFE da NF-e nº ${data.numeroNota} (${data.referencia}) baixado. Enviando o PDF em seguida.`,
+          document: outcome.kind === 'data' ? outcome.document : undefined
         };
       }
 

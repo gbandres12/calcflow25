@@ -363,6 +363,107 @@ describe('agente: emissão de NF-e pelo Telegram', () => {
     assert.equal((proposal as any).payload.standalone, true);
     assert.equal(repo.tables.sales_orders.length, 1);
   });
+
+  it('diagnostica emissão consultiva, atualiza cadastro fiscal pelo chat e emite NF-e parcial com placa e motorista', async () => {
+    const seed = seedNfe();
+    seed.customers[0].document = '';
+    (seed.sales_orders[0] as any).withdrawals = [
+      {
+        id: 'w-1',
+        orderId: 'ord-1',
+        date: '2026-09-18',
+        weighTicketNumber: 'TK-405',
+        quantityWithdrawn: 6,
+        netWeight: 6,
+        plateNumber: 'QVA1B23',
+        driverName: 'Carlos Caminhoneiro'
+      }
+    ];
+    const repo = fakeRepo(seed);
+    const ctx = makeContext(repo);
+
+    // 1. Diagnóstico aponta falta de CPF/CNPJ e lista o ticket de balança
+    const diag = await executeTool(
+      'diagnosticar_emissao_nfe',
+      { clienteNome: 'Fazenda Boa Vista', pedidoRef: 'PED-2026-0001' },
+      ctx
+    );
+    assert.equal(diag.kind, 'data');
+    assert.equal((diag as any).data.cliente.aptoParaEmitir, false);
+    assert.equal((diag as any).data.pedidoSelecionado.carregamentosBalanca[0].ticket, 'TK-405');
+
+    // 2. Operador informa CNPJ e IE no chat e o agente atualiza com salvar_cliente_fiscal
+    const savedCust = await executeTool(
+      'salvar_cliente_fiscal',
+      {
+        clienteId: 'cust-1',
+        nome: 'Fazenda Boa Vista',
+        documento: '12.345.678/0001-90',
+        ie: '153216549',
+        logradouro: 'Rodovia BR-163 KM 45'
+      },
+      ctx
+    );
+    assert.equal((savedCust as any).data.cliente.aptoParaEmitir, true);
+    assert.equal(repo.tables.customers[0].ie, '153216549');
+
+    // 3. Agente monta proposta da NF-e parcial com dados do carregamento e observação
+    let capturedPayload: any = null;
+    setTelegramNfeTransport({
+      async request({ url, body, binary }) {
+        if (String(url).includes('/emitir')) {
+          capturedPayload = body;
+          return {
+            status: 200,
+            data: { status: 'issued', invoiceId: 'inv-100', chaveAcesso: '4'.repeat(44), nNf: 1042, nProt: 'p100' }
+          };
+        }
+        if (binary || String(url).includes('/danfe')) {
+          return { status: 200, buffer: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]) };
+        }
+        return { status: 200, data: {} };
+      },
+      async sleep() {}
+    });
+
+    try {
+      const proposal = await executeTool(
+        'emitir_nfe_pedido',
+        {
+          pedidoRef: 'PED-2026-0001',
+          itens: [{ quantidade: 6 }],
+          modalidadeFrete: 'FOB',
+          placaVeiculo: 'QVA-1B23',
+          ufPlaca: 'PA',
+          motoristaNome: 'Carlos Caminhoneiro',
+          ticketPesagem: 'TK-405',
+          formaPagamento: 'Boleto',
+          observacao: 'Entrega parcial ref. 1ª carrada'
+        },
+        ctx
+      );
+      assert.equal(proposal.kind, 'confirm');
+      assert.match((proposal as any).summary, /QVA1B23\/PA/);
+      assert.match((proposal as any).summary, /Carlos Caminhoneiro/);
+      assert.match((proposal as any).summary, /1\.080,00|1080/);
+
+      await commitAction((proposal as any).action, (proposal as any).payload, ctx);
+      assert.ok(capturedPayload);
+      assert.equal(capturedPayload.items[0].quantidade, 6);
+      assert.equal(capturedPayload.items[0].valorTotal, 1080);
+      assert.equal(capturedPayload.dest.ie, '153216549');
+      assert.deepEqual(capturedPayload.transporte.veiculo, { placa: 'QVA1B23', uf: 'PA' });
+      assert.match(capturedPayload.infCpl, /Ticket de pesagem: TK-405/);
+      assert.match(capturedPayload.infCpl, /Entrega parcial ref\. 1ª carrada/);
+
+      // 4. Operador pede 2ª via do DANFE via comando /danfe
+      const danfeReply = await runCommand('/danfe PED-2026-0001', ctx);
+      assert.ok(danfeReply?.document);
+      assert.equal(danfeReply!.document!.filename, 'DANFE-1042.pdf');
+    } finally {
+      setTelegramNfeTransport(null);
+    }
+  });
 });
 
 describe('agente: comandos determinísticos, o fallback sem IA', () => {

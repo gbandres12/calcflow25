@@ -84,6 +84,32 @@ describe('telegram NF-e: validação e payload', () => {
     assert.equal(payload.referenciaExterna, 'PED-2026-0001');
   });
 
+  it('inclui placa, motorista, ticket de pesagem e modalidade de frete no payload da NF-e', () => {
+    const orderWithTransport: SaleOrder = {
+      ...order,
+      paymentMethod: 'Boleto 30 dias',
+      nfeInfCpl: 'Fazenda Santa Luzia - Lote 12',
+      frete: {
+        modalidade: 1,
+        valor: 0,
+        placa: 'QVA-1B23',
+        uf: 'PA',
+        motorista: 'João Motorista',
+        ticketPesagem: 'TK-9081'
+      } as any
+    };
+    const payload = buildNfePayload(orderWithTransport, { ...customer, ie: '15.321.654-9' } as any, config);
+    assert.equal(payload.dest.indicadorIE, 1);
+    assert.equal(payload.dest.ie, '153216549');
+    assert.equal(payload.transporte.modalidadeFrete, 1);
+    assert.deepEqual(payload.transporte.veiculo, { placa: 'QVA1B23', uf: 'PA' });
+    assert.equal(payload.pagamentos[0].tipoPagamento, '15');
+    assert.match(payload.infCpl, /Fazenda Santa Luzia/);
+    assert.match(payload.infCpl, /Placa: QVA1B23\/PA/);
+    assert.match(payload.infCpl, /Motorista: João Motorista/);
+    assert.match(payload.infCpl, /Ticket de pesagem: TK-9081/);
+  });
+
   it('desconta quantidade já autorizada do que ainda falta faturar', () => {
     const invoiced = {
       ...order,

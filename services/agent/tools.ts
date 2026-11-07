@@ -30,16 +30,20 @@ import {
 import { buildOrderPdfTitle, buildSalesOrderPdf } from '../domain/salesOrderPdf.js';
 import {
   applyEmitToOrder,
+  consultNfeStatusOnNotaAs,
   emitNfeOnNotaAs,
   fetchDanfePdf,
+  formatFreteSummary,
   nfeEnvironmentLabel,
+  onlyDigits,
+  parseModalidadeFrete,
   pickNfeItems,
   readFiscalConfig,
   remainingItemsForNfe,
   totalsOf,
   validateFiscalForEmit
 } from '../domain/telegramNfe.js';
-import { avulsaExternalRef, listOrderNfes, overlayNfeFields } from '../saleNfe.js';
+import { avulsaExternalRef, listOrderNfes, overlayNfeFields, upsertLinkedNfe } from '../saleNfe.js';
 import { newId, nextAvulsaReference } from '../ids.js';
 import { formatSuggestions, pickUnique, rankNamed } from './search.js';
 
@@ -64,8 +68,14 @@ export interface AgentContext {
   today: string;
 }
 
+export type ToolDocument = {
+  filename: string;
+  bytes: Uint8Array;
+  caption: string;
+};
+
 export type ToolOutcome =
-  | { kind: 'data'; data: any }
+  | { kind: 'data'; data: any; document?: ToolDocument }
   | { kind: 'confirm'; action: string; payload: any; summary: string };
 
 const normalize = (text: string): string =>
@@ -142,32 +152,211 @@ function hasProcessingNfe(order: SaleOrder): boolean {
   return listOrderNfes(order).some((nfe) => nfe.nfeStatus === 'processando');
 }
 
+export interface ConsultativeNfeOverrides {
+  naturezaOperacao?: string;
+  cfop?: string;
+  formaPagamento?: string;
+  modalidadeFrete?: string | number;
+  valorFrete?: number;
+  placaVeiculo?: string;
+  ufPlaca?: string;
+  motoristaNome?: string;
+  motoristaCpf?: string;
+  transportadoraNome?: string;
+  transportadoraDocumento?: string;
+  ticketPesagem?: string;
+  observacao?: string;
+}
+
+function inspectCustomerFiscal(customer: Customer) {
+  const docClean = onlyDigits(customer.document);
+  const pendenciasObrigatorias: string[] = [];
+  const avisosFiscais: string[] = [];
+
+  if (!docClean || (docClean.length !== 11 && docClean.length !== 14)) {
+    pendenciasObrigatorias.push('CPF (11 dígitos) ou CNPJ (14 dígitos) válido é obrigatório.');
+  }
+  if (!customer.name || customer.name.trim().length < 2) {
+    pendenciasObrigatorias.push('Nome ou razão social do cliente é obrigatório.');
+  }
+
+  const ieDigits = onlyDigits(customer.ie);
+  if (!customer.isentoIE && !ieDigits) {
+    avisosFiscais.push('Sem Inscrição Estadual (IE) — vai como não contribuinte (se for Produtor Rural ou PJ contribuinte, informe a IE).');
+  }
+  if (!customer.street?.trim()) {
+    avisosFiscais.push('Sem logradouro — vai "Zona Rural / Rodovia".');
+  }
+  if (!customer.city?.trim() || !customer.state?.trim()) {
+    avisosFiscais.push('Cidade/UF incompletas — assume o município da usina.');
+  }
+  if (onlyDigits(customer.zipCode).length !== 8) {
+    avisosFiscais.push('Sem CEP de 8 dígitos — usa o CEP padrão da usina.');
+  }
+
+  return {
+    id: customer.id,
+    nome: customer.name,
+    documento: customer.document || '',
+    tipoPessoa: docClean.length === 14 ? 'PJ' : docClean.length === 11 ? 'PF' : 'Indefinido',
+    ie: customer.ie || '',
+    isentoIE: Boolean(customer.isentoIE),
+    telefone: customer.phone || '',
+    email: customer.email || '',
+    endereco: {
+      logradouro: customer.street || '',
+      numero: customer.number || '',
+      bairro: customer.neighborhood || '',
+      cidade: customer.city || '',
+      uf: customer.state || '',
+      cep: customer.zipCode || '',
+      codigoIbge: customer.ibgeCode || ''
+    },
+    aptoParaEmitir: pendenciasObrigatorias.length === 0,
+    pendenciasObrigatorias,
+    avisosFiscais
+  };
+}
+
+function applyItemFiscalOverrides(items: SaleOrderItem[], cfopOverride?: string): SaleOrderItem[] {
+  const cleanCfop = onlyDigits(cfopOverride);
+  if (cleanCfop.length !== 4) return items;
+  return items.map((item) => ({ ...item, cfop: cleanCfop }));
+}
+
+function buildConsultativeOrderOverrides(
+  baseOrder: Partial<SaleOrder>,
+  overrides: ConsultativeNfeOverrides,
+  config: FiscalConfig | null
+): {
+  shipping: number;
+  frete: SaleOrder['frete'];
+  paymentMethod?: string;
+  nfeNaturezaOperacao?: string;
+  nfeInfCpl?: string;
+} {
+  const hasExplicitFreightValue = overrides.valorFrete !== undefined && overrides.valorFrete !== null;
+  const shipping = hasExplicitFreightValue
+    ? Math.max(0, toNumber(overrides.valorFrete))
+    : Math.max(0, toNumber(baseOrder.frete?.valor ?? baseOrder.shipping ?? 0));
+
+  const hasAnyTransportInput = Boolean(
+    overrides.modalidadeFrete !== undefined ||
+      hasExplicitFreightValue ||
+      overrides.placaVeiculo ||
+      overrides.motoristaNome ||
+      overrides.transportadoraNome ||
+      overrides.ticketPesagem ||
+      baseOrder.frete
+  );
+
+  const modalidade =
+    overrides.modalidadeFrete !== undefined && overrides.modalidadeFrete !== null && String(overrides.modalidadeFrete).trim() !== ''
+      ? parseModalidadeFrete(overrides.modalidadeFrete, shipping > 0)
+      : (baseOrder.frete?.modalidade ?? (shipping > 0 ? 0 : 9));
+
+  const anyBaseFrete = baseOrder.frete as any;
+  const placa = String(overrides.placaVeiculo || baseOrder.frete?.veiculo?.placa || anyBaseFrete?.placa || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const uf = String(overrides.ufPlaca || baseOrder.frete?.veiculo?.uf || anyBaseFrete?.uf || config?.ufEmitente || 'PA')
+    .trim()
+    .toUpperCase();
+  const motorista = String(overrides.motoristaNome || anyBaseFrete?.motorista || '').trim();
+  const transpNome = String(
+    overrides.transportadoraNome || baseOrder.frete?.transportadora?.nome || anyBaseFrete?.transportadoraNome || ''
+  ).trim();
+  const transpDoc = onlyDigits(
+    overrides.transportadoraDocumento ||
+      overrides.motoristaCpf ||
+      baseOrder.frete?.transportadora?.documento ||
+      anyBaseFrete?.transportadoraDocumento
+  );
+  const ticketPesagem = String(overrides.ticketPesagem || anyBaseFrete?.ticketPesagem || '').trim();
+
+  const frete: SaleOrder['frete'] = hasAnyTransportInput
+    ? ({
+        modalidade,
+        valor: shipping,
+        veiculo: placa ? { placa, uf } : undefined,
+        transportadora:
+          transpNome || transpDoc
+            ? {
+                ...(transpNome ? { nome: transpNome } : {}),
+                ...(transpDoc ? { documento: transpDoc } : {})
+              }
+            : undefined,
+        ...(motorista ? { motorista } : {}),
+        ...(ticketPesagem ? { ticketPesagem } : {})
+      } as SaleOrder['frete'])
+    : undefined;
+
+  const paymentMethod = overrides.formaPagamento || baseOrder.paymentMethod || undefined;
+  const nfeNaturezaOperacao =
+    (overrides.naturezaOperacao || baseOrder.nfeNaturezaOperacao || config?.naturezaOperacaoPadrao || '').trim() || undefined;
+  const nfeInfCpl =
+    (overrides.observacao !== undefined ? String(overrides.observacao || '').trim() : baseOrder.nfeInfCpl || baseOrder.notes || '') ||
+    undefined;
+
+  return {
+    shipping,
+    frete,
+    paymentMethod,
+    nfeNaturezaOperacao,
+    nfeInfCpl
+  };
+}
+
 function nfeProposalSummary(params: {
   title: string;
   customer: Customer;
   items: SaleOrderItem[];
   total: number;
+  shipping?: number;
+  frete?: SaleOrder['frete'];
+  paymentMethod?: string;
+  naturezaOperacao?: string;
+  observacao?: string;
   config: FiscalConfig | null;
   warnings: string[];
   extra?: string[];
 }): string {
+  const ieLabel = params.customer.isentoIE
+    ? 'Isento'
+    : params.customer.ie
+      ? params.customer.ie
+      : 'Não informada (Não contribuinte)';
+  const addressParts = [
+    params.customer.street ? `${params.customer.street}${params.customer.number ? `, ${params.customer.number}` : ''}` : null,
+    params.customer.neighborhood || null,
+    params.customer.city ? `${params.customer.city}${params.customer.state ? `/${params.customer.state}` : ''}` : null,
+    params.customer.zipCode ? `CEP ${params.customer.zipCode}` : null
+  ].filter(Boolean);
+
   return [
     params.title,
     '',
     `Cliente: ${params.customer.name}`,
-    params.customer.document ? `Documento: ${params.customer.document}` : null,
-    params.customer.city
-      ? `Cidade: ${params.customer.city}${params.customer.state ? `/${params.customer.state}` : ''}`
-      : null,
+    params.customer.document ? `CPF/CNPJ: ${params.customer.document} · IE: ${ieLabel}` : `IE: ${ieLabel}`,
+    addressParts.length ? `Endereço: ${addressParts.join(' · ')}` : null,
+    params.naturezaOperacao ? `Natureza: ${params.naturezaOperacao}` : null,
     ...params.items.map(
-      (item) => `• ${item.quantity} ${item.unit} de ${item.productName} — ${formatBRL(item.total)}`
+      (item) =>
+        `• ${item.quantity} ${item.unit} de ${item.productName} a ${formatBRL(item.unitPrice)} — ${formatBRL(item.total)}${
+          item.cfop ? ` (CFOP ${item.cfop})` : ''
+        }`
     ),
-    `Total da nota: ${formatBRL(params.total)}`,
+    params.shipping && params.shipping > 0 ? `Frete na nota: ${formatBRL(params.shipping)}` : null,
+    `Total da NF-e: ${formatBRL(params.total)}`,
+    `Frete / Transporte: ${formatFreteSummary(params.frete, params.shipping)}`,
+    params.paymentMethod ? `Pagamento: ${params.paymentMethod}` : null,
+    params.observacao ? `Observações na nota: ${params.observacao}` : null,
     `Ambiente: ${nfeEnvironmentLabel(params.config)}`,
-    ...(params.warnings.length ? ['Avisos:', ...params.warnings.map((warning) => `• ${warning}`)] : []),
+    ...(params.warnings.length ? ['Avisos fiscais:', ...params.warnings.map((warning) => `• ${warning}`)] : []),
     ...(params.extra || []),
     '',
-    'Se estiver certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
+    'Quer ajustar quantidade, preço, placa, frete, IE, endereço ou observação? É só me dizer aqui no chat que eu atualizo o rascunho.',
+    'Se estiver tudo certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
   ]
     .filter((line) => line !== null)
     .join('\n');
@@ -461,6 +650,7 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       ]);
 
       const open = listOpenInstallments(transactions, { customerId: customer.id });
+      const fiscalInfo = inspectCustomerFiscal(customer);
 
       return {
         kind: 'data',
@@ -469,13 +659,282 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           id: customer.id,
           nome: customer.name,
           documento: customer.document,
+          ie: customer.ie || '',
+          isentoIE: Boolean(customer.isentoIE),
           telefone: customer.phone,
+          email: customer.email || '',
+          logradouro: customer.street || '',
+          numero: customer.number || '',
+          bairro: customer.neighborhood || '',
           cidade: customer.city,
+          uf: customer.state || '',
+          cep: customer.zipCode || '',
+          codigoIbge: customer.ibgeCode || '',
+          aptoParaEmitirNfe: fiscalInfo.aptoParaEmitir,
+          pendenciasFiscais: fiscalInfo.pendenciasObrigatorias,
+          avisosFiscais: fiscalInfo.avisosFiscais,
           saldoDevedor: open.reduce((sum, item) => sum + item.outstanding, 0),
           pedidos: orders
             .filter((order) => order.customerId === customer.id)
-            .slice(-5)
-            .map((order) => ({ referencia: order.reference, total: order.total, status: order.status }))
+            .slice(-8)
+            .map((order) => {
+              const remaining = remainingItemsForNfe(order);
+              return {
+                referencia: order.reference,
+                data: order.date,
+                total: order.total,
+                status: order.status,
+                nfeStatus: order.nfeStatus || 'nao_emitida',
+                quantidadePendenteNfe: remaining.reduce((sum, item) => sum + item.quantity, 0)
+              };
+            })
+        }
+      };
+    }
+
+    case 'diagnosticar_emissao_nfe': {
+      requireFiscal(ctx);
+      const [orders, customers, inventory, fiscalRows] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'inventory') as Promise<InventoryItem[]>,
+        ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+      ]);
+
+      const config = readFiscalConfig(fiscalRows);
+      const selectedOrder = args.pedidoRef ? findOrder(orders, String(args.pedidoRef)) : null;
+
+      let resolvedCustomer: { customer: Customer | null; suggestions: Customer[] } = { customer: null, suggestions: [] };
+      if (selectedOrder) {
+        const orderCustomer = customers.find((item) => item.id === selectedOrder.customerId) || null;
+        resolvedCustomer = { customer: orderCustomer, suggestions: orderCustomer ? [orderCustomer] : [] };
+      } else if (args.clienteNome) {
+        resolvedCustomer = resolveCustomer(customers, String(args.clienteNome));
+      }
+
+      const customer = resolvedCustomer.customer;
+      const customerDiagnostic = customer ? inspectCustomerFiscal(customer) : null;
+
+      const formatOrderForNfe = (order: SaleOrder) => {
+        const remaining = remainingItemsForNfe(order);
+        const withdrawals = (order.withdrawals || []).map((w) => {
+          const anyW = w as any;
+          return {
+            ticket: w.weighTicketNumber || anyW.ticketNumber || '',
+            data: w.date || '',
+            pesoLiquido: w.netWeight ?? w.quantityWithdrawn,
+            placa: w.plateNumber || w.truckPlate || anyW.vehiclePlate || '',
+            motorista: w.driverName || '',
+            transportadora: w.transporterName || anyW.carrierName || '',
+            notaVinculada: w.nfeNumero || anyW.invoiceNumber || ''
+          };
+        });
+        return {
+          referencia: order.reference,
+          data: order.date,
+          status: order.status,
+          totalPedido: order.total,
+          formaPagamento: order.paymentMethod || 'A combinar',
+          nfeStatus: order.nfeStatus || 'nao_emitida',
+          freteAtual: order.frete || null,
+          observacaoAtual: order.nfeInfCpl || order.notes || '',
+          quantidadePendenteTotal: remaining.reduce((sum, item) => sum + item.quantity, 0),
+          itensPendentes: remaining.map((item) => ({
+            produto: item.productName,
+            quantidadePendente: item.quantity,
+            unidade: item.unit || 'TON',
+            precoUnitario: item.unitPrice,
+            subtotal: item.total,
+            cfop: item.cfop || '',
+            ncm: item.ncm || '25171000'
+          })),
+          carregamentosBalanca: withdrawals,
+          notasEmitidas: listOrderNfes(order).map((nfe) => ({
+            tipo: nfe.tipo,
+            status: nfe.nfeStatus,
+            numero: nfe.nfeNumero,
+            total: nfe.total
+          }))
+        };
+      };
+
+      const candidateOrders = customer
+        ? orders
+            .filter((order) => order.customerId === customer.id && order.status !== OrderStatus.CANCELLED)
+            .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+            .slice(0, 8)
+            .map(formatOrderForNfe)
+        : [];
+
+      const roteiroConsultivo: string[] = [];
+      if (!customer) {
+        if (resolvedCustomer.suggestions.length) {
+          roteiroConsultivo.push(
+            `Confirme com o usuário qual destes clientes é o destinatário: ${resolvedCustomer.suggestions
+              .map((item) => item.name)
+              .join('; ')}.`
+          );
+        } else {
+          roteiroConsultivo.push(
+            'Cliente não encontrado. Pergunte o nome completo, CPF/CNPJ, IE (ou se é isento/não contribuinte), endereço e cidade/UF para cadastrar com salvar_cliente_fiscal.'
+          );
+        }
+      } else {
+        if (!customerDiagnostic?.aptoParaEmitir) {
+          roteiroConsultivo.push(
+            `Bloqueio fiscal no cadastro de ${customer.name}: ${customerDiagnostic?.pendenciasObrigatorias.join(
+              ' '
+            )} Peça o dado ao usuário e salve com salvar_cliente_fiscal.`
+          );
+        }
+        if (customerDiagnostic?.avisosFiscais.length) {
+          roteiroConsultivo.push(
+            `Avisos no cadastro de ${customer.name}: ${customerDiagnostic.avisosFiscais.join(
+              ' '
+            )} Pergunte se quer informar IE/endereço antes de emitir ou seguir assim.`
+          );
+        }
+      }
+
+      if (selectedOrder) {
+        const formatted = formatOrderForNfe(selectedOrder);
+        if (formatted.quantidadePendenteTotal <= 0) {
+          roteiroConsultivo.push(
+            `O pedido ${selectedOrder.reference} já teve toda a quantidade faturada. Pergunte se deseja emitir uma NF-e avulsa solta.`
+          );
+        } else {
+          roteiroConsultivo.push(
+            `Confirme se vai faturar o saldo total do pedido ${selectedOrder.reference} (${formatted.quantidadePendenteTotal} ton) ou uma quantidade parcial (por carregamento/caminhão).`
+          );
+        }
+        if (formatted.carregamentosBalanca.length) {
+          roteiroConsultivo.push(
+            'Existem tickets de balança no pedido: ofereça usar o peso líquido, placa e motorista de um carregamento específico na nota.'
+          );
+        }
+      } else if (candidateOrders.length) {
+        roteiroConsultivo.push(
+          'O cliente tem pedidos recentes listados em pedidosDoCliente. Pergunte se a NF-e é de algum desses pedidos ou se é uma NF-e avulsa sem pedido.'
+        );
+      } else if (customer) {
+        roteiroConsultivo.push(
+          'O cliente não tem pedidos em aberto. Pergunte qual produto, quantidade (ton) e preço unitário deseja para montar a NF-e avulsa.'
+        );
+      }
+
+      roteiroConsultivo.push(
+        'Pergunte se deseja informar placa do caminhão, motorista, modalidade/valor do frete (CIF, FOB ou sem frete), forma de pagamento e alguma observação na nota (ex: número de ticket, fazenda, inscrição de produtor).'
+      );
+
+      return {
+        kind: 'data',
+        data: {
+          apiKeyConfigurada: Boolean(String(config?.apiKey || '').trim()),
+          ambiente: nfeEnvironmentLabel(config),
+          naturezaOperacaoPadrao: config?.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
+          cfopEstadualPadrao: config?.cfopPadraoEstadual || '5101',
+          cfopInterestadualPadrao: config?.cfopPadraoInterestadual || '6101',
+          cliente: customerDiagnostic
+            ? { encontrado: true, ...customerDiagnostic }
+            : {
+                encontrado: false,
+                termoBuscado: args.clienteNome || null,
+                sugestoes: resolvedCustomer.suggestions.map((item) => ({
+                  id: item.id,
+                  nome: item.name,
+                  documento: item.document,
+                  cidade: item.city,
+                  uf: item.state
+                }))
+              },
+          pedidoSelecionado: selectedOrder ? formatOrderForNfe(selectedOrder) : null,
+          pedidosDoCliente: candidateOrders,
+          produtosDisponiveis: inventory.map((item) => ({
+            id: item.id,
+            nome: item.name,
+            precoUnitario: item.unitPrice,
+            unidade: item.unit || 'TON',
+            ncm: item.ncm || '25171000',
+            cfop: item.cfop || ''
+          })),
+          roteiroConsultivo
+        }
+      };
+    }
+
+    case 'salvar_cliente_fiscal': {
+      requireFiscal(ctx);
+      requireWrites(ctx);
+
+      const customers = (await ctx.repo.getTable(ctx.companyId, 'customers')) as Customer[];
+      let existing: Customer | null = null;
+      if (args.clienteId) {
+        existing = customers.find((item) => item.id === String(args.clienteId)) || null;
+      }
+      if (!existing && args.documento) {
+        const cleanDoc = onlyDigits(args.documento);
+        if (cleanDoc.length >= 11) {
+          existing = customers.find((item) => onlyDigits(item.document) === cleanDoc) || null;
+        }
+      }
+      if (!existing && args.nome) {
+        const resolved = resolveCustomer(customers, String(args.nome));
+        existing = resolved.customer;
+      }
+
+      const name = String(args.nome || existing?.name || '').trim();
+      if (!name || name.length < 2) {
+        throw new Error('Informe o nome completo ou razão social do cliente.');
+      }
+
+      const rawDoc = args.documento !== undefined ? String(args.documento).trim() : existing?.document || '';
+      const docDigits = onlyDigits(rawDoc);
+      if (rawDoc && docDigits.length !== 11 && docDigits.length !== 14) {
+        throw new Error('O documento precisa ser um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
+      }
+
+      const ieRaw = args.ie !== undefined ? String(args.ie || '').trim() : existing?.ie || '';
+      const isentoIE =
+        args.isentoIE !== undefined
+          ? Boolean(args.isentoIE)
+          : normalize(ieRaw) === 'isento' || Boolean(existing?.isentoIE);
+      const cleanIe = normalize(ieRaw) === 'isento' ? '' : ieRaw;
+
+      const updated: Customer = {
+        ...(existing || {
+          id: newId('cust'),
+          name,
+          document: rawDoc,
+          phone: '',
+          email: '',
+          city: 'Santarém',
+          totalSpent: 0,
+          lastOrderDate: ''
+        }),
+        name,
+        document: rawDoc || existing?.document || '',
+        ie: cleanIe || undefined,
+        isentoIE,
+        phone: args.telefone !== undefined ? String(args.telefone || '').trim() : existing?.phone || '',
+        email: args.email !== undefined ? String(args.email || '').trim() : existing?.email || '',
+        street: args.logradouro !== undefined ? String(args.logradouro || '').trim() : existing?.street,
+        number: args.numero !== undefined ? String(args.numero || '').trim() : existing?.number,
+        neighborhood: args.bairro !== undefined ? String(args.bairro || '').trim() : existing?.neighborhood,
+        city: args.cidade !== undefined ? String(args.cidade || '').trim() : existing?.city || 'Santarém',
+        state: args.uf !== undefined ? String(args.uf || '').trim().toUpperCase() : existing?.state || 'PA',
+        zipCode: args.cep !== undefined ? String(args.cep || '').trim() : existing?.zipCode,
+        ibgeCode: args.codigoIbge !== undefined ? onlyDigits(args.codigoIbge) : existing?.ibgeCode,
+        companyId: ctx.companyId
+      };
+
+      await ctx.repo.upsert(ctx.companyId, 'customers', updated);
+      const fiscalCheck = inspectCustomerFiscal(updated);
+
+      return {
+        kind: 'data',
+        data: {
+          acao: existing ? 'atualizado' : 'cadastrado',
+          cliente: fiscalCheck
         }
       };
     }
@@ -546,9 +1005,40 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
     }
 
     case 'status_nfe_pedido': {
-      const orders = (await ctx.repo.getTable(ctx.companyId, 'sales_orders')) as SaleOrder[];
-      const order = findOrder(orders, String(args.pedidoRef || ''));
+      const [orders, fiscalRows] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+      ]);
+      let order = findOrder(orders, String(args.pedidoRef || ''));
       if (!order) return { kind: 'data', data: { encontrado: false } };
+
+      const config = readFiscalConfig(fiscalRows);
+      if (config && hasProcessingNfe(order)) {
+        const nfes = listOrderNfes(order);
+        let changed = false;
+        for (const nfe of nfes) {
+          if (nfe.nfeStatus === 'processando' && nfe.nfeId) {
+            const consulted = await consultNfeStatusOnNotaAs(nfe.nfeId, config, nfe.nfeNumero || '', nfe.nfeSerie || '1');
+            if (consulted && consulted.nfeStatus && consulted.nfeStatus !== 'processando') {
+              order = upsertLinkedNfe(order, {
+                ...nfe,
+                nfeStatus: consulted.nfeStatus,
+                nfeNumero: consulted.nfeNumero || nfe.nfeNumero,
+                nfeChave: consulted.nfeChave || nfe.nfeChave,
+                nfeProtocolo: consulted.nfeProtocolo || nfe.nfeProtocolo,
+                nfeDanfeUrl: consulted.nfeDanfeUrl || nfe.nfeDanfeUrl,
+                nfeXmlUrl: consulted.nfeXmlUrl || nfe.nfeXmlUrl,
+                nfeErro: consulted.nfeErro || nfe.nfeErro
+              });
+              changed = true;
+            }
+          }
+        }
+        if (changed && ctx.allowWrites) {
+          await ctx.repo.upsert(ctx.companyId, 'sales_orders', { ...order, origin: 'telegram' });
+        }
+      }
+
       const remaining = remainingItemsForNfe(order);
 
       return {
@@ -561,6 +1051,8 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
           chave: order.nfeChave,
           erro: order.nfeErro,
           notas: listOrderNfes(order).map((nfe) => ({
+            id: nfe.id,
+            nfeId: nfe.nfeId,
             tipo: nfe.tipo,
             status: nfe.nfeStatus,
             numero: nfe.nfeNumero,
@@ -568,6 +1060,56 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
             total: nfe.total
           })),
           quantidadePendente: remaining.reduce((sum, item) => sum + item.quantity, 0)
+        }
+      };
+    }
+
+    case 'enviar_danfe_nfe': {
+      requireFiscal(ctx);
+      const [orders, customers, fiscalRows] = await Promise.all([
+        ctx.repo.getTable(ctx.companyId, 'sales_orders') as Promise<SaleOrder[]>,
+        ctx.repo.getTable(ctx.companyId, 'customers') as Promise<Customer[]>,
+        ctx.repo.getTable(ctx.companyId, 'fiscal_config')
+      ]);
+
+      const order = findOrder(orders, String(args.pedidoRef || ''));
+      if (!order) throw new Error(`Não encontrei o pedido ${args.pedidoRef || ''}.`);
+
+      const config = readFiscalConfig(fiscalRows);
+      if (!config || !String(config.apiKey || '').trim()) {
+        throw new Error('Cadastre a Project Key da NotaAs nas Configurações Fiscais.');
+      }
+
+      const nfes = listOrderNfes(order).filter((nfe) => nfe.nfeStatus === 'autorizada' && nfe.nfeId);
+      const targetNfe = args.numeroNota
+        ? nfes.find((nfe) => String(nfe.nfeNumero || '') === String(args.numeroNota).trim())
+        : nfes.at(-1);
+
+      const nfeId = targetNfe?.nfeId || (order.nfeStatus === 'autorizada' ? order.nfeId : undefined);
+      const nfeNumero = targetNfe?.nfeNumero || order.nfeNumero || 'nfe';
+
+      if (!nfeId) {
+        throw new Error(`O pedido ${order.reference} ainda não tem NF-e autorizada com DANFE disponível.`);
+      }
+
+      const bytes = await fetchDanfePdf(nfeId, config);
+      if (!bytes) {
+        throw new Error('Não consegui baixar o DANFE na NotaAs agora. Tente novamente em instantes.');
+      }
+
+      const customer = customers.find((item) => item.id === order.customerId);
+      return {
+        kind: 'data',
+        data: {
+          enviado: true,
+          referencia: order.reference,
+          numeroNota: nfeNumero,
+          chave: targetNfe?.nfeChave || order.nfeChave
+        },
+        document: {
+          filename: `DANFE-${nfeNumero}.pdf`,
+          bytes,
+          caption: `DANFE NF-e ${nfeNumero} · ${customer?.name || order.reference}`
         }
       };
     }
@@ -734,32 +1276,60 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
       }
 
       const customer = customers.find((item) => item.id === order.customerId);
-      const items = remainingItemsForNfe(order);
+      const rawItems = Array.isArray(args.itens) && args.itens.length ? pickNfeItems(order, args.itens) : remainingItemsForNfe(order);
+      const items = applyItemFiscalOverrides(rawItems, args.cfop);
       if (!items.length) {
-        throw new Error(`O ${order.reference} já está faturado. Para outra nota, use nota avulsa com quantidade menor.`);
+        throw new Error(`O ${order.reference} já está faturado. Para outra nota, use nota avulsa.`);
       }
-
-      const totals = totalsOf(items, order.shipping);
-      const previewOrder = { ...order, items, subtotal: totals.subtotal, shipping: totals.shipping, total: totals.total };
-      const validation = validateFiscalForEmit(previewOrder, customer);
-      if (!validation.valid) throw new Error(validation.errors.join(' '));
 
       const config = readFiscalConfig(fiscalRows);
       if (!String(config?.apiKey || '').trim()) {
         throw new Error('Cadastre a Project Key da NotaAs nas Configurações Fiscais antes de emitir pelo Telegram.');
       }
 
+      const consultative = buildConsultativeOrderOverrides(order, args, config);
+      const totals = totalsOf(items, consultative.shipping);
+      const previewOrder: SaleOrder = {
+        ...order,
+        items,
+        subtotal: totals.subtotal,
+        shipping: totals.shipping,
+        total: totals.total,
+        frete: consultative.frete,
+        paymentMethod: consultative.paymentMethod || order.paymentMethod,
+        nfeNaturezaOperacao: consultative.nfeNaturezaOperacao,
+        nfeInfCpl: consultative.nfeInfCpl
+      };
+      const validation = validateFiscalForEmit(previewOrder, customer);
+      if (!validation.valid) throw new Error(validation.errors.join(' '));
+
+      const isPartial = Array.isArray(args.itens) && args.itens.length > 0;
+
       return {
         kind: 'confirm',
         action: 'emitir_nfe_pedido',
-        payload: { orderId: order.id, items },
+        payload: {
+          orderId: order.id,
+          items,
+          shipping: totals.shipping,
+          frete: consultative.frete || null,
+          paymentMethod: consultative.paymentMethod || null,
+          naturezaOperacao: consultative.nfeNaturezaOperacao || null,
+          notes: consultative.nfeInfCpl || null
+        },
         summary: nfeProposalSummary({
           title: `NF-e do pedido ${order.reference}`,
           customer: customer!,
           items,
           total: totals.total,
+          shipping: totals.shipping,
+          frete: consultative.frete,
+          paymentMethod: consultative.paymentMethod || order.paymentMethod,
+          naturezaOperacao: consultative.nfeNaturezaOperacao,
+          observacao: consultative.nfeInfCpl,
           config,
-          warnings: validation.warnings
+          warnings: validation.warnings,
+          extra: isPartial ? ['Emissão com quantidade/itens ajustados conforme combinado no chat.'] : undefined
         })
       };
     }
@@ -791,18 +1361,24 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         }
 
         const customer = customers.find((item) => item.id === order.customerId);
-        const items = pickNfeItems(order, args.itens);
+        const rawItems = pickNfeItems(order, args.itens);
+        const items = applyItemFiscalOverrides(rawItems, args.cfop);
         if (!items.length) {
           throw new Error(`Não restou quantidade para faturar no ${order.reference}.`);
         }
 
-        const totals = totalsOf(items);
-        const previewOrder = {
+        const consultative = buildConsultativeOrderOverrides({ ...order, shipping: 0 }, args, config);
+        const totals = totalsOf(items, consultative.shipping);
+        const previewOrder: SaleOrder = {
           ...order,
           items,
           subtotal: totals.subtotal,
-          shipping: 0,
+          shipping: totals.shipping,
           total: totals.total,
+          frete: consultative.frete,
+          paymentMethod: consultative.paymentMethod || order.paymentMethod,
+          nfeNaturezaOperacao: consultative.nfeNaturezaOperacao,
+          nfeInfCpl: consultative.nfeInfCpl,
           isAvulsa: true
         };
         const validation = validateFiscalForEmit(previewOrder, customer);
@@ -811,15 +1387,29 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         return {
           kind: 'confirm',
           action: 'emitir_nfe_avulsa',
-          payload: { orderId: order.id, items, standalone: false },
+          payload: {
+            orderId: order.id,
+            items,
+            shipping: totals.shipping,
+            frete: consultative.frete || null,
+            paymentMethod: consultative.paymentMethod || null,
+            naturezaOperacao: consultative.nfeNaturezaOperacao || null,
+            notes: consultative.nfeInfCpl || null,
+            standalone: false
+          },
           summary: nfeProposalSummary({
             title: `NF-e avulsa do pedido ${order.reference}`,
             customer: customer!,
             items,
             total: totals.total,
+            shipping: totals.shipping,
+            frete: consultative.frete,
+            paymentMethod: consultative.paymentMethod || order.paymentMethod,
+            naturezaOperacao: consultative.nfeNaturezaOperacao,
+            observacao: consultative.nfeInfCpl,
             config,
             warnings: validation.warnings,
-            extra: ['Essa nota é parcial: não substitui a nota do pedido completo.']
+            extra: ['Essa nota é parcial: abate do saldo fiscal do pedido e permite emitir outras notas depois.']
           })
         };
       }
@@ -839,8 +1429,23 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         notes: args.observacao,
         paymentMethod: args.formaPagamento
       });
-      const items = preview.items;
-      const validation = validateFiscalForEmit({ ...preview, isAvulsa: true }, customer);
+      const items = applyItemFiscalOverrides(preview.items, args.cfop);
+      const consultative = buildConsultativeOrderOverrides(preview, args, config);
+      const totals = totalsOf(items, consultative.shipping);
+      const validation = validateFiscalForEmit(
+        {
+          ...preview,
+          items,
+          subtotal: totals.subtotal,
+          shipping: totals.shipping,
+          total: totals.total,
+          frete: consultative.frete,
+          nfeNaturezaOperacao: consultative.nfeNaturezaOperacao,
+          nfeInfCpl: consultative.nfeInfCpl,
+          isAvulsa: true
+        },
+        customer
+      );
       if (!validation.valid) throw new Error(validation.errors.join(' '));
 
       return {
@@ -849,15 +1454,23 @@ export async function executeTool(name: string, rawArgs: any, ctx: AgentContext)
         payload: {
           customerId: customer.id,
           items,
-          paymentMethod: args.formaPagamento || null,
-          notes: args.observacao || null,
+          shipping: totals.shipping,
+          frete: consultative.frete || null,
+          paymentMethod: consultative.paymentMethod || null,
+          naturezaOperacao: consultative.nfeNaturezaOperacao || null,
+          notes: consultative.nfeInfCpl || null,
           standalone: true
         },
         summary: nfeProposalSummary({
           title: 'NF-e avulsa (sem pedido de venda)',
           customer,
           items,
-          total: preview.total,
+          total: totals.total,
+          shipping: totals.shipping,
+          frete: consultative.frete,
+          paymentMethod: consultative.paymentMethod,
+          naturezaOperacao: consultative.nfeNaturezaOperacao,
+          observacao: consultative.nfeInfCpl,
           config,
           warnings: validation.warnings,
           extra: ['Não baixa estoque nem abre parcela. Só emite a nota.']
@@ -1083,12 +1696,14 @@ export async function commitAction(
     let customer: Customer | undefined;
     let items: SaleOrderItem[] = payload.items || [];
     const tipo: 'pedido' | 'avulsa' = action === 'emitir_nfe_pedido' ? 'pedido' : 'avulsa';
+    const shippingOverride =
+      payload.shipping !== undefined && payload.shipping !== null ? Math.max(0, toNumber(payload.shipping)) : undefined;
 
     if (standalone) {
       customer = customers.find((item) => item.id === payload.customerId);
       if (!customer) throw new Error('Cliente não encontrado. Nada foi emitido.');
       if (!items.length) throw new Error('A nota avulsa precisa de itens.');
-      const totals = totalsOf(items);
+      const totals = totalsOf(items, shippingOverride ?? 0);
       order = {
         id: newId('ord'),
         reference: nextAvulsaReference(orders),
@@ -1099,12 +1714,15 @@ export async function commitAction(
         items,
         subtotal: totals.subtotal,
         discount: 0,
-        shipping: 0,
+        shipping: totals.shipping,
         total: totals.total,
         status: OrderStatus.FINALIZED,
         paymentMethod: payload.paymentMethod || 'Outros',
         payments: [],
         notes: payload.notes || undefined,
+        frete: payload.frete || undefined,
+        nfeNaturezaOperacao: payload.naturezaOperacao || undefined,
+        nfeInfCpl: payload.notes || undefined,
         companyId: ctx.companyId,
         nfeReferenciaExterna: undefined
       };
@@ -1122,7 +1740,8 @@ export async function commitAction(
 
     if (!customer) throw new Error('Cliente do pedido não encontrado. Nada foi emitido.');
 
-    const totals = totalsOf(items, tipo === 'pedido' ? order.shipping : 0);
+    const shippingForEmit = shippingOverride !== undefined ? shippingOverride : tipo === 'pedido' ? order.shipping : 0;
+    const totals = totalsOf(items, shippingForEmit);
     const linkedId = tipo === 'avulsa' ? `nfa-${Date.now().toString(36)}` : `nfp-${Date.now().toString(36)}`;
     const emitOrder: SaleOrder = {
       ...order,
@@ -1131,12 +1750,22 @@ export async function commitAction(
       discount: 0,
       shipping: totals.shipping,
       total: totals.total,
+      frete: payload.frete || order.frete,
+      paymentMethod: payload.paymentMethod || order.paymentMethod,
+      nfeNaturezaOperacao: payload.naturezaOperacao || order.nfeNaturezaOperacao,
+      nfeInfCpl: payload.notes !== undefined && payload.notes !== null ? payload.notes : order.nfeInfCpl,
       isAvulsa: tipo === 'avulsa',
       nfeReferenciaExterna: tipo === 'avulsa' ? avulsaExternalRef(order.reference, linkedId) : order.reference
     };
 
     const result = await emitNfeOnNotaAs({ order: emitOrder, customer, config });
-    let updatedOrder = applyEmitToOrder({ order, items, tipo, result, linkedId });
+    const orderWithFiscalExtras: SaleOrder = {
+      ...order,
+      ...(payload.frete ? { frete: payload.frete } : {}),
+      ...(payload.notes ? { nfeInfCpl: payload.notes } : {}),
+      ...(payload.naturezaOperacao ? { nfeNaturezaOperacao: payload.naturezaOperacao } : {})
+    };
+    let updatedOrder = applyEmitToOrder({ order: orderWithFiscalExtras, items, tipo, result, linkedId });
     if (standalone) {
       const linked = listOrderNfes(updatedOrder).at(-1);
       if (linked) updatedOrder = { ...overlayNfeFields(updatedOrder, linked), isAvulsa: true };
@@ -1186,7 +1815,7 @@ export async function commitAction(
         document
           ? 'O DANFE vai em seguida.'
           : result.nfeStatus === 'autorizada'
-            ? 'A nota está no ERP; o DANFE não saiu agora.'
+            ? 'A nota está no ERP; o DANFE não saiu agora (peça /danfe ' + updatedOrder.reference + ').'
             : 'Acompanhe pelo status da nota neste chat ou no ERP.'
       ]
         .filter(Boolean)
@@ -1204,13 +1833,16 @@ export const READ_ONLY_TOOLS = [
   'listar_recebiveis_em_aberto',
   'resumo_do_dia',
   'buscar_cliente',
+  'diagnosticar_emissao_nfe',
   'consultar_estoque',
   'listar_vendas',
   'status_nfe_pedido',
+  'enviar_danfe_nfe',
   'conferir_lancamentos'
 ];
 
 export const WRITE_TOOLS = [
+  'salvar_cliente_fiscal',
   'registrar_abatimento',
   'registrar_recebimento',
   'criar_orcamento',
@@ -1218,6 +1850,61 @@ export const WRITE_TOOLS = [
   'emitir_nfe_pedido',
   'emitir_nfe_avulsa'
 ];
+
+const nfeConsultativeProperties = {
+  naturezaOperacao: {
+    type: 'STRING',
+    description: 'Natureza da operação na NF-e (ex: Venda de producao do estabelecimento, Remessa para entrega futura).'
+  },
+  cfop: {
+    type: 'STRING',
+    description: 'CFOP de 4 dígitos para sobrescrever nos itens (ex: 5101 estadual, 6101 interestadual, 5922, 5116).'
+  },
+  formaPagamento: {
+    type: 'STRING',
+    description: 'PIX, Boleto, A prazo, Transferência, Dinheiro ou Sem pagamento.'
+  },
+  modalidadeFrete: {
+    type: 'STRING',
+    description: 'CIF (0 - por conta do emitente), FOB (1 - por conta do destinatário), Sem frete (9), Terceiros (2) ou Próprio destinatário (4).'
+  },
+  valorFrete: {
+    type: 'NUMBER',
+    description: 'Valor do frete em R$ para destacar na NF-e (se CIF).'
+  },
+  placaVeiculo: {
+    type: 'STRING',
+    description: 'Placa do caminhão/veículo (ex: QVA1B23 ou ABC1234).'
+  },
+  ufPlaca: {
+    type: 'STRING',
+    description: 'UF da placa do veículo (ex: PA, MT).'
+  },
+  motoristaNome: {
+    type: 'STRING',
+    description: 'Nome do motorista que retirou/transporta a carga.'
+  },
+  motoristaCpf: {
+    type: 'STRING',
+    description: 'CPF do motorista (opcional).'
+  },
+  transportadoraNome: {
+    type: 'STRING',
+    description: 'Nome/razão social da transportadora (se houver).'
+  },
+  transportadoraDocumento: {
+    type: 'STRING',
+    description: 'CNPJ/CPF da transportadora (se houver).'
+  },
+  ticketPesagem: {
+    type: 'STRING',
+    description: 'Número do ticket de balança/pesagem para sair nas informações complementares da nota.'
+  },
+  observacao: {
+    type: 'STRING',
+    description: 'Observações / informações complementares da NF-e (ex: fazenda, matrícula, contrato, produtor rural).'
+  }
+};
 
 /** Declarações no formato de function calling do Gemini. */
 export const toolDeclarations = [
@@ -1249,11 +1936,48 @@ export const toolDeclarations = [
   {
     name: 'buscar_cliente',
     description:
-      'Localiza cliente por nome parcial ou documento. "GABRIEL ANDRES" encontra "Gabriel Lima Andres". Se não for único, devolve sugestões.',
+      'Localiza cliente por nome parcial ou documento, retornando também dados fiscais (CPF/CNPJ, IE, endereço, pendências para NF-e) e últimos pedidos.',
     parameters: {
       type: 'OBJECT',
       properties: { termo: { type: 'STRING', description: 'Nome ou documento do cliente.' } },
       required: ['termo']
+    }
+  },
+  {
+    name: 'diagnosticar_emissao_nfe',
+    description:
+      'SEMPRE chame no início de uma conversa de emissão de NF-e. Diagnostica cadastro fiscal do cliente (CPF/CNPJ, IE, endereço), pedidos do cliente com saldo a faturar, tickets de balança/carregamentos, produtos disponíveis e devolve um roteiroConsultivo do que perguntar ao usuário.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        clienteNome: { type: 'STRING', description: 'Nome parcial ou CPF/CNPJ do cliente.' },
+        pedidoRef: { type: 'STRING', description: 'Referência do pedido, se o usuário já informou (ex: PED-2026-0012).' }
+      }
+    }
+  },
+  {
+    name: 'salvar_cliente_fiscal',
+    description:
+      'Cadastra um cliente novo ou atualiza os dados fiscais de um cliente existente (CPF/CNPJ, Inscrição Estadual/IE, isentoIE, logradouro, número, bairro, cidade, UF, CEP, código IBGE, telefone, email) diretamente pelo chat durante a emissão consultiva da NF-e.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        clienteId: { type: 'STRING', description: 'ID do cliente existente, se já localizado.' },
+        nome: { type: 'STRING', description: 'Nome completo ou razão social do cliente.' },
+        documento: { type: 'STRING', description: 'CPF (11 dígitos) ou CNPJ (14 dígitos).' },
+        ie: { type: 'STRING', description: 'Inscrição Estadual (IE) ou "ISENTO".' },
+        isentoIE: { type: 'BOOLEAN', description: 'True se for explicitamente isento de IE.' },
+        logradouro: { type: 'STRING', description: 'Rua, rodovia, ramal ou fazenda.' },
+        numero: { type: 'STRING', description: 'Número ou KM (ou SN).' },
+        bairro: { type: 'STRING', description: 'Bairro, comunidade ou Zona Rural.' },
+        cidade: { type: 'STRING', description: 'Município (ex: Santarém).' },
+        uf: { type: 'STRING', description: 'Sigla do estado (ex: PA).' },
+        cep: { type: 'STRING', description: 'CEP com 8 dígitos.' },
+        codigoIbge: { type: 'STRING', description: 'Código IBGE do município (7 dígitos), se informado.' },
+        telefone: { type: 'STRING' },
+        email: { type: 'STRING' }
+      },
+      required: ['nome']
     }
   },
   {
@@ -1278,10 +2002,23 @@ export const toolDeclarations = [
   },
   {
     name: 'status_nfe_pedido',
-    description: 'Situação fiscal das NF-e de um pedido, inclusive avulsas e quantidade ainda sem nota.',
+    description:
+      'Situação fiscal das NF-e de um pedido (consulta a SEFAZ/NotaAs em tempo real se estiver processando), inclusive avulsas e quantidade ainda sem nota.',
     parameters: {
       type: 'OBJECT',
       properties: { pedidoRef: { type: 'STRING' } },
+      required: ['pedidoRef']
+    }
+  },
+  {
+    name: 'enviar_danfe_nfe',
+    description: 'Baixa o PDF do DANFE de uma NF-e autorizada do pedido e envia o documento direto no chat do Telegram.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoRef: { type: 'STRING', description: 'Referência do pedido (ex: PED-2026-0012 ou AVU-2026-0001).' },
+        numeroNota: { type: 'STRING', description: 'Número da NF-e específica, se o pedido tiver mais de uma.' }
+      },
       required: ['pedidoRef']
     }
   },
@@ -1376,22 +2113,40 @@ export const toolDeclarations = [
   {
     name: 'emitir_nfe_pedido',
     description:
-      'Prepara a NF-e do pedido de venda (quantidade ainda sem nota). Não transmite até o usuário tocar em Emitir NF-e. Use a referência PED-...',
+      'Prepara o resumo e o botão de confirmação da NF-e de um pedido de venda. Aceita emitir o saldo total ou parcial (itens), customizar preço, CFOP, natureza da operação, frete, placa do caminhão, motorista, ticket de pesagem e observações. Chame novamente sempre que o usuário pedir para alterar algum dado antes de transmitir.',
     parameters: {
       type: 'OBJECT',
-      properties: { pedidoRef: { type: 'STRING', description: 'Referência do pedido, por exemplo PED-2026-0012.' } },
+      properties: {
+        pedidoRef: { type: 'STRING', description: 'Referência do pedido, por exemplo PED-2026-0012.' },
+        itens: {
+          type: 'ARRAY',
+          description: 'Opcional. Informe se o usuário quiser faturar quantidade parcial ou ajustar preço/CFOP do item.',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              produto: { type: 'STRING' },
+              quantidade: { type: 'NUMBER' },
+              precoUnitario: { type: 'NUMBER' },
+              cfop: { type: 'STRING' },
+              ncm: { type: 'STRING' }
+            },
+            required: ['quantidade']
+          }
+        },
+        ...nfeConsultativeProperties
+      },
       required: ['pedidoRef']
     }
   },
   {
     name: 'emitir_nfe_avulsa',
     description:
-      'Prepara NF-e avulsa: parcial de um pedido (pedidoRef + quantidades) ou nota solta (cliente + itens), sem baixar estoque. Não transmite até o usuário confirmar.',
+      'Prepara o resumo e o botão de confirmação de uma NF-e avulsa: parcial vinculada a um pedido (pedidoRef + itens) ou nota solta sem pedido (clienteNome + itens), sem baixar estoque nem abrir financeiro. Aceita placa, motorista, frete, CFOP, natureza da operação e observações.',
     parameters: {
       type: 'OBJECT',
       properties: {
-        pedidoRef: { type: 'STRING', description: 'Se for parcial de um pedido existente.' },
-        clienteNome: { type: 'STRING', description: 'Obrigatório na nota solta, sem pedido.' },
+        pedidoRef: { type: 'STRING', description: 'Se for nota parcial vinculada a um pedido existente.' },
+        clienteNome: { type: 'STRING', description: 'Nome ou documento do cliente (obrigatório na nota solta sem pedido).' },
         itens: {
           type: 'ARRAY',
           items: {
@@ -1399,13 +2154,14 @@ export const toolDeclarations = [
             properties: {
               produto: { type: 'STRING' },
               quantidade: { type: 'NUMBER' },
-              precoUnitario: { type: 'NUMBER' }
+              precoUnitario: { type: 'NUMBER' },
+              cfop: { type: 'STRING' },
+              ncm: { type: 'STRING' }
             },
             required: ['produto', 'quantidade']
           }
         },
-        formaPagamento: { type: 'STRING' },
-        observacao: { type: 'STRING' }
+        ...nfeConsultativeProperties
       }
     }
   }

@@ -150,15 +150,26 @@ export function remainingItemsForNfe(order: SaleOrder): SaleOrderItem[] {
     .filter((item): item is SaleOrderItem => Boolean(item));
 }
 
-export function pickNfeItems(order: SaleOrder, requested?: { productId?: string; produto?: string; quantidade: number }[]): SaleOrderItem[] {
+export interface RequestedNfeLine {
+  productId?: string;
+  produto?: string;
+  quantidade: number;
+  precoUnitario?: number;
+  cfop?: string;
+  ncm?: string;
+}
+
+export function pickNfeItems(order: SaleOrder, requested?: RequestedNfeLine[]): SaleOrderItem[] {
   if (!requested?.length) return remainingItemsForNfe(order);
 
   const remaining = remainingQuantityByProduct(order);
   return requested.map((line) => {
     const term = String(line.productId || line.produto || '').trim().toLowerCase();
+    const orderItems = order.items || [];
     const source =
-      (order.items || []).find((item) => saleItemKey(item).toLowerCase() === term) ||
-      (order.items || []).find((item) => String(item.productName || '').toLowerCase().includes(term));
+      orderItems.find((item) => saleItemKey(item).toLowerCase() === term) ||
+      (term ? orderItems.find((item) => String(item.productName || '').toLowerCase().includes(term)) : undefined) ||
+      (orderItems.length === 1 ? orderItems[0] : undefined);
     if (!source) throw new Error(`Produto "${line.produto || line.productId}" não está nesse pedido.`);
 
     const key = saleItemKey(source);
@@ -169,17 +180,65 @@ export function pickNfeItems(order: SaleOrder, requested?: { productId?: string;
       throw new Error(`${source.productName}: restam ${max} ${source.unit || ''} para faturar nesse pedido.`);
     }
 
-    const unitPrice = Number(source.unitPrice) || 0;
+    const customPrice = line.precoUnitario != null && Number(line.precoUnitario) > 0 ? Number(line.precoUnitario) : null;
+    const unitPrice = customPrice ?? (Number(source.unitPrice) || 0);
     const discountRatio = (Number(source.quantity) || 0) > 0 ? quantity / Number(source.quantity) : 1;
-    const discount = Math.round((Number(source.discount) || 0) * discountRatio * 100) / 100;
+    const discount = customPrice ? 0 : Math.round((Number(source.discount) || 0) * discountRatio * 100) / 100;
+    const cleanCfop = onlyDigits(line.cfop);
+    const cleanNcm = onlyDigits(line.ncm);
     remaining.set(key, Math.max(0, max - quantity));
     return {
       ...source,
       quantity,
+      unitPrice,
       discount,
+      ...(cleanCfop.length === 4 ? { cfop: cleanCfop } : {}),
+      ...(cleanNcm.length === 8 ? { ncm: cleanNcm } : {}),
       total: Math.round((quantity * unitPrice - discount) * 100) / 100
     };
   });
+}
+
+export function parseModalidadeFrete(raw?: string | number | null, hasShippingValue = false): 0 | 1 | 2 | 3 | 4 | 9 {
+  if (typeof raw === 'number' && [0, 1, 2, 3, 4, 9].includes(raw)) return raw as 0 | 1 | 2 | 3 | 4 | 9;
+  const text = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!text) return hasShippingValue ? 0 : 9;
+  if (text === '0' || text.includes('cif') || text.includes('emitente') || text.includes('remetente')) return 0;
+  if (text === '1' || text.includes('fob') || text.includes('destinatario')) return 1;
+  if (text === '2' || text.includes('terceiro')) return 2;
+  if (text === '3' || text.includes('proprio remetente')) return 3;
+  if (text === '4' || text.includes('proprio destinatario') || text.includes('retira')) return 4;
+  if (text === '9' || text.includes('sem frete') || text === 'sem_frete') return 9;
+  return hasShippingValue ? 0 : 9;
+}
+
+export function formatFreteSummary(frete?: SaleOrder['frete'], shipping?: number): string {
+  const mod = Number(frete?.modalidade ?? (shipping ? 0 : 9));
+  const modLabel =
+    mod === 0
+      ? 'CIF (por conta do emitente)'
+      : mod === 1
+        ? 'FOB (por conta do destinatário)'
+        : mod === 2
+          ? 'Por conta de terceiros'
+          : mod === 4
+            ? 'Transporte próprio do destinatário'
+            : 'Sem ocorrência de transporte (9)';
+  const parts: string[] = [modLabel];
+  const anyFrete = frete as any;
+  const placa = String(frete?.veiculo?.placa || anyFrete?.placa || '').trim().toUpperCase();
+  const uf = String(frete?.veiculo?.uf || anyFrete?.uf || '').trim().toUpperCase();
+  if (placa) parts.push(`Placa ${placa}${uf ? `/${uf}` : ''}`);
+  const motorista = String(anyFrete?.motorista || '').trim();
+  const transpNome = String(frete?.transportadora?.nome || anyFrete?.transportadoraNome || '').trim();
+  if (motorista) parts.push(`Motorista ${motorista}`);
+  else if (transpNome) parts.push(`Transp. ${transpNome}`);
+  if (anyFrete?.ticketPesagem) parts.push(`Ticket ${anyFrete.ticketPesagem}`);
+  return parts.join(' · ');
 }
 
 export function totalsOf(items: SaleOrderItem[], shipping = 0): { subtotal: number; shipping: number; total: number } {
@@ -243,7 +302,19 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
     return row;
   });
 
-  const tipoPagamento = order.paymentMethod === 'PIX' ? '17' : order.paymentMethod === 'Boleto' ? '15' : '01';
+  const pmNorm = String(order.paymentMethod || '')
+    .trim()
+    .toLowerCase();
+  const isSemPagamento = pmNorm.includes('sem pagamento') || pmNorm === '90';
+  const tipoPagamento = isSemPagamento
+    ? '90'
+    : pmNorm === 'pix'
+      ? '17'
+      : pmNorm.includes('boleto') || pmNorm.includes('prazo')
+        ? '15'
+        : pmNorm.includes('transfer')
+          ? '18'
+          : '01';
   const freteModalidade = Number(order.frete?.modalidade ?? (order.shipping ? 0 : 9)) as 0 | 1 | 2 | 3 | 4 | 9;
   const freteValor = Math.max(0, Number(order.frete?.valor ?? order.shipping ?? 0) || 0);
   const hasFrete =
@@ -252,20 +323,53 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
     freteModalidade !== 1 &&
     freteModalidade !== 4;
   const isAvulsaNote = Boolean(order.isAvulsa) || String(order.nfeReferenciaExterna || '').includes('#AV#');
+  const anyFrete = order.frete as any;
+  const placaLimpa = String(order.frete?.veiculo?.placa || anyFrete?.placa || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  const ufPlaca = String(order.frete?.veiculo?.uf || anyFrete?.uf || config.ufEmitente || 'PA')
+    .trim()
+    .toUpperCase();
+  const ticketPesagem = String(anyFrete?.ticketPesagem || '').trim();
+  const motoristaNome = String(anyFrete?.motorista || '').trim();
+
+  const extraInfCpl: string[] = [];
+  if (!isAvulsaNote && order.reference) extraInfCpl.push(`Pedido: ${order.reference}`);
+  if (placaLimpa) extraInfCpl.push(`Placa: ${placaLimpa}/${ufPlaca}`);
+  if (motoristaNome) extraInfCpl.push(`Motorista: ${motoristaNome}`);
+  if (ticketPesagem) extraInfCpl.push(`Ticket de pesagem: ${ticketPesagem}`);
+
   const infCpl = buildNfeInfCpl({
     nfeInfCpl: order.nfeInfCpl,
     observacoesFiscaisPadrao: config.observacoesFiscaisPadrao,
     items: order.items,
-    extras: isAvulsaNote ? [] : [order.reference ? `Pedido: ${order.reference}` : '']
+    extras: extraInfCpl
   });
+
+  const transporte: any = { modalidadeFrete: Number.isFinite(freteModalidade) ? freteModalidade : 9 };
+  if (placaLimpa.length === 7) {
+    transporte.veiculo = { placa: placaLimpa, uf: ufPlaca };
+  }
+  const transpDoc = onlyDigits(
+    order.frete?.transportadora?.documento || anyFrete?.transportadoraDocumento || anyFrete?.motoristaCpf
+  );
+  const transpNome = String(
+    order.frete?.transportadora?.nome || anyFrete?.transportadoraNome || motoristaNome || ''
+  ).trim();
+  if (transpNome && (freteModalidade === 0 || freteModalidade === 2 || transpDoc.length === 11)) {
+    transporte.transportadora = {
+      nome: transpNome,
+      ...(transpDoc ? { documento: transpDoc } : {})
+    };
+  }
 
   const payload: any = {
     modelo: 55,
     naturezaOperacao: order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
     dest,
     items,
-    pagamentos: [{ tipoPagamento, valor: order.total }],
-    transporte: { modalidadeFrete: Number.isFinite(freteModalidade) ? freteModalidade : 9 },
+    pagamentos: [{ tipoPagamento, valor: isSemPagamento ? 0 : order.total }],
+    transporte,
     tipoOperacao: 1,
     finalidade: 1,
     consumidorFinal: isPF ? 1 : 0,
@@ -402,6 +506,31 @@ export async function emitNfeOnNotaAs(params: {
   }
 
   return emitted;
+}
+
+export async function consultNfeStatusOnNotaAs(
+  invoiceId: string,
+  config: FiscalConfig,
+  fallbackNumero = '',
+  serie = '1'
+): Promise<TelegramNfeEmitResult | null> {
+  const apiKey = String(config?.apiKey || '').trim();
+  const id = String(invoiceId || '').trim();
+  if (!apiKey || !id) return null;
+  const base = String(config.apiBaseUrl || NOTAAS_API_BASE).replace(/\/$/, '');
+  try {
+    const consult = await transport.request({
+      method: 'GET',
+      url: `${base}/nfe/invoices/${encodeURIComponent(id)}/status`,
+      apiKey
+    });
+    if (consult.status >= 200 && consult.status < 300) {
+      return parseEmitBody(consult.data, consult.status, fallbackNumero, serie);
+    }
+  } catch (error: any) {
+    console.warn('[TELEGRAM NF-e] Falha ao consultar status na NotaAs:', error?.message);
+  }
+  return null;
 }
 
 export async function fetchDanfePdf(invoiceId: string, config: FiscalConfig): Promise<Uint8Array | null> {

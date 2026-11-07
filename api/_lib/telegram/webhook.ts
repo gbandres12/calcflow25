@@ -226,10 +226,18 @@ async function handleMessage(message: any): Promise<void> {
 async function deliver(
   chatId: string,
   link: TelegramLink,
-  reply: { text: string; pending?: { action: string; payload: any; summary: string } }
+  reply: {
+    text: string;
+    pending?: { action: string; payload: any; summary: string };
+    document?: { filename: string; bytes: Uint8Array; caption: string };
+  }
 ): Promise<void> {
   if (!reply.pending) {
     await sendMessage(chatId, reply.text);
+    if (reply.document) {
+      await sendChatAction(chatId, 'upload_document');
+      await sendDocument(chatId, reply.document, reply.document.caption);
+    }
     return;
   }
 
@@ -246,21 +254,26 @@ async function deliver(
     ? `${reply.text.trim()}\n\n${reply.pending.summary}`
     : reply.pending.summary;
 
+  const isNfe = reply.pending.action === 'emitir_nfe_pedido' || reply.pending.action === 'emitir_nfe_avulsa';
   const confirmPrompt =
     reply.pending.action === 'criar_pedido_venda'
       ? 'Confere esses dados. Se estiver certo, toque em Confirmar. Aí eu gravo o pedido e mando o PDF.'
-      : reply.pending.action === 'emitir_nfe_pedido' || reply.pending.action === 'emitir_nfe_avulsa'
-        ? 'Confere esses dados. Se estiver certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
+      : isNfe
+        ? body.includes('Emitir NF-e')
+          ? ''
+          : 'Confere esses dados. Se estiver certo, toque em Emitir NF-e. A nota vai para a SEFAZ e não tem como desfazer pelo chat.'
         : 'Confirma o lançamento?';
 
   const confirmLabel =
     reply.pending.action === 'criar_pedido_venda'
       ? 'Confirmar pedido'
-      : reply.pending.action === 'emitir_nfe_pedido' || reply.pending.action === 'emitir_nfe_avulsa'
+      : isNfe
         ? 'Emitir NF-e'
         : 'Confirmar';
 
-  await sendMessage(chatId, `${body}\n\n${confirmPrompt}`, [
+  const fullText = confirmPrompt ? `${body}\n\n${confirmPrompt}` : body;
+
+  await sendMessage(chatId, fullText, [
     [
       { text: confirmLabel, callback_data: `ok:${pendingId}` },
       { text: 'Cancelar', callback_data: `no:${pendingId}` }
