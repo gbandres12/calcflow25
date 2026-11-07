@@ -100,21 +100,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
       case '/start':
       case '/menu':
         return {
-          text: HELP_TEXT,
-          buttons: [
-            [
-              { text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' },
-              { text: '📄 Emitir NF-e', callback_data: 'cmd:nfe' }
-            ],
-            [
-              { text: '💰 Saldo / Caixa', callback_data: 'cmd:saldo' },
-              { text: '📊 Resumo do Dia', callback_data: 'cmd:resumo' }
-            ],
-            [
-              { text: '📥 Contas a Receber', callback_data: 'cmd:receber' },
-              { text: '📋 Últimas Vendas', callback_data: 'cmd:vendas' }
-            ]
-          ]
+          text: HELP_TEXT
         };
 
       case '/novo_pedido': {
@@ -143,13 +129,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             'Me mande em texto ou áudio: Cliente, Produto, Quantidade e Preço (e a forma de pagamento).',
             'Exemplo: "Pedido pro Gabriel Andres, 10t de Calcário Dolomítico a 160 no PIX".',
             ...stockLines
-          ].join('\n'),
-          buttons: [
-            [
-              { text: '📋 Ver Últimas Vendas', callback_data: 'cmd:vendas' },
-              { text: '📦 Ver Estoque', callback_data: 'cmd:estoque' }
-            ]
-          ]
+          ].join('\n')
         };
       }
 
@@ -158,13 +138,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
         const data = dataOf(outcome);
         const lines = data.contas.map((conta: any) => `• ${conta.nome}: ${formatBRL(conta.saldo)}`);
         return {
-          text: [`Saldo total: ${formatBRL(data.saldoTotal)}`, ...lines].join('\n'),
-          buttons: [
-            [
-              { text: '📊 Resumo do Dia', callback_data: 'cmd:resumo' },
-              { text: '📥 Contas a Receber', callback_data: 'cmd:receber' }
-            ]
-          ]
+          text: [`Saldo total: ${formatBRL(data.saldoTotal)}`, ...lines].join('\n')
         };
       }
 
@@ -273,8 +247,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             }`
         );
         return {
-          text: lines.join('\n'),
-          buttons: [[{ text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' }]]
+          text: lines.join('\n')
         };
       }
 
@@ -288,13 +261,7 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             `Saídas: ${formatBRL(data.saidas)}`,
             `Abatimentos: ${formatBRL(data.abatimentos)}`,
             `Resultado: ${formatBRL(data.resultado)}`
-          ].join('\n'),
-          buttons: [
-            [
-              { text: '💰 Saldo das Contas', callback_data: 'cmd:saldo' },
-              { text: '📥 Contas a Receber', callback_data: 'cmd:receber' }
-            ]
-          ]
+          ].join('\n')
         };
       }
 

@@ -523,7 +523,7 @@ describe('agente: comandos determinísticos, o fallback sem IA', () => {
     const novoPedido = await runCommand('🛒 Novo Pedido', ctx);
     assert.ok(novoPedido);
     assert.match(novoPedido!.text, /Vamos lançar um pedido de venda/);
-    assert.ok(novoPedido!.buttons?.length);
+    assert.equal(novoPedido!.buttons, undefined);
 
     const emitirNfe = await runCommand('📄 Emitir NF-e', ctx);
     assert.ok(emitirNfe);
