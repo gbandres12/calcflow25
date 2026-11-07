@@ -1,4 +1,4 @@
-import { InventoryItem, SaleOrder } from '../types';
+import { InventoryItem, SaleOrder } from '../types.js';
 
 export const INF_CPL_MAX = 5000;
 export const INF_ADPROD_MAX = 500;

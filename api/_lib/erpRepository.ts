@@ -119,5 +119,44 @@ export async function upsertMany(
     throw new Error(`Falha ao gravar ${tableName} no Supabase: ${error.message}`);
   }
 
+  if (tableName === 'sales_orders') {
+    await syncOrderNfesToErp(supabase, company, rows.map((row) => row.data));
+  }
+
   return rows.map((row) => row.data);
+}
+
+async function syncOrderNfesToErp(supabase: any, companyId: string, orders: any[]): Promise<void> {
+  const nfeRows: any[] = [];
+  for (const order of orders) {
+    const orderId = String(order?.id || '').trim();
+    const nfes = Array.isArray(order?.nfes) ? order.nfes : [];
+    if (!orderId || !nfes.length) continue;
+
+    nfes.forEach((nfe: any, idx: number) => {
+      nfeRows.push({
+        company_id: companyId,
+        id: String(nfe.id || nfe.nfeId || `${orderId}_nfe_${idx + 1}`),
+        order_id: orderId,
+        chave: nfe.chave || nfe.nfeChave || null,
+        numero: nfe.numero || nfe.nfeNumero || null,
+        serie: nfe.serie || nfe.nfeSerie || null,
+        status: nfe.status || nfe.nfeStatus || 'draft',
+        emissao: nfe.emissao || nfe.nfeEmissao || null,
+        protocolo: nfe.protocolo || nfe.nfeProtocolo || null,
+        danfe_url: nfe.danfeUrl || nfe.nfeDanfeUrl || null,
+        xml_url: nfe.xmlUrl || nfe.nfeXmlUrl || null,
+        nfe_payload: nfe.nfePayload || null,
+        nfe_response: nfe.nfeResponse || nfe.nfeRawResponse || null,
+        updated_at: new Date().toISOString()
+      });
+    });
+  }
+
+  if (!nfeRows.length) return;
+  try {
+    await supabase.schema('erp').from('sales_order_nfes').upsert(nfeRows, { onConflict: 'company_id,id' });
+  } catch (err: any) {
+    console.warn('[erpRepository] Falha ao sincronizar sales_order_nfes:', err?.message);
+  }
 }

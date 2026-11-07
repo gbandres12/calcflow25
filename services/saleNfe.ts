@@ -1,4 +1,4 @@
-import { NfeStatus, SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, SaleNfeTipo } from '../types';
+import { NfeStatus, SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, SaleNfeTipo } from '../types.js';
 
 export const AVULSA_REF_SEP = '#AV#';
 

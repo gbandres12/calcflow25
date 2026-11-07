@@ -1,4 +1,4 @@
-import { NfeStatus } from '../types';
+import { NfeStatus } from '../types.js';
 
 /** Cancelamento homologado / evento de cancelamento na SEFAZ. */
 export const CANCEL_CSTATS = new Set([101, 135, 151, 155]);

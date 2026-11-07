@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/telegram/:action", "destination": "/api/telegram/[action]?action=:action" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

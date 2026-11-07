@@ -1,4 +1,4 @@
-import { InventoryItem, SaleOrder } from '../types';
+import { InventoryItem, SaleOrder } from '../types.js';
 
 export type OrderLineDraft = {
   lineId: string;

@@ -12,7 +12,7 @@ import {
 } from '../../types.js';
 import { newId, nextOrderReference, nextQuoteReference } from '../ids.js';
 import { defaultWarrantyDraft, productSheetFromInventory, warrantyFromDraft } from '../../utils/salesOrderProduct.js';
-import { dateISOBR } from "../../utils/dateFilterUtils";
+import { dateISOBR } from '../../utils/dateFilterUtils.js';
 
 /**
  * Regras de escrita do agente do Telegram.

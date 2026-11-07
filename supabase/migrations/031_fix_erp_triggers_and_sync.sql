@@ -203,6 +203,7 @@ DECLARE
   v_rec jsonb;
   v_wth jsonb;
   v_pmt jsonb;
+  v_nfe jsonb;
   v_idx int;
 BEGIN
   IF pg_trigger_depth() > 1 THEN
@@ -421,7 +422,7 @@ BEGIN
         FOR v_pmt IN SELECT * FROM jsonb_array_elements(v_data->'payments') LOOP
           v_idx := v_idx + 1;
           INSERT INTO erp.transaction_payments (
-            company_id, id, transaction_id, amount, payment_date, payment_method, account_id, receipt_id, notes, created_at
+            company_id, id, transaction_id, amount, payment_date, payment_method, account_id, receipt_id, notes, is_discount_or_deduction, extra, created_at
           ) VALUES (
             NEW.company_id,
             COALESCE(v_pmt->>'id', 'pmt-' || NEW.id || '-' || v_idx),
@@ -432,6 +433,8 @@ BEGIN
             NULLIF(v_pmt->>'accountId', ''),
             NULLIF(v_pmt->>'receiptId', ''),
             v_pmt->>'notes',
+            COALESCE((v_pmt->>'isDiscountOrDeduction')::boolean, (v_pmt->>'paymentMethod') = 'Abatimento / Devolução', false),
+            v_pmt,
             NEW.updated_at
           )
           ON CONFLICT (company_id, id) DO UPDATE SET
@@ -440,7 +443,9 @@ BEGIN
             payment_method = EXCLUDED.payment_method,
             account_id = EXCLUDED.account_id,
             receipt_id = EXCLUDED.receipt_id,
-            notes = EXCLUDED.notes;
+            notes = EXCLUDED.notes,
+            is_discount_or_deduction = EXCLUDED.is_discount_or_deduction,
+            extra = EXCLUDED.extra;
         END LOOP;
       END IF;
 
@@ -564,6 +569,70 @@ BEGIN
             driver_name = EXCLUDED.driver_name, carrier_name = EXCLUDED.carrier_name,
             ticket_number = EXCLUDED.ticket_number, notes = EXCLUDED.notes, extra = EXCLUDED.extra;
         END LOOP;
+      END IF;
+
+      IF jsonb_typeof(v_data->'nfes') = 'array' AND jsonb_array_length(v_data->'nfes') > 0 THEN
+        v_idx := 0;
+        FOR v_nfe IN SELECT * FROM jsonb_array_elements(v_data->'nfes') LOOP
+          v_idx := v_idx + 1;
+          INSERT INTO erp.sales_order_nfes (
+            company_id, id, order_id, chave, numero, serie, status, emissao,
+            protocolo, danfe_url, xml_url, nfe_payload, nfe_response, extra, created_at, updated_at
+          ) VALUES (
+            NEW.company_id,
+            COALESCE(v_nfe->>'id', v_nfe->>'nfeId', NEW.id || '_nfe_' || v_idx),
+            NEW.id,
+            COALESCE(v_nfe->>'nfeChave', v_nfe->>'chave'),
+            COALESCE(v_nfe->>'nfeNumero', v_nfe->>'numero'),
+            COALESCE(v_nfe->>'nfeSerie', v_nfe->>'serie'),
+            COALESCE(v_nfe->>'nfeStatus', v_nfe->>'status', 'draft'),
+            COALESCE((v_nfe->>'nfeEmissao')::timestamptz, (v_nfe->>'emissao')::timestamptz),
+            COALESCE(v_nfe->>'nfeProtocolo', v_nfe->>'protocolo'),
+            COALESCE(v_nfe->>'nfeDanfeUrl', v_nfe->>'danfeUrl'),
+            COALESCE(v_nfe->>'nfeXmlUrl', v_nfe->>'xmlUrl'),
+            v_nfe->'nfePayload',
+            COALESCE(v_nfe->'nfeRawResponse', v_nfe->'nfeResponse'),
+            v_nfe,
+            NEW.updated_at,
+            NEW.updated_at
+          )
+          ON CONFLICT (company_id, id) DO UPDATE SET
+            chave = EXCLUDED.chave,
+            numero = EXCLUDED.numero,
+            serie = EXCLUDED.serie,
+            status = EXCLUDED.status,
+            emissao = EXCLUDED.emissao,
+            protocolo = EXCLUDED.protocolo,
+            danfe_url = EXCLUDED.danfe_url,
+            xml_url = EXCLUDED.xml_url,
+            nfe_payload = EXCLUDED.nfe_payload,
+            nfe_response = EXCLUDED.nfe_response,
+            extra = EXCLUDED.extra,
+            updated_at = EXCLUDED.updated_at;
+        END LOOP;
+      ELSIF (v_data->>'nfeChave' IS NOT NULL OR v_data->>'nfeNumero' IS NOT NULL OR v_data->>'nfeStatus' IS NOT NULL) THEN
+        INSERT INTO erp.sales_order_nfes (
+          company_id, id, order_id, chave, numero, serie, status, emissao,
+          protocolo, danfe_url, xml_url, nfe_payload, nfe_response, extra, created_at, updated_at
+        ) VALUES (
+          NEW.company_id,
+          NEW.id || '_nfe_' || COALESCE(v_data->>'nfeId', 'main'),
+          NEW.id,
+          v_data->>'nfeChave', v_data->>'nfeNumero', v_data->>'nfeSerie',
+          COALESCE(v_data->>'nfeStatus', 'draft'),
+          (v_data->>'nfeEmissao')::timestamptz,
+          v_data->>'nfeProtocolo', v_data->>'nfeDanfeUrl', v_data->>'nfeXmlUrl',
+          v_data->'nfePayload', v_data->'nfeRawResponse',
+          v_data,
+          NEW.updated_at, NEW.updated_at
+        )
+        ON CONFLICT (company_id, id) DO UPDATE SET
+          chave = EXCLUDED.chave,
+          numero = EXCLUDED.numero,
+          status = EXCLUDED.status,
+          protocolo = EXCLUDED.protocolo,
+          extra = EXCLUDED.extra,
+          updated_at = EXCLUDED.updated_at;
       END IF;
     END IF;
   EXCEPTION WHEN OTHERS THEN

@@ -27,6 +27,7 @@ export interface AgentReply {
 
 const PRIMARY_MODEL = 'gemini-3.5-flash';
 const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+const LEGACY_FALLBACK_MODEL = 'gemini-2.5-flash';
 const MAX_TOOL_ROUNDS = 6;
 
 const systemInstruction = (ctx: AgentContext) => `
@@ -95,7 +96,8 @@ async function generateWithFallback(ai: GoogleGenAI, params: any): Promise<any> 
   const attempts: { model: string; waitMs: number }[] = [
     { model: PRIMARY_MODEL, waitMs: 0 },
     { model: PRIMARY_MODEL, waitMs: 800 },
-    { model: FALLBACK_MODEL, waitMs: 400 }
+    { model: FALLBACK_MODEL, waitMs: 400 },
+    { model: LEGACY_FALLBACK_MODEL, waitMs: 400 }
   ];
 
   let lastError: any;
