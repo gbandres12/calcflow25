@@ -461,10 +461,12 @@ async function fulfillPending(chatId: string, link: TelegramLink, pending: { act
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
+    await ensureBotMenuCommands().catch(() => undefined);
     return res.status(200).json({
       status: 'ok',
       service: 'CalcárioFlow ERP - Agente Telegram',
       writes: writesEnabled() ? 'habilitadas' : 'somente consulta',
+      quickButtons: true,
       timestamp: new Date().toISOString()
     });
   }
