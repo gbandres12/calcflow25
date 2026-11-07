@@ -27,9 +27,16 @@ import {
 interface CashFlowProps {
   transactions: Transaction[];
   categories: Category[];
+  costCenters?: CostCenter[];
+  onOpenBudgetDashboard?: () => void;
 }
 
-const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
+const CashFlow: React.FC<CashFlowProps> = ({
+  transactions,
+  categories,
+  costCenters = INITIAL_COST_CENTERS,
+  onOpenBudgetDashboard
+}) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
@@ -54,28 +61,28 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
       const categoryMatch = selectedCategory === 'Todas' || t.category === selectedCategory;
       let ccMatch = selectedCCId === 'Todos';
       if (!ccMatch) {
-        const targetCc = INITIAL_COST_CENTERS.find(c => c.id === selectedCCId);
+        const targetCc = costCenters.find(c => c.id === selectedCCId);
         ccMatch = t.costCenterId === selectedCCId || 
                   Boolean(targetCc && t.costCenter && t.costCenter.trim().toLowerCase() === targetCc.name.trim().toLowerCase()) ||
                   t.costCenter === selectedCCId;
       }
       return dateMatch && categoryMatch && ccMatch;
     });
-  }, [transactions, startDate, endDate, selectedCategory, selectedCCId]);
+  }, [transactions, startDate, endDate, selectedCategory, selectedCCId, costCenters]);
 
   // Compute total cash inflows and outflows within date range
   const { totalIn, totalOut, costCenterSummary } = useMemo(() => {
     let sumIn = 0;
     let sumOut = 0;
     const ccSummary: Record<string, { in: number, out: number }> = {};
-    INITIAL_COST_CENTERS.forEach(cc => {
+    costCenters.forEach(cc => {
       ccSummary[cc.id] = { in: 0, out: 0 };
     });
 
     filteredTransactions.forEach(t => {
       const hasPayments = Array.isArray(t.payments) && t.payments.length > 0;
-      const resolvedCc = INITIAL_COST_CENTERS.find(c => c.id === t.costCenterId || (t.costCenter && c.name.toLowerCase() === t.costCenter.toLowerCase()));
-      const ccId = resolvedCc?.id || t.costCenterId || 'cc1';
+      const resolvedCc = costCenters.find(c => c.id === t.costCenterId || (t.costCenter && c.name.toLowerCase() === t.costCenter.toLowerCase()));
+      const ccId = resolvedCc?.id || t.costCenterId || costCenters[0]?.id || 'cc1';
 
       if (hasPayments) {
         t.payments!.forEach(pmt => {
@@ -247,7 +254,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
               <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Centro de Custo</label>
               <select value={selectedCCId} onChange={(e) => setSelectedCCId(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500 font-bold text-xs">
                 <option value="Todos">Todos os C. Custo</option>
-                {INITIAL_COST_CENTERS.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
@@ -264,15 +271,28 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
 
         <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest border-l-4 border-purple-500 pl-4">Distribuição por C. Custo</h3>
-              <BarChart3 size={20} className="text-slate-300" />
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest border-l-4 border-purple-500 pl-4">Distribuição por C. Custo (Saídas vs. Verba)</h3>
+              {onOpenBudgetDashboard ? (
+                <button
+                  type="button"
+                  onClick={onOpenBudgetDashboard}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0F5948] text-xs font-extrabold flex items-center gap-1.5 transition-colors"
+                >
+                  <PieChartIcon size={15} /> Ver Painel de Verbas
+                </button>
+              ) : (
+                <BarChart3 size={20} className="text-slate-300" />
+              )}
            </div>
            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-              {INITIAL_COST_CENTERS.map(cc => {
+              {costCenters.map(cc => {
                 const data = (costCenterSummary[cc.id] || { in: 0, out: 0 }) as { in: number; out: number };
                 const total = data.in + data.out;
                 if (total === 0 && selectedCCId === 'Todos') return null;
-                const percentageOut = totalOut > 0 ? (data.out / totalOut) * 100 : 0;
+                const budget = Number(cc.monthlyBudget) || 0;
+                const percentageOut = budget > 0
+                  ? Math.min(100, (data.out / budget) * 100)
+                  : (totalOut > 0 ? (data.out / totalOut) * 100 : 0);
                 return (
                   <div key={cc.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-purple-200 transition-all">
                     <div className="flex justify-between items-start mb-3">
@@ -281,7 +301,14 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions, categories }) => {
                           <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{cc.name}</p>
                        </div>
                        <div className="text-right">
-                          <p className="text-xs font-black text-slate-900">R$ {data.out.toLocaleString('pt-BR')}</p>
+                          <p className="text-xs font-black text-slate-900">
+                            R$ {data.out.toLocaleString('pt-BR')}
+                            {budget > 0 && (
+                              <span className="text-[11px] font-bold text-slate-400">
+                                {' '} / Verba R$ {budget.toLocaleString('pt-BR')} ({((data.out / budget) * 100).toFixed(0)}%)
+                              </span>
+                            )}
+                          </p>
                        </div>
                     </div>
                     <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">

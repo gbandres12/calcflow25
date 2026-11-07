@@ -1,4 +1,4 @@
-import { CompanyModulePermissions } from '../types';
+import { CompanyModulePermissions } from '../types.js';
 
 /**
  * Mesma lista de módulos de ALL_TABLES em dataService.ts. Repetida aqui de
@@ -24,7 +24,9 @@ export const PERMISSION_MODULES = [
   'transportadores',
   'crm_leads',
   'stock_yards',
-  'barge_discharges'
+  'barge_discharges',
+  'cost_centers',
+  'purchase_orders'
 ] as const;
 
 export type PermissionModule = typeof PERMISSION_MODULES[number];
@@ -39,8 +41,8 @@ export interface PermissionGroup {
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   { key: 'comercial', label: 'Comercial & Clientes', modules: ['customers', 'sales_orders', 'transportadores', 'crm_leads'] },
   { key: 'producao', label: 'Produção & Fábrica', modules: ['inventory', 'categories'] },
-  { key: 'frota_patio', label: 'Frota, Pátio & Suprimentos', modules: ['store_items', 'machines', 'maintenance_records', 'fuel_records', 'fuel_purchases', 'transfers', 'stock_yards', 'barge_discharges'] },
-  { key: 'financeiro', label: 'Financeiro & Caixa', modules: ['transactions', 'financial_accounts', 'fiscal_config'] },
+  { key: 'frota_patio', label: 'Frota, Pátio & Suprimentos', modules: ['store_items', 'machines', 'maintenance_records', 'fuel_records', 'fuel_purchases', 'transfers', 'stock_yards', 'barge_discharges', 'purchase_orders'] },
+  { key: 'financeiro', label: 'Financeiro & Caixa', modules: ['transactions', 'financial_accounts', 'fiscal_config', 'cost_centers'] },
   { key: 'gestao', label: 'Gestão & Sistema', modules: ['users'] }
 ];
 

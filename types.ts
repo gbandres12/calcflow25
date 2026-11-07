@@ -75,6 +75,17 @@ export interface CostCenter {
   id: string;
   name: string;
   color: string;
+  code?: string;
+  /** Verba mensal padrão designada ao Centro de Custo (R$). */
+  monthlyBudget?: number;
+  /** Ajustes específicos de verba por mês/ano, ex.: { "2026-10": 45000 }. */
+  monthlyOverrides?: Record<string, number>;
+  /** Percentual de alerta (default 80%). */
+  alertThresholdPercent?: number;
+  responsibleName?: string;
+  isActive?: boolean;
+  companyId?: string;
+  updatedAt?: string;
 }
 
 export interface Company {
@@ -459,6 +470,8 @@ export interface Transaction {
   installmentNumber?: number;
   installmentTotal?: number;
   supplierCnpj?: string;
+  purchaseOrderId?: string;
+  purchaseOrderReference?: string;
 }
 
 export type NfeStatus = 'nao_emitida' | 'rascunho' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada';
@@ -860,5 +873,83 @@ export interface CrmLead {
   updatedAt: string;
 }
 
-export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'payables_receivables' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+export type PurchaseOrderStatus =
+  | 'RASCUNHO'
+  | 'EM_COTACAO'
+  | 'AGUARDANDO_APROVACAO'
+  | 'APROVADA'
+  | 'RECEBIDA'
+  | 'CANCELADA';
+
+export type PurchaseOrderPriority = 'NORMAL' | 'ALTA' | 'URGENTE';
+
+export interface PurchaseOrderItem {
+  id: string;
+  description: string;
+  storeItemId?: string;
+  productId?: string;
+  category?: StoreItemCategory | string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  discount?: number;
+  total: number;
+  notes?: string;
+}
+
+export interface PurchaseOrderQuote {
+  id: string;
+  supplierId?: string;
+  supplierName: string;
+  supplierDocument?: string;
+  supplierPhone?: string;
+  totalAmount: number;
+  deliveryDays?: number;
+  paymentTerms?: string;
+  notes?: string;
+  isSelected?: boolean;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  reference: string;
+  date: string;
+  expectedDeliveryDate?: string;
+  status: PurchaseOrderStatus;
+  priority: PurchaseOrderPriority;
+  costCenterId: string;
+  costCenterName?: string;
+  category: string;
+  requesterName: string;
+  supplierId?: string;
+  supplierName: string;
+  supplierDocument?: string;
+  supplierContact?: string;
+  items: PurchaseOrderItem[];
+  quotes?: PurchaseOrderQuote[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  total: number;
+  paymentMethod?: string;
+  installmentsCount?: number;
+  firstDueDate?: string;
+  notes?: string;
+  approvalNotes?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  receivedBy?: string;
+  receivedAt?: string;
+  nfeNumber?: string;
+  /** IDs das transações financeiras geradas no Contas a Pagar ao receber/faturar a OC. */
+  generatedTransactionIds?: string[];
+  /** Indica se já houve integração com o Almoxarifado (store_items). */
+  stockIntegrated?: boolean;
+  companyId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'cost_centers' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'payables_receivables' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
+
 

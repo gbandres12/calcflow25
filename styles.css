@@ -837,7 +837,88 @@ textarea:focus-visible {
 }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd8cf; border-radius: 10px; }
+
+/* Sidebar refinada e corporativa (sem negrito excessivo e sem ser afetada pelos overrides globais) */
+.cf-sidebar {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.cf-sidebar-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #0F2E28;
+}
+
+.cf-sidebar-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: #6B7D74;
+}
+
+.cf-sidebar-group-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #7D8E85;
+}
+
+.cf-sidebar-item {
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+}
+
+.cf-sidebar-item-active {
+  font-weight: 500;
+}
+
+.cf-sidebar-avatar {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.cf-sidebar-user-name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #163C35;
+}
+
+.cf-sidebar-user-role {
+  margin-top: 1px;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: #72827A;
+}
+
+.cf-sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cf-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cf-sidebar-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.cf-sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: #CFDAD3;
+}
 
 /* Legibilidade: tamanhos fixos em px não crescem com a base, então sobem aqui. */
 .text-\[9px\] { font-size: 11px !important; }

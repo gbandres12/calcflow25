@@ -20,7 +20,8 @@ import {
   Category,
   FiscalConfig,
   TransferShipment,
-  StockYard
+  StockYard,
+  PurchaseOrder
 } from './types';
 
 export const DEFAULT_FISCAL_CONFIG: FiscalConfig = {
@@ -158,13 +159,13 @@ export const INITIAL_USERS: User[] = [
 ];
 
 export const INITIAL_COST_CENTERS: CostCenter[] = [
-  { id: 'cc1', name: 'Administrativo & Diretoria', color: '#1E293B' },
-  { id: 'cc2', name: 'Produção / Moinhos & Britagem', color: '#10B981' },
-  { id: 'cc3', name: 'Frota, Pátio & Balança', color: '#F59E0B' },
-  { id: 'cc4', name: 'Comercial & Vendas Agro', color: '#8B5CF6' },
-  { id: 'cc5', name: 'Manutenção Eletromecânica', color: '#EF4444' },
-  { id: 'cc6', name: 'Logística & Carregamento', color: '#0EA5E9' },
-  { id: 'cc7', name: 'Tributos & CFEM Mineral', color: '#64748B' }
+  { id: 'cc1', code: 'CC-01', name: 'Administrativo & Diretoria', color: '#1E293B', monthlyBudget: 35000, alertThresholdPercent: 80, responsibleName: 'Carlos Mendes', isActive: true },
+  { id: 'cc2', code: 'CC-02', name: 'Produção / Moinhos & Britagem', color: '#10B981', monthlyBudget: 95000, alertThresholdPercent: 80, responsibleName: 'Eng. Roberto Albuquerque', isActive: true },
+  { id: 'cc3', code: 'CC-03', name: 'Frota, Pátio & Balança', color: '#F59E0B', monthlyBudget: 65000, alertThresholdPercent: 80, responsibleName: 'Marcos Encarregado', isActive: true },
+  { id: 'cc4', code: 'CC-04', name: 'Comercial & Vendas Agro', color: '#8B5CF6', monthlyBudget: 25000, alertThresholdPercent: 80, responsibleName: 'Mariana Rocha', isActive: true },
+  { id: 'cc5', code: 'CC-05', name: 'Manutenção Eletromecânica', color: '#EF4444', monthlyBudget: 48000, alertThresholdPercent: 80, responsibleName: 'Eng. Roberto Albuquerque', isActive: true },
+  { id: 'cc6', code: 'CC-06', name: 'Logística & Carregamento', color: '#0EA5E9', monthlyBudget: 55000, alertThresholdPercent: 80, responsibleName: 'Marcos Encarregado', isActive: true },
+  { id: 'cc7', code: 'CC-07', name: 'Tributos & CFEM Mineral', color: '#64748B', monthlyBudget: 40000, alertThresholdPercent: 85, responsibleName: 'Carlos Mendes', isActive: true }
 ];
 
 export const INITIAL_ACCOUNTS: FinancialAccount[] = [
@@ -883,4 +884,121 @@ export const INITIAL_STOCK_YARDS: StockYard[] = [
     notes: 'Ponto avançado de distribuição rodoviária e transbordo para produtores da região sul/sudeste.'
   }
 ];
+
+export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
+  {
+    id: 'po-demo-1',
+    reference: 'OC-2026-0001',
+    date: new Date().toISOString().slice(0, 10),
+    expectedDeliveryDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    status: 'APROVADA',
+    priority: 'ALTA',
+    costCenterId: 'cc5',
+    costCenterName: 'Manutenção Eletromecânica',
+    category: 'Peças de Desgaste e Telas',
+    requesterName: 'Eng. Roberto Albuquerque',
+    supplierName: 'Metso Outotec Peças Minerárias Ltda',
+    supplierDocument: '45.112.900/0001-18',
+    supplierContact: '(93) 3522-9100',
+    items: [
+      {
+        id: 'poi-1',
+        description: 'Kit Mandíbulas Manganês Britador Primário',
+        category: 'Peças',
+        quantity: 2,
+        unit: 'JG',
+        unitPrice: 6800,
+        discount: 0,
+        total: 13600
+      },
+      {
+        id: 'poi-2',
+        description: 'Tela Vibratória Aço Mola Malha 4mm',
+        category: 'Peças',
+        quantity: 4,
+        unit: 'UN',
+        unitPrice: 950,
+        discount: 0,
+        total: 3800
+      }
+    ],
+    quotes: [
+      {
+        id: 'q-1',
+        supplierName: 'Metso Outotec Peças Minerárias Ltda',
+        supplierDocument: '45.112.900/0001-18',
+        totalAmount: 17400,
+        deliveryDays: 5,
+        paymentTerms: '28/56 dias (Boleto)',
+        isSelected: true
+      },
+      {
+        id: 'q-2',
+        supplierName: 'AçoForte Fundidos Industriais',
+        supplierDocument: '19.882.400/0001-55',
+        totalAmount: 18900,
+        deliveryDays: 8,
+        paymentTerms: '30 dias',
+        isSelected: false
+      }
+    ],
+    subtotal: 17400,
+    discount: 0,
+    shipping: 0,
+    total: 17400,
+    paymentMethod: 'Boleto Bancário',
+    installmentsCount: 2,
+    firstDueDate: new Date(Date.now() + 28 * 86400000).toISOString().slice(0, 10),
+    notes: 'Reposição preventiva programada para parada de manutenção da britagem.',
+    approvedBy: 'Carlos Mendes (Diretor Geral)',
+    approvedAt: new Date().toISOString(),
+    companyId: 'matriz-demo'
+  },
+  {
+    id: 'po-demo-2',
+    reference: 'OC-2026-0002',
+    date: new Date().toISOString().slice(0, 10),
+    expectedDeliveryDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+    status: 'AGUARDANDO_APROVACAO',
+    priority: 'URGENTE',
+    costCenterId: 'cc3',
+    costCenterName: 'Frota, Pátio & Balança',
+    category: 'Lubrificantes e Graxas Industriais',
+    requesterName: 'Marcos Encarregado (Supervisor)',
+    supplierName: 'Distribuidora Tapajós Lubrificantes',
+    supplierDocument: '08.451.220/0001-90',
+    supplierContact: '(93) 99122-4500',
+    items: [
+      {
+        id: 'poi-3',
+        description: 'Óleo Hidráulico 68 (Tambor 200L)',
+        category: 'Lubrificantes',
+        quantity: 3,
+        unit: 'TB',
+        unitPrice: 2850,
+        discount: 0,
+        total: 8550
+      },
+      {
+        id: 'poi-4',
+        description: 'Graxa Azul Alta Temperatura (Balde 20kg)',
+        category: 'Lubrificantes',
+        quantity: 4,
+        unit: 'BD',
+        unitPrice: 690,
+        discount: 0,
+        total: 2760
+      }
+    ],
+    subtotal: 11310,
+    discount: 310,
+    shipping: 0,
+    total: 11000,
+    paymentMethod: 'PIX',
+    installmentsCount: 1,
+    notes: 'Urgente para revisão das pás carregadeiras CAT 938K e XCMG.',
+    companyId: 'matriz-demo'
+  }
+];
+
 

@@ -21,6 +21,8 @@ const FiscalManagement = lazyWithRetry(() => import('./components/FiscalManageme
 const FiscalConfigView = lazyWithRetry(() => import('./components/FiscalConfigView').then((m) => ({ default: m.FiscalConfigView })));
 const Transportadores = lazyWithRetry(() => import('./components/Transportadores'));
 const CrmKanban = lazyWithRetry(() => import('./components/CrmKanban'));
+const PurchaseOrders = lazyWithRetry(() => import('./components/PurchaseOrders'));
+const CostCenterBudgetDashboard = lazyWithRetry(() => import('./components/CostCenterBudgetDashboard'));
 import ErrorBoundary from './components/ErrorBoundary';
 const TransfersPage = lazyWithRetry(() => import('./components/TransfersPage'));
 const BargeDischargeModal = lazyWithRetry(() => import('./components/BargeDischargeModal'));
@@ -56,7 +58,8 @@ import {
   UserRole,
   CompanyMembership,
   StockYard,
-  BargeDischargeRecord
+  BargeDischargeRecord,
+  PurchaseOrder
 } from './types';
 import {
   INITIAL_COST_CENTERS,
@@ -191,7 +194,8 @@ const App: React.FC = () => {
   }, []);
   
   // App State
-  const [costCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>(INITIAL_COST_CENTERS);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -370,6 +374,8 @@ const App: React.FC = () => {
       setTransfers([]);
       setTransportadores([]);
       setCrmLeads([]);
+      setPurchaseOrders([]);
+      setCostCenters(INITIAL_COST_CENTERS);
     }
     loadedCompanyRef.current = activeCompanyId;
 
@@ -404,7 +410,9 @@ const App: React.FC = () => {
           db.getTable('transportadores', activeCompanyId),
           db.getTable('crm_leads', activeCompanyId),
           db.getTable('stock_yards', activeCompanyId),
-          db.getTable('barge_discharges', activeCompanyId)
+          db.getTable('barge_discharges', activeCompanyId),
+          db.getTable('cost_centers', activeCompanyId),
+          db.getTable('purchase_orders', activeCompanyId)
         ]);
 
         let bundle = await fetchAll();
@@ -418,7 +426,7 @@ const App: React.FC = () => {
           savedOrders, savedMachines, savedStore, 
           savedMaint, savedFuel, savedFuelPurchases, savedAccounts,
           savedCategories, savedUsers, savedTransfers, savedTransportadores, savedCrmLeads,
-          savedStockYards, savedBargeDischarges
+          savedStockYards, savedBargeDischarges, savedCostCenters, savedPurchaseOrders
         ] = bundle;
 
         if (epoch !== dataEpochRef.current) return;
@@ -485,6 +493,31 @@ const App: React.FC = () => {
         setBargeDischarges((prev) => adoptFetched(
           'barge_discharges',
           Array.isArray(savedBargeDischarges) ? savedBargeDischarges.filter((d: any) => d && typeof d === 'object' && d.id) : [],
+          prev
+        ));
+        setCostCenters((prev) => {
+          const validSaved = Array.isArray(savedCostCenters)
+            ? savedCostCenters.filter((c: any) => c && typeof c === 'object' && c.id && c.name)
+            : [];
+          const merged = adoptFetched('cost_centers', validSaved, prev);
+          if (merged.length === 0) return INITIAL_COST_CENTERS;
+          // Garantir que os centros padrão (cc1..cc7) existam com verbas default se não salvos ainda
+          const byId = new Map<string, CostCenter>();
+          INITIAL_COST_CENTERS.forEach((def) => byId.set(def.id, def));
+          merged.forEach((custom) => {
+            const base = byId.get(custom.id);
+            byId.set(custom.id, {
+              ...base,
+              ...custom,
+              monthlyBudget: custom.monthlyBudget ?? base?.monthlyBudget ?? 0,
+              alertThresholdPercent: custom.alertThresholdPercent ?? base?.alertThresholdPercent ?? 80
+            });
+          });
+          return Array.from(byId.values());
+        });
+        setPurchaseOrders((prev) => adoptFetched(
+          'purchase_orders',
+          Array.isArray(savedPurchaseOrders) ? savedPurchaseOrders.filter((p: any) => p && typeof p === 'object' && p.id) : [],
           prev
         ));
 
@@ -791,6 +824,46 @@ const App: React.FC = () => {
   const handleDeleteTransportador = (id: string) => {
     setTransportadores(prev => prev.filter(item => item.id !== id));
     persistDelete('transportadores', id);
+  };
+
+  // Centros de Custo & Verbas
+  const handleSaveCostCenter = (cc: CostCenter) => {
+    const tagged: CostCenter = {
+      ...cc,
+      companyId: activeCompanyId,
+      updatedAt: new Date().toISOString()
+    };
+    setCostCenters((prev) => {
+      const exists = prev.some((item) => item.id === tagged.id);
+      return exists ? prev.map((item) => (item.id === tagged.id ? tagged : item)) : [...prev, tagged];
+    });
+    persistCloud('cost_centers', tagged);
+  };
+
+  const handleDeleteCostCenter = (id: string) => {
+    setCostCenters((prev) => prev.filter((item) => item.id !== id));
+    persistDelete('cost_centers', id);
+  };
+
+  // Ordens de Compra (OC)
+  const handleSavePurchaseOrder = (po: PurchaseOrder) => {
+    const now = new Date().toISOString();
+    const tagged: PurchaseOrder = {
+      ...po,
+      companyId: activeCompanyId,
+      createdAt: po.createdAt || now,
+      updatedAt: now
+    };
+    setPurchaseOrders((prev) => {
+      const exists = prev.some((item) => item.id === tagged.id);
+      return exists ? prev.map((item) => (item.id === tagged.id ? tagged : item)) : [tagged, ...prev];
+    });
+    persistCloud('purchase_orders', tagged);
+  };
+
+  const handleDeletePurchaseOrder = (id: string) => {
+    setPurchaseOrders((prev) => prev.filter((item) => item.id !== id));
+    persistDelete('purchase_orders', id);
   };
 
   // Pátios de Estoque
@@ -2153,10 +2226,45 @@ const App: React.FC = () => {
               onDelete={handleDeleteTransportador}
             />
           )}
+          {currentView === 'purchases' && (
+            <PurchaseOrders
+              purchaseOrders={purchaseOrders}
+              costCenters={costCenters}
+              categories={categories}
+              customers={customers}
+              storeItems={storeItems}
+              inventory={inventory}
+              transactions={transactions}
+              accounts={accounts}
+              currentUser={currentUser}
+              company={operatingCompany}
+              onSavePurchaseOrder={handleSavePurchaseOrder}
+              onDeletePurchaseOrder={handleDeletePurchaseOrder}
+              onAddTransaction={handleAddTransaction}
+              onUpsertStoreItem={(item) => {
+                const exists = storeItems.some((s) => s.id === item.id);
+                if (exists) handleUpdateStoreItem(item);
+                else handleAddStoreItem(item);
+              }}
+              onNavigate={navigateTo}
+            />
+          )}
+          {currentView === 'cost_centers' && (
+            <CostCenterBudgetDashboard
+              costCenters={costCenters}
+              transactions={transactions}
+              purchaseOrders={purchaseOrders}
+              onSaveCostCenter={handleSaveCostCenter}
+              onDeleteCostCenter={handleDeleteCostCenter}
+              onNavigate={navigateTo}
+            />
+          )}
           {currentView === 'cashflow' && (
             <CashFlow 
               transactions={transactions} 
-              categories={categories} 
+              categories={categories}
+              costCenters={costCenters}
+              onOpenBudgetDashboard={() => navigateTo('cost_centers')}
             />
           )}
           {currentView === 'daily' && (

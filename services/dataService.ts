@@ -13,7 +13,9 @@ import {
   INFLOW_CATEGORIES,
   OUTFLOW_CATEGORIES,
   DEFAULT_FISCAL_CONFIG,
-  INITIAL_STOCK_YARDS
+  INITIAL_STOCK_YARDS,
+  INITIAL_COST_CENTERS,
+  INITIAL_PURCHASE_ORDERS
 } from '../constants';
 import { User, UserRole, CompanyMembership, StockYard, BargeDischargeOperation } from '../types';
 import { getSupabase } from './supabaseClient';
@@ -165,7 +167,9 @@ const DEMO_TABLE_DATA: Record<string, any[]> = {
     ...OUTFLOW_CATEGORIES.map((name, i) => ({ id: `cat-out-${i + 1}`, name, type: 'OUTFLOW' as const }))
   ],
   stock_yards: INITIAL_STOCK_YARDS,
-  barge_discharges: []
+  barge_discharges: [],
+  cost_centers: INITIAL_COST_CENTERS,
+  purchase_orders: INITIAL_PURCHASE_ORDERS
 };
 
 // Coleções lógicas no JSONB public.app_records. Não dual-write nas tabelas
@@ -188,7 +192,9 @@ export const ALL_TABLES = [
   'transportadores',
   'crm_leads',
   'stock_yards',
-  'barge_discharges'
+  'barge_discharges',
+  'cost_centers',
+  'purchase_orders'
 ];
 
 export const resolveCompanyKey = (companyId?: string | null): string => {
@@ -225,6 +231,9 @@ export const getCleanStarterData = (tableName: string): any[] => {
   }
   if (tableName === 'stock_yards') {
     return INITIAL_STOCK_YARDS;
+  }
+  if (tableName === 'cost_centers') {
+    return INITIAL_COST_CENTERS;
   }
   return [];
 };

@@ -23,6 +23,8 @@ export const ROUTES: RouteConfig[] = [
   { view: 'transportadores', path: '/transportadores', title: 'Transportadores' },
   { view: 'fleet', path: '/frota', aliases: ['/fleet'], title: 'Frota e Maquinário' },
   { view: 'fuel', path: '/combustivel', aliases: ['/fuel'], title: 'Combustível' },
+  { view: 'purchases', path: '/ordens-compra', aliases: ['/compras', '/oc', '/purchases'], title: 'Ordens de Compra' },
+  { view: 'cost_centers', path: '/verbas-centros-custo', aliases: ['/centros-custo', '/orcamento-centros-custo', '/verbas'], title: 'Verbas & Centros de Custo' },
   { view: 'daily', path: '/caixa', aliases: ['/diario', '/movimentacao-diaria', '/daily'], title: 'Movimentação Diária' },
   { view: 'payables_receivables', path: '/contas-pagar-receber', aliases: ['/projecao', '/contas-a-pagar', '/contas-a-receber', '/payables'], title: 'Contas a Pagar & Receber' },
   { view: 'transactions', path: '/lancamentos', aliases: ['/transacoes', '/extrato', '/transactions'], title: 'Lançamentos / Extrato' },

@@ -48,3 +48,16 @@ export const nextTransferCode = (transfers: { code?: string }[], year = new Date
   }
   return `${prefix}${(max + 1).toString().padStart(3, '0')}`;
 };
+
+export const nextPurchaseOrderReference = (purchaseOrders: { reference?: string }[], year = new Date().getFullYear()): string => {
+  const prefix = `OC-${year}-`;
+  let max = 0;
+  for (const po of purchaseOrders) {
+    const ref = po.reference || '';
+    if (!ref.startsWith(prefix)) continue;
+    const n = parseInt(ref.slice(prefix.length), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}${(max + 1).toString().padStart(4, '0')}`;
+};
+

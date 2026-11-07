@@ -17,6 +17,8 @@ describe('roteamento e sincronização de URL', () => {
     assert.equal(getViewPath('milling'), '/moagem');
     assert.equal(getViewPath('yard'), '/patio');
     assert.equal(getViewPath('transfers'), '/transferencias');
+    assert.equal(getViewPath('purchases'), '/ordens-compra');
+    assert.equal(getViewPath('cost_centers'), '/verbas-centros-custo');
   });
 
   it('gera títulos amigáveis para cada tela do sistema', () => {

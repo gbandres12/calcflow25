@@ -18,6 +18,8 @@ const VIEW_LABELS: Record<string, string> = {
   transportadores: 'Transportadores',
   fleet: 'Frota e Maquinário',
   fuel: 'Combustível',
+  purchases: 'Ordens de Compra',
+  cost_centers: 'Verbas & Centros de Custo',
   daily: 'Movimentação Diária',
   transactions: 'Lançamentos / Extrato',
   cashflow: 'Fluxo de Caixa',
