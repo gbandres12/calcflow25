@@ -516,4 +516,23 @@ describe('agente: comandos determinísticos, o fallback sem IA', () => {
     const reply = await runCommand('/inventar', makeContext(fakeRepo(seedData())));
     assert.match(reply!.text, /\/saldo/);
   });
+
+  it('botões rápidos do teclado (🛒 Novo Pedido, 📄 Emitir NF-e, 📥 Contas a Receber) respondem direto com botões inline', async () => {
+    const ctx = makeContext(fakeRepo(seedNfe()));
+
+    const novoPedido = await runCommand('🛒 Novo Pedido', ctx);
+    assert.ok(novoPedido);
+    assert.match(novoPedido!.text, /Vamos lançar um pedido de venda/);
+    assert.ok(novoPedido!.buttons?.length);
+
+    const emitirNfe = await runCommand('📄 Emitir NF-e', ctx);
+    assert.ok(emitirNfe);
+    assert.match(emitirNfe!.text, /Emissão de NF-e/);
+    assert.equal(emitirNfe!.buttons?.[0]?.[0]?.callback_data, 'cmd:nfe:PED-2026-0001');
+
+    const receber = await runCommand('📥 Contas a Receber', makeContext(fakeRepo(seedData())));
+    assert.ok(receber);
+    assert.match(receber!.text, /tx-1/);
+    assert.match(receber!.buttons?.[0]?.[0]?.callback_data || '', /^pay:tx-1:/);
+  });
 });

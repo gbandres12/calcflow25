@@ -28,16 +28,60 @@ export interface InlineButton {
   callback_data: string;
 }
 
+/**
+ * Teclado fixo na parte inferior do Telegram (ReplyKeyboardMarkup).
+ * Permite ao operador acionar as funções principais com 1 toque, sem digitar.
+ */
+export const QUICK_REPLY_KEYBOARD = [
+  [{ text: '🛒 Novo Pedido' }, { text: '📄 Emitir NF-e' }],
+  [{ text: '💰 Saldo / Caixa' }, { text: '📊 Resumo do Dia' }],
+  [{ text: '📥 Contas a Receber' }, { text: '📦 Estoque' }],
+  [{ text: '📋 Últimas Vendas' }, { text: '❓ Ajuda / Menu' }]
+];
+
+export const BOT_MENU_COMMANDS = [
+  { command: 'novo_pedido', description: 'Criar novo pedido de venda' },
+  { command: 'nfe', description: 'Emitir NF-e de pedido ou avulsa' },
+  { command: 'saldo', description: 'Consultar saldo das contas e caixa' },
+  { command: 'resumo', description: 'Resumo financeiro de hoje' },
+  { command: 'receber', description: 'Parcelas em aberto para dar baixa' },
+  { command: 'estoque', description: 'Posição atual do estoque e preços' },
+  { command: 'vendas', description: 'Últimos pedidos de venda' },
+  { command: 'danfe', description: 'Baixar PDF do DANFE de uma NF-e' },
+  { command: 'ajuda', description: 'Ver atalhos e instruções' }
+];
+
+let menuCommandsConfigured = false;
+
+export async function ensureBotMenuCommands(): Promise<void> {
+  if (menuCommandsConfigured) return;
+  menuCommandsConfigured = true;
+  try {
+    await callApi('setMyCommands', { commands: BOT_MENU_COMMANDS });
+  } catch {
+    menuCommandsConfigured = false;
+  }
+}
+
 export async function sendMessage(
   chatId: string | number,
   text: string,
   buttons?: InlineButton[][]
 ): Promise<void> {
   // Sem parse_mode de propósito: nome de cliente com _ ou * quebraria a mensagem.
+  const replyMarkup = buttons?.length
+    ? { inline_keyboard: buttons }
+    : {
+        keyboard: QUICK_REPLY_KEYBOARD,
+        resize_keyboard: true,
+        is_persistent: true,
+        input_field_placeholder: 'Toque num botão abaixo ou escreva/mande áudio...'
+      };
+
   await callApi('sendMessage', {
     chat_id: chatId,
     text: text.slice(0, 4000),
-    reply_markup: buttons?.length ? { inline_keyboard: buttons } : undefined
+    reply_markup: replyMarkup
   });
 }
 

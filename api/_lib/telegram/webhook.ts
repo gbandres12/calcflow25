@@ -1,8 +1,10 @@
 import { getTable, upsert } from '../erpRepository.js';
 import {
+  InlineButton,
   answerCallbackQuery,
   downloadFileAsBase64,
   editMessageReplyMarkup,
+  ensureBotMenuCommands,
   sendChatAction,
   sendDocument,
   sendMessage
@@ -230,10 +232,11 @@ async function deliver(
     text: string;
     pending?: { action: string; payload: any; summary: string };
     document?: { filename: string; bytes: Uint8Array; caption: string };
+    buttons?: InlineButton[][];
   }
 ): Promise<void> {
   if (!reply.pending) {
-    await sendMessage(chatId, reply.text);
+    await sendMessage(chatId, reply.text, reply.buttons);
     if (reply.document) {
       await sendChatAction(chatId, 'upload_document');
       await sendDocument(chatId, reply.document, reply.document.caption);
@@ -284,21 +287,57 @@ async function deliver(
 async function handleCallback(callback: any): Promise<void> {
   const chatId = String(callback.message?.chat?.id || '');
   const data = String(callback.data || '');
-  const [verb, pendingId] = data.split(':');
+  const parts = data.split(':');
+  const verb = parts[0];
+  const rest = parts.slice(1).join(':');
 
-  if (!chatId || !pendingId) {
+  if (!chatId || !verb || !rest) {
     await answerCallbackQuery(callback.id, 'Não entendi esse botão.');
     return;
-  }
-
-  if (callback.message?.message_id) {
-    await editMessageReplyMarkup(chatId, callback.message.message_id);
   }
 
   const link = await getLink(chatId);
   if (!link) {
     await answerCallbackQuery(callback.id, 'Chat não vinculado.');
     return;
+  }
+
+  await touchLink(chatId);
+
+  // Atalhos rápidos inline (ex: cmd:nfe:PED-2026-0064, cmd:novo_pedido, pay:tx-123:160.00)
+  if (verb === 'cmd' || verb === 'pay') {
+    await answerCallbackQuery(callback.id, 'Carregando...');
+    const ctx = buildContext(link);
+    const agent = await loadAgentModules();
+
+    let cmdText = '';
+    if (verb === 'cmd') {
+      const [subCmd, ...argParts] = rest.split(':');
+      const arg = argParts.join(':').trim();
+      cmdText = arg ? `/${subCmd} ${arg}` : `/${subCmd}`;
+    } else {
+      const [parcelaId, amount] = rest.split(':');
+      cmdText = `/baixar ${parcelaId} ${amount}`;
+    }
+
+    const reply = await agent.runCommand(cmdText, ctx);
+    if (reply) {
+      await saveChatTurn({
+        chatId,
+        companyId: link.companyId,
+        userId: link.userId,
+        userText: cmdText,
+        assistantText: reply.text
+      });
+      await deliver(chatId, link, reply);
+    }
+    return;
+  }
+
+  const pendingId = rest;
+
+  if (callback.message?.message_id) {
+    await editMessageReplyMarkup(chatId, callback.message.message_id);
   }
 
   const pending = await consumePendingAction(pendingId, chatId);
@@ -338,6 +377,41 @@ function isAffirmative(text: string): boolean {
   );
 }
 
+function buildPostActionButtons(action: string, message: string): InlineButton[][] | undefined {
+  const refMatch = String(message || '').match(/\b((?:PED|AVU)-\d{4}-\d{4,})\b/);
+  const orderRef = refMatch ? refMatch[1] : null;
+
+  if (action === 'criar_pedido_venda' && orderRef) {
+    return [
+      [
+        { text: `📄 Emitir NF-e (${orderRef})`, callback_data: `cmd:nfe:${orderRef}`.slice(0, 64) },
+        { text: `💵 Dar baixa (${orderRef})`, callback_data: `cmd:receber:${orderRef}`.slice(0, 64) }
+      ],
+      [{ text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' }]
+    ];
+  }
+
+  if ((action === 'emitir_nfe_pedido' || action === 'emitir_nfe_avulsa') && orderRef) {
+    return [
+      [
+        { text: `📥 Baixar DANFE (${orderRef})`, callback_data: `cmd:danfe:${orderRef}`.slice(0, 64) },
+        { text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' }
+      ]
+    ];
+  }
+
+  if (action === 'registrar_recebimento' || action === 'registrar_abatimento') {
+    return [
+      [
+        { text: '📥 Ver Contas a Receber', callback_data: 'cmd:receber' },
+        { text: '💰 Ver Saldo / Caixa', callback_data: 'cmd:saldo' }
+      ]
+    ];
+  }
+
+  return undefined;
+}
+
 async function fulfillPending(chatId: string, link: TelegramLink, pending: { action: string; payload: any }): Promise<void> {
   try {
     const isNfe = pending.action === 'emitir_nfe_pedido' || pending.action === 'emitir_nfe_avulsa';
@@ -355,7 +429,8 @@ async function fulfillPending(chatId: string, link: TelegramLink, pending: { act
       payload: { ...pending.payload, records: result.records },
       result: 'confirmado'
     });
-    await sendMessage(chatId, result.message);
+    const followUpButtons = buildPostActionButtons(pending.action, result.message);
+    await sendMessage(chatId, result.message, followUpButtons);
     if (result.document) {
       await sendChatAction(chatId, 'upload_document');
       try {
@@ -405,6 +480,7 @@ export default async function handler(req: any, res: any) {
   const update = req.body || {};
 
   try {
+    ensureBotMenuCommands().catch(() => undefined);
     const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
     const fresh = await claimUpdate(Number(update.update_id), chatId ? String(chatId) : undefined);
     if (!fresh) {
