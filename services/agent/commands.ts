@@ -22,35 +22,39 @@ export interface CommandReply {
 }
 
 export const HELP_TEXT = [
-  'Posso responder em texto, áudio ou foto — ou você pode usar os botões rápidos aqui embaixo:',
+  'Posso responder em texto, áudio ou foto — ou você pode tocar nos botões aqui embaixo:',
   '',
-  '• 🛒 Novo Pedido — lança pedido de venda e gera o PDF',
-  '• 📄 Emitir NF-e — emite nota de um pedido ou nota avulsa',
-  '• 💰 Saldo / Caixa — saldo atual das contas',
-  '• 📊 Resumo do Dia — entradas, saídas e resultado de hoje',
-  '• 📥 Contas a Receber — parcelas em aberto com botão de baixa rápida',
-  '• 📦 Estoque — posição atual dos produtos',
-  '• 📋 Últimas Vendas — últimos pedidos lançados',
+  '• Novo Pedido — lança pedido de venda e gera o PDF',
+  '• Consultar Pedido — lista os últimos pedidos lançados',
+  '• Emitir NF-e — emite nota de um pedido ou nota avulsa',
+  '• Estoque — posição atual dos produtos',
+  '• Caixa hoje — entradas, saídas de hoje e saldo das contas',
+  '• Cancelar — cancela a operação atual',
   '',
-  'Comandos diretos por texto:',
-  '/novo_pedido · /nfe <pedido> · /danfe <pedido> · /saldo · /resumo · /receber · /estoque · /vendas · /conferir'
+  'Comandos adicionais:',
+  '/saldo · /receber · /baixar <id> <valor> · /abater <id> <valor> · /danfe <pedido> · /conferir'
 ].join('\n');
 
 const SHORTCUT_MAP: Record<string, string> = {
   'novo pedido': '/novo_pedido',
   'criar pedido': '/novo_pedido',
+  'consultar pedido': '/vendas',
+  'consultar pedidos': '/vendas',
+  'ultimas vendas': '/vendas',
+  'vendas': '/vendas',
   'emitir nfe': '/nfe',
   'emitir nf e': '/nfe',
   'emitir nota': '/nfe',
+  'estoque': '/estoque',
+  'caixa hoje': '/caixa',
+  'caixa': '/caixa',
   'saldo caixa': '/saldo',
   'saldo': '/saldo',
   'resumo do dia': '/resumo',
   'resumo': '/resumo',
   'contas a receber': '/receber',
   'receber': '/receber',
-  'estoque': '/estoque',
-  'ultimas vendas': '/vendas',
-  'vendas': '/vendas',
+  'cancelar': '/cancelar',
   'ajuda menu': '/ajuda',
   'ajuda': '/ajuda',
   'menu': '/ajuda'
@@ -133,6 +137,33 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
         };
       }
 
+      case '/cancelar':
+        return {
+          text: 'Operação cancelada. Escolha um botão abaixo ou me mande uma mensagem.'
+        };
+
+      case '/caixa': {
+        const [resumoOutcome, caixaOutcome] = await Promise.all([
+          executeTool('resumo_do_dia', {}, ctx),
+          executeTool('consultar_caixa', {}, ctx)
+        ]);
+        const resumo = dataOf(resumoOutcome);
+        const caixa = dataOf(caixaOutcome);
+        const contasLines = caixa.contas.map((conta: any) => `• ${conta.nome}: ${formatBRL(conta.saldo)}`);
+        return {
+          text: [
+            `Caixa hoje (${resumo.data}):`,
+            `Entradas: ${formatBRL(resumo.entradas)}`,
+            `Saídas: ${formatBRL(resumo.saidas)}`,
+            `Abatimentos: ${formatBRL(resumo.abatimentos)}`,
+            `Resultado do dia: ${formatBRL(resumo.resultado)}`,
+            '',
+            `Saldo total das contas: ${formatBRL(caixa.saldoTotal)}`,
+            ...contasLines
+          ].join('\n')
+        };
+      }
+
       case '/saldo': {
         const outcome = await executeTool('consultar_caixa', {}, ctx);
         const data = dataOf(outcome);
@@ -158,28 +189,13 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             }\n  vence ${parcela.vencimento || 'sem data'} · id ${parcela.parcelaId}`
         );
 
-        const buttons: CommandInlineButton[][] = data.parcelas
-          .slice(0, 5)
-          .filter((p: any) => p.parcelaId && Number(p.saldo) > 0)
-          .map((p: any) => {
-            const labelRef = p.pedido || (p.cliente ? String(p.cliente).split(' ')[0] : p.parcelaId);
-            const callbackData = `pay:${p.parcelaId}:${Number(p.saldo).toFixed(2)}`;
-            return [
-              {
-                text: `✅ Baixar ${formatBRL(p.saldo)} · ${labelRef}`.slice(0, 60),
-                callback_data: callbackData.slice(0, 64)
-              }
-            ];
-          });
-
         return {
           text: [
             `${data.quantidade} parcela(s) em aberto, total ${formatBRL(data.total)}:`,
             ...lines,
             '',
-            'Toque num botão abaixo para dar baixa total ou envie: /baixar <id> <valor>'
-          ].join('\n'),
-          buttons: buttons.length ? buttons : undefined
+            'Para lançar: /baixar <id> <valor> ou /abater <id> <valor>'
+          ].join('\n')
         };
       }
 
@@ -217,22 +233,13 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
             `• ${pedido.referencia} — ${pedido.cliente || 'Cliente'} — ${formatBRL(pedido.total)} (${pedido.status})`
         );
 
-        const buttons: CommandInlineButton[][] = data.pedidos
-          .slice(0, 4)
-          .filter((p: any) => p.referencia)
-          .map((p: any) => [
-            { text: `📄 NF-e ${p.referencia}`, callback_data: `cmd:nfe:${p.referencia}`.slice(0, 64) },
-            { text: `💵 Receber ${p.referencia}`, callback_data: `cmd:receber:${p.referencia}`.slice(0, 64) }
-          ]);
-
         return {
           text: [
             'Últimos pedidos de venda:',
             ...lines,
             '',
-            'Toque num atalho abaixo para emitir NF-e ou consultar recebimento do pedido:'
-          ].join('\n'),
-          buttons: buttons.length ? buttons : undefined
+            'Qual o número do pedido? Ex: PED-2026-0064 (ou envie /nfe PED-2026-0064 para emitir nota)'
+          ].join('\n')
         };
       }
 
@@ -267,34 +274,30 @@ export async function runCommand(text: string, ctx: AgentContext): Promise<Comma
 
       case '/nfe': {
         if (!argument) {
-          let orderButtons: CommandInlineButton[][] = [];
+          let recentLines: string[] = [];
           try {
             const salesOutcome = await executeTool('listar_vendas', { limite: 5 }, ctx);
             const salesData = dataOf(salesOutcome);
-            if (Array.isArray(salesData?.pedidos)) {
-              orderButtons = salesData.pedidos
-                .slice(0, 4)
-                .filter((p: any) => p.referencia && p.status !== 'Cancelado')
-                .map((p: any) => [
-                  {
-                    text: `📄 Emitir NF-e · ${p.referencia} (${String(p.cliente || '').split(' ')[0] || 'Cliente'})`.slice(0, 60),
-                    callback_data: `cmd:nfe:${p.referencia}`.slice(0, 64)
-                  }
-                ]);
+            if (Array.isArray(salesData?.pedidos) && salesData.pedidos.length) {
+              recentLines = [
+                '',
+                'Últimos pedidos:',
+                ...salesData.pedidos
+                  .slice(0, 5)
+                  .filter((p: any) => p.referencia && p.status !== 'Cancelado')
+                  .map((p: any) => `• ${p.referencia} — ${p.cliente || 'Cliente'} (${formatBRL(p.total)})`)
+              ];
             }
           } catch {
             // Segue apenas com instruções se falhar listagem
           }
 
-          orderButtons.push([{ text: '➕ Emitir NF-e Avulsa (sem pedido)', callback_data: 'cmd:nfe_avulsa' }]);
-
           return {
             text: [
-              'Emissão de NF-e:',
-              '• Toque em um dos pedidos recentes abaixo para preparar a NF-e na hora;',
-              '• Ou me diga em texto/áudio: "Quero emitir uma nota fiscal pro cliente X" que montamos passo a passo.'
-            ].join('\n'),
-            buttons: orderButtons
+              'Qual o número do pedido para emitir a NF-e? Ex: /nfe PED-2026-0064',
+              'Ou me diga em texto/áudio: "Quero emitir uma nota fiscal pro cliente X" que montamos passo a passo.',
+              ...recentLines
+            ].join('\n')
           };
         }
         const outcome = await executeTool('emitir_nfe_pedido', { pedidoRef: argument }, ctx);

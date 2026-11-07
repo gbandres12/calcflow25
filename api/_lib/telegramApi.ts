@@ -29,24 +29,30 @@ export interface InlineButton {
 }
 
 /**
- * Teclado fixo na parte inferior do Telegram (ReplyKeyboardMarkup).
- * Permite ao operador acionar as funções principais com 1 toque, sem digitar.
+ * Teclado fixo na parte inferior do Telegram (ReplyKeyboardMarkup),
+ * no formato 3x2 limpo (idêntico ao modelo operacional solicitado).
  */
 export const QUICK_REPLY_KEYBOARD = [
-  [{ text: '🛒 Novo Pedido' }, { text: '📄 Emitir NF-e' }],
-  [{ text: '💰 Saldo / Caixa' }, { text: '📊 Resumo do Dia' }],
-  [{ text: '📥 Contas a Receber' }, { text: '📦 Estoque' }],
-  [{ text: '📋 Últimas Vendas' }, { text: '❓ Ajuda / Menu' }]
+  [{ text: 'Novo Pedido' }, { text: 'Consultar Pedido' }],
+  [{ text: 'Emitir NF-e' }, { text: 'Estoque' }],
+  [{ text: 'Caixa hoje' }, { text: 'Cancelar' }]
 ];
+
+export const DEFAULT_KEYBOARD_MARKUP = {
+  keyboard: QUICK_REPLY_KEYBOARD,
+  resize_keyboard: true,
+  is_persistent: true,
+  one_time_keyboard: false,
+  input_field_placeholder: 'Escrever mensagem...'
+};
 
 export const BOT_MENU_COMMANDS = [
   { command: 'novo_pedido', description: 'Criar novo pedido de venda' },
+  { command: 'vendas', description: 'Consultar últimos pedidos' },
   { command: 'nfe', description: 'Emitir NF-e de pedido ou avulsa' },
-  { command: 'saldo', description: 'Consultar saldo das contas e caixa' },
-  { command: 'resumo', description: 'Resumo financeiro de hoje' },
+  { command: 'estoque', description: 'Posição atual do estoque' },
+  { command: 'caixa', description: 'Resumo e saldo do caixa hoje' },
   { command: 'receber', description: 'Parcelas em aberto para dar baixa' },
-  { command: 'estoque', description: 'Posição atual do estoque e preços' },
-  { command: 'vendas', description: 'Últimos pedidos de venda' },
   { command: 'danfe', description: 'Baixar PDF do DANFE de uma NF-e' },
   { command: 'ajuda', description: 'Ver atalhos e instruções' }
 ];
@@ -69,14 +75,7 @@ export async function sendMessage(
   buttons?: InlineButton[][]
 ): Promise<void> {
   // Sem parse_mode de propósito: nome de cliente com _ ou * quebraria a mensagem.
-  const replyMarkup = buttons?.length
-    ? { inline_keyboard: buttons }
-    : {
-        keyboard: QUICK_REPLY_KEYBOARD,
-        resize_keyboard: true,
-        is_persistent: true,
-        input_field_placeholder: 'Toque num botão abaixo ou escreva/mande áudio...'
-      };
+  const replyMarkup = buttons?.length ? { inline_keyboard: buttons } : DEFAULT_KEYBOARD_MARKUP;
 
   await callApi('sendMessage', {
     chat_id: chatId,
@@ -99,6 +98,7 @@ export async function sendDocument(
     file.filename
   );
   if (caption) form.append('caption', caption.slice(0, 1024));
+  form.append('reply_markup', JSON.stringify(DEFAULT_KEYBOARD_MARKUP));
 
   const response = await fetch(`${API_BASE}/bot${token}/sendDocument`, {
     method: 'POST',

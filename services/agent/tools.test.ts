@@ -517,22 +517,32 @@ describe('agente: comandos determinísticos, o fallback sem IA', () => {
     assert.match(reply!.text, /\/saldo/);
   });
 
-  it('botões rápidos do teclado (🛒 Novo Pedido, 📄 Emitir NF-e, 📥 Contas a Receber) respondem direto com botões inline', async () => {
+  it('botões rápidos do teclado 3x2 (Novo Pedido, Consultar Pedido, Emitir NF-e, Estoque, Caixa hoje, Cancelar) respondem direto sem sobrescrever o ReplyKeyboardMarkup', async () => {
     const ctx = makeContext(fakeRepo(seedNfe()));
 
-    const novoPedido = await runCommand('🛒 Novo Pedido', ctx);
+    const novoPedido = await runCommand('Novo Pedido', ctx);
     assert.ok(novoPedido);
     assert.match(novoPedido!.text, /Vamos lançar um pedido de venda/);
     assert.equal(novoPedido!.buttons, undefined);
 
-    const emitirNfe = await runCommand('📄 Emitir NF-e', ctx);
-    assert.ok(emitirNfe);
-    assert.match(emitirNfe!.text, /Emissão de NF-e/);
-    assert.equal(emitirNfe!.buttons?.[0]?.[0]?.callback_data, 'cmd:nfe:PED-2026-0001');
+    const consultarPedido = await runCommand('Consultar Pedido', ctx);
+    assert.ok(consultarPedido);
+    assert.match(consultarPedido!.text, /PED-2026-0001/);
+    assert.equal(consultarPedido!.buttons, undefined);
 
-    const receber = await runCommand('📥 Contas a Receber', makeContext(fakeRepo(seedData())));
-    assert.ok(receber);
-    assert.match(receber!.text, /tx-1/);
-    assert.match(receber!.buttons?.[0]?.[0]?.callback_data || '', /^pay:tx-1:/);
+    const emitirNfe = await runCommand('Emitir NF-e', ctx);
+    assert.ok(emitirNfe);
+    assert.match(emitirNfe!.text, /PED-2026-0001/);
+    assert.equal(emitirNfe!.buttons, undefined);
+
+    const caixaHoje = await runCommand('Caixa hoje', makeContext(fakeRepo(seedData())));
+    assert.ok(caixaHoje);
+    assert.match(caixaHoje!.text, /Caixa hoje/);
+    assert.match(caixaHoje!.text, /Saldo total das contas/);
+    assert.equal(caixaHoje!.buttons, undefined);
+
+    const cancelar = await runCommand('Cancelar', ctx);
+    assert.ok(cancelar);
+    assert.match(cancelar!.text, /Operação cancelada/);
   });
 });

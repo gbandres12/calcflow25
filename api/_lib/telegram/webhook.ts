@@ -16,6 +16,7 @@ import {
   consumePairingCode,
   consumePendingAction,
   getLink,
+  listAllActiveLinks,
   loadChatHistory,
   saveChatTurn,
   savePendingAction,
@@ -165,6 +166,22 @@ async function handleMessage(message: any): Promise<void> {
 
   await touchLink(chatId);
   const ctx = buildContext(link);
+
+  if (isCancel(text)) {
+    const pending = await consumeLatestPending(chatId).catch(() => null);
+    if (pending) {
+      await writeAudit({
+        chatId,
+        companyId: link.companyId,
+        userId: link.userId,
+        action: pending.action,
+        payload: pending.payload,
+        result: 'cancelado'
+      });
+    }
+    await sendMessage(chatId, 'Operação cancelada. Escolha um botão abaixo ou envie uma mensagem.');
+    return;
+  }
 
   if (isAffirmative(text)) {
     const pending = await consumeLatestPending(chatId);
@@ -365,6 +382,16 @@ async function handleCallback(callback: any): Promise<void> {
   await fulfillPending(chatId, link, pending);
 }
 
+function isCancel(text: string): boolean {
+  const clean = String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s/]/g, '')
+    .trim();
+  return /^(cancelar|\/cancelar|cancela)$/.test(clean);
+}
+
 function isAffirmative(text: string): boolean {
   const clean = String(text || '')
     .toLowerCase()
@@ -375,41 +402,6 @@ function isAffirmative(text: string): boolean {
   return /^(ok|sim|s|pode|fechou|isso|confirmo|confirmado|confirma|pode confirmar|pode mandar|manda|isso mesmo|pode gravar)$/.test(
     clean
   );
-}
-
-function buildPostActionButtons(action: string, message: string): InlineButton[][] | undefined {
-  const refMatch = String(message || '').match(/\b((?:PED|AVU)-\d{4}-\d{4,})\b/);
-  const orderRef = refMatch ? refMatch[1] : null;
-
-  if (action === 'criar_pedido_venda' && orderRef) {
-    return [
-      [
-        { text: `📄 Emitir NF-e (${orderRef})`, callback_data: `cmd:nfe:${orderRef}`.slice(0, 64) },
-        { text: `💵 Dar baixa (${orderRef})`, callback_data: `cmd:receber:${orderRef}`.slice(0, 64) }
-      ],
-      [{ text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' }]
-    ];
-  }
-
-  if ((action === 'emitir_nfe_pedido' || action === 'emitir_nfe_avulsa') && orderRef) {
-    return [
-      [
-        { text: `📥 Baixar DANFE (${orderRef})`, callback_data: `cmd:danfe:${orderRef}`.slice(0, 64) },
-        { text: '🛒 Novo Pedido', callback_data: 'cmd:novo_pedido' }
-      ]
-    ];
-  }
-
-  if (action === 'registrar_recebimento' || action === 'registrar_abatimento') {
-    return [
-      [
-        { text: '📥 Ver Contas a Receber', callback_data: 'cmd:receber' },
-        { text: '💰 Ver Saldo / Caixa', callback_data: 'cmd:saldo' }
-      ]
-    ];
-  }
-
-  return undefined;
 }
 
 async function fulfillPending(chatId: string, link: TelegramLink, pending: { action: string; payload: any }): Promise<void> {
@@ -429,8 +421,7 @@ async function fulfillPending(chatId: string, link: TelegramLink, pending: { act
       payload: { ...pending.payload, records: result.records },
       result: 'confirmado'
     });
-    const followUpButtons = buildPostActionButtons(pending.action, result.message);
-    await sendMessage(chatId, result.message, followUpButtons);
+    await sendMessage(chatId, result.message);
     if (result.document) {
       await sendChatAction(chatId, 'upload_document');
       try {
@@ -462,11 +453,32 @@ async function fulfillPending(chatId: string, link: TelegramLink, pending: { act
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     await ensureBotMenuCommands().catch(() => undefined);
+    const shouldPush =
+      String(req.query?.push_keyboard || '') === '1' || String(req.url || '').includes('push_keyboard=1');
+
+    let pushedChats = 0;
+    if (shouldPush) {
+      try {
+        const links = await listAllActiveLinks();
+        const uniqueChatIds = Array.from(new Set(links.map((l) => l.chatId).filter(Boolean)));
+        for (const chatId of uniqueChatIds) {
+          await sendMessage(
+            chatId,
+            'Menu rápido ativado! Use os botões abaixo (Novo Pedido, Consultar Pedido, Emitir NF-e, Estoque, Caixa hoje ou Cancelar) para acessar mais rápido.'
+          );
+          pushedChats += 1;
+        }
+      } catch (err: any) {
+        console.warn('[TELEGRAM] Falha ao enviar teclado aos chats ativos:', err?.message);
+      }
+    }
+
     return res.status(200).json({
       status: 'ok',
       service: 'CalcárioFlow ERP - Agente Telegram',
       writes: writesEnabled() ? 'habilitadas' : 'somente consulta',
       quickButtons: true,
+      pushedChats: shouldPush ? pushedChats : undefined,
       timestamp: new Date().toISOString()
     });
   }

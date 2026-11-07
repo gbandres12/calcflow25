@@ -162,6 +162,18 @@ export async function listLinks(companyId: string): Promise<(TelegramLink & { cr
   }));
 }
 
+export async function listAllActiveLinks(): Promise<TelegramLink[]> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('telegram_links')
+    .select('*')
+    .is('revoked_at', null)
+    .order('last_seen_at', { ascending: false });
+
+  if (error) throw new Error(`Falha ao listar chats ativos: ${error.message}`);
+  return (data || []).map(mapLink);
+}
+
 export async function revokeLink(companyId: string, chatId: string): Promise<boolean> {
   const supabase = requireSupabase();
   const { error } = await supabase
