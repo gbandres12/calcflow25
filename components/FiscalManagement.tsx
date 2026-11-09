@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador, OrderStatus } from '../types';
+import { FiscalConfig, SaleOrder, SaleOrderLinkedNfe, Customer, Company, View, InventoryItem, User, Transportador, OrderStatus, StoreItem, TransferShipment } from '../types';
 import { fiscalService } from '../services/fiscalService';
 import { listOrderNfes, listDraftNfes, overlayNfeFields, totalRemainingQuantity, commitLinkedNfeSync, findLinkedNfe, findDraftNfe, isDraftNfe, dedupeEmittedNfeRows, isFiscalOnlyOrder } from '../services/saleNfe';
 import { buildNfeDuplicateDraft, NfeDuplicateDraft } from '../services/nfeDuplicate';
 import {
   FileText, CheckCircle2, AlertCircle, RefreshCw, Send, Eye,
   Layers, BarChart3, Check, Search, Sliders, FileCheck, Clock,
-  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit, X, Download
+  Copy, ArrowRightLeft, AlertTriangle, Plus, FileEdit, X, Download, FileUp
 } from 'lucide-react';
 import { DanfeModal } from './DanfeModal';
 import { EmitirNfeModal } from './EmitirNfeModal';
 import { EmitirNfeAvulsaModal } from './EmitirNfeAvulsaModal';
+import { SmartNfeImportModal } from './SmartNfeImportModal';
 import { CartaCorrecaoModal } from './fiscal/CartaCorrecaoModal';
 import { DateFilterControl } from './ui/DateFilterControl';
 import { DatePreset, getDatePresetRange, isDateInRange } from '../utils/dateFilterUtils';
@@ -23,10 +24,14 @@ interface FiscalManagementProps {
   company: Company;
   companyId?: string;
   inventory?: InventoryItem[];
+  storeItems?: StoreItem[];
+  transfers?: TransferShipment[];
   currentUser?: User;
   transportadores?: Transportador[];
   onAddTransportador?: (data: Omit<Transportador, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Transportador | void;
   onUpdateCustomer?: (customer: Customer) => void;
+  onAddCustomer?: (customer: Customer) => void;
+  onAddTransfer?: (transfer: Omit<TransferShipment, 'id'>) => void;
   onUpdateOrder: (order: SaleOrder) => void;
   onAddOrder?: (order: any) => void;
   onNavigate?: (view: View) => void;
@@ -39,10 +44,14 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   company,
   companyId,
   inventory = [],
+  storeItems = [],
+  transfers = [],
   currentUser,
   transportadores = [],
   onAddTransportador,
   onUpdateCustomer,
+  onAddCustomer,
+  onAddTransfer,
   onUpdateOrder,
   onNavigate,
   canConfigure = false
@@ -54,11 +63,13 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const [draftToResume, setDraftToResume] = useState<SaleOrderLinkedNfe | undefined>(undefined);
   const [emitInitialStep, setEmitInitialStep] = useState<'edit' | 'preview'>('edit');
   const [isTransferenciaEmit, setIsTransferenciaEmit] = useState(false);
+  const [devolutionChaveEmit, setDevolutionChaveEmit] = useState<string | undefined>(undefined);
   const [isAvulsaEmit, setIsAvulsaEmit] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [orderToCce, setOrderToCce] = useState<{ order: SaleOrder; linkedNfeId?: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'notas_emitidas' | 'fila_emissao' | 'rascunhos'>('notas_emitidas');
   const [showAvulsaModal, setShowAvulsaModal] = useState(false);
+  const [showSmartImportModal, setShowSmartImportModal] = useState(false);
   const [duplicateDraft, setDuplicateDraft] = useState<NfeDuplicateDraft | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -148,12 +159,13 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
 
   const openEmitFromOrder = (
     order: SaleOrder,
-    opts?: { avulsa?: boolean; transferencia?: boolean; draft?: SaleOrderLinkedNfe; step?: 'edit' | 'preview' }
+    opts?: { avulsa?: boolean; transferencia?: boolean; devolution?: string; draft?: SaleOrderLinkedNfe; step?: 'edit' | 'preview' }
   ) => {
-    const tipo = opts?.transferencia ? 'transferencia' : opts?.avulsa ? 'avulsa' : 'pedido';
+    const tipo = opts?.devolution ? 'devolucao' : opts?.transferencia ? 'transferencia' : opts?.avulsa ? 'avulsa' : 'pedido';
     const draft = opts?.draft || findDraftNfe(order, tipo as any);
     setIsAvulsaEmit(Boolean(opts?.avulsa));
     setIsTransferenciaEmit(Boolean(opts?.transferencia));
+    setDevolutionChaveEmit(opts?.devolution);
     setDraftToResume(draft);
     setEmitInitialStep(opts?.step || (draft ? 'preview' : 'edit'));
     setOrderToEmitNfe(order);
@@ -162,6 +174,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
   const closeEmitModal = () => {
     setOrderToEmitNfe(null);
     setIsTransferenciaEmit(false);
+    setDevolutionChaveEmit(undefined);
     setIsAvulsaEmit(false);
     setDraftToResume(undefined);
     setEmitInitialStep('edit');
@@ -383,6 +396,15 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setShowSmartImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-[#0F5948] border border-emerald-200 font-bold text-xs rounded-2xl transition-all"
+            title="Importar XML ou PDF de NF-e para gerar NF-e de Devolução, NF-e de Transferência ou Remessa Interna"
+          >
+            <FileUp size={15} className="text-[#0F5948]" />
+            <span>Importar NF-e (Devolução / Transf.)</span>
+          </button>
+
           <button
             onClick={() => {
               setDuplicateDraft(null);
@@ -898,6 +920,7 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
           company={company}
           transportadores={transportadores}
           onAddTransportador={onAddTransportador}
+          devolutionChave={devolutionChaveEmit}
           transferencia={isTransferenciaEmit}
           modo={isAvulsaEmit ? 'avulsa' : 'pedido'}
           draftNfe={draftToResume}
@@ -924,6 +947,45 @@ export const FiscalManagement: React.FC<FiscalManagementProps> = ({
         />
         </ErrorBoundary>
       )}
+
+      {/* Modal de Importação Inteligente de NF-e (Devolução / Transferência / Remessa) */}
+      <SmartNfeImportModal
+        isOpen={showSmartImportModal}
+        onClose={() => setShowSmartImportModal(false)}
+        defaultIntent="devolucao_nfe"
+        company={company}
+        config={config}
+        currentUser={currentUser}
+        customers={safeCustomers}
+        orders={safeOrders}
+        storeItems={storeItems}
+        transfers={transfers}
+        onStartFiscalEmission={({ order, customer, isNewCustomer, intent, devolutionChave }) => {
+          if (isNewCustomer) {
+            if (onAddCustomer) onAddCustomer(customer);
+            else if (onUpdateCustomer) onUpdateCustomer(customer);
+          } else if (onUpdateCustomer) {
+            onUpdateCustomer(customer);
+          }
+          onUpdateOrder(order);
+          setShowSmartImportModal(false);
+          openEmitFromOrder(order, {
+            avulsa: true,
+            transferencia: intent === 'transferencia_nfe',
+            devolution: intent === 'devolucao_nfe' ? devolutionChave : undefined,
+            step: 'edit'
+          });
+        }}
+        onCreateTransferShipment={
+          onAddTransfer
+            ? (shipment) => {
+                onAddTransfer(shipment);
+                setShowSmartImportModal(false);
+                if (onNavigate) onNavigate('transfers');
+              }
+            : undefined
+        }
+      />
 
       {/* Modal de Visualização de DANFE */}
       {selectedDanfeOrder && config && (

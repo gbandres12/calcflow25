@@ -28,7 +28,7 @@ import {
   Zap
 } from 'lucide-react';
 import { TransferShipment, TransferItem, TransferStatus, StoreItem, Company, User } from '../types';
-import { NfImportModal } from './NfImportModal';
+import { SmartNfeImportModal } from './SmartNfeImportModal';
 import { nextTransferCode } from '../services/ids';
 import { TransferRomaneioDocument } from './transfer-print/TransferRomaneioDocument';
 import { QuickRomaneioModal } from './QuickRomaneioModal';
@@ -1174,14 +1174,15 @@ export const TransferManagement: React.FC<TransferManagementProps> = ({
         />
       )}
 
-      <NfImportModal
+      <SmartNfeImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        defaultIntent="remessa_interna"
         storeItems={storeItems}
         transfers={safeTransfers}
         currentUser={currentUser}
         company={company}
-        onApply={(shipment) => {
+        onCreateTransferShipment={(shipment) => {
           onAddTransfer(shipment);
           setIsImportOpen(false);
         }}

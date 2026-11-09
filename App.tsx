@@ -2054,12 +2054,16 @@ const App: React.FC = () => {
               company={operatingCompany}
               companyId={activeCompanyId}
               inventory={inventory}
+              storeItems={storeItems}
+              transfers={transfers}
               currentUser={currentUser}
               transportadores={transportadores}
               onAddTransportador={handleAddTransportador}
               onUpdateCustomer={handleUpdateCustomer}
+              onAddCustomer={handleAddCustomer}
               onUpdateOrder={handleUpdateOrder} 
               onAddOrder={handleAddOrder}
+              onAddTransfer={handleAddTransfer}
               onNavigate={navigateTo}
               canConfigure={currentUser.role === 'Administrador' || (currentUser.role === 'Gerente' && Boolean(currentUser.permissions?.financial))}
             />
