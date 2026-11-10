@@ -26,6 +26,8 @@ export interface NfeDuplicateDraftItem {
 export interface NfeDuplicateDraft {
   sourceNumero?: string;
   sourceTipo?: SaleNfeTipo;
+  sourceChave?: string;
+  chaveReferenciada?: string;
   customerId: string;
   customerDocument?: string;
   customerName?: string;
@@ -85,14 +87,26 @@ export function buildNfeDuplicateDraft(order: SaleOrder, nfe?: SaleOrderLinkedNf
   const freteSource = nfe?.frete || order.frete || { modalidade: 9, valor: 0 };
   const destDoc = nfe?.nfePayload?.dest?.cpf || nfe?.nfePayload?.dest?.cnpj || order.customerDocument || order.nfePayload?.dest?.cpf || order.nfePayload?.dest?.cnpj;
   const destName = nfe?.destinatarioNome || nfe?.nfePayload?.dest?.nome || order.customerName || order.nfePayload?.dest?.nome;
+  const infCpl = nfe?.nfeInfCpl || order.nfeInfCpl;
+  const refFromPayload =
+    nfe?.nfePayload?.items?.[0]?.nfeReferenciada?.chaveAcesso ||
+    order.nfePayload?.items?.[0]?.nfeReferenciada?.chaveAcesso ||
+    String(infCpl || '').match(/\b(\d{44})\b/)?.[1];
+  const sourceChaveRaw =
+    nfe?.nfeChave ||
+    order.nfeChave ||
+    (nfe?.nfePayload as any)?.chaveAcesso ||
+    (order.nfePayload as any)?.chaveAcesso;
   return {
     sourceNumero: nfe?.nfeNumero || order.nfeNumero,
     sourceTipo: nfe?.tipo,
+    sourceChave: sourceChaveRaw ? sourceChaveRaw.replace(/\D/g, '') : undefined,
+    chaveReferenciada: refFromPayload ? String(refFromPayload).replace(/\D/g, '') : undefined,
     customerId: order.customerId,
     customerDocument: destDoc,
     customerName: destName,
     naturezaOperacao: nfe?.nfeNaturezaOperacao || order.nfeNaturezaOperacao,
-    infCpl: nfe?.nfeInfCpl || order.nfeInfCpl,
+    infCpl,
     paymentMethod: mapPaymentMethodForDuplicate(order.paymentMethod, nfe?.tipo),
     frete: {
       modalidade: freteSource.modalidade ?? 9,

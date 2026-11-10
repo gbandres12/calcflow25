@@ -1,6 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SaleOrder, SaleOrderItem, SaleOrderLinkedNfe, Customer, FiscalConfig, Company, FreteInfo, FRETE_MODALIDADES, Transportador } from '../types';
-import { fiscalService, freteValorCompoeTotalNota, mergeNfeConsulta, resolveFreteModalidade } from '../services/fiscalService';
+import {
+  fiscalService,
+  freteValorCompoeTotalNota,
+  isCfopDevolucao,
+  isNaturezaDevolucao,
+  isOrderDevolucao,
+  mergeNfeConsulta,
+  resolveDevolucaoChaveAcesso,
+  resolveFreteModalidade,
+} from '../services/fiscalService';
 import { db } from '../services/dataService';
 import { newId } from '../services/ids';
 import {
@@ -72,7 +81,16 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     initialStep || (draftNfe?.nfeStatus === 'rascunho' ? 'preview' : 'edit')
   );
   const [draftLinkedId, setDraftLinkedId] = useState<string | null>(draftNfe?.id || null);
-  const [chaveDevolucao, setChaveDevolucao] = useState(devolutionChave || order.nfeChave || '');
+  const [chaveDevolucao, setChaveDevolucao] = useState(
+    () =>
+      resolveDevolucaoChaveAcesso(
+        order,
+        devolutionChave ? { devolucao: { chaveAcesso: devolutionChave } } : undefined,
+        draftNfe
+      ) ||
+      devolutionChave ||
+      ''
+  );
   const [quickApiKey, setQuickApiKey] = useState(config.apiKey || '');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySavedSuccess, setKeySavedSuccess] = useState(false);
@@ -85,20 +103,23 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
   }, [customer, order.customerId]);
 
   const isSubmittingRef = useRef(false);
-  const isDevolucao = Boolean(devolutionChave);
-  const isTransferencia = Boolean(transferencia) && !isDevolucao;
-  const isAvulsa = modo === 'avulsa' && !isDevolucao && !isTransferencia;
+  const initialIsDevolucao =
+    devolutionChave !== undefined ||
+    draftNfe?.tipo === 'devolucao' ||
+    isOrderDevolucao(order, undefined, draftNfe);
+  const initialIsTransferencia =
+    (Boolean(transferencia) || draftNfe?.tipo === 'transferencia') && !initialIsDevolucao;
   const isInterestadual = Boolean(safeCustomer.state && safeCustomer.state !== 'PA');
-  const cfopSugerido = isDevolucao
+  const cfopSugerido = initialIsDevolucao
     ? (isInterestadual ? '6202' : '5202')
-    : isTransferencia
+    : initialIsTransferencia
       ? (isInterestadual ? (config.cfopTransferenciaInterestadual || '6152') : (config.cfopTransferenciaEstadual || '5152'))
       : (isInterestadual ? (config.cfopPadraoInterestadual || '6101') : (config.cfopPadraoEstadual || '5101'));
 
   // Itens com CFOP e CST editáveis. Na avulsa, quantidade limitada ao saldo não faturado.
   const [items, setItems] = useState<(SaleOrderItem & { maxQuantity?: number })[]>(() => {
     const remaining = remainingQuantityByProduct(order);
-    const useRemaining = !isDevolucao && !isTransferencia;
+    const useRemaining = !initialIsDevolucao && !initialIsTransferencia;
     const sourceItems = draftNfe?.items?.length ? draftNfe.items : orderItems;
     return sourceItems.map((it) => {
       const rem = remaining.get(saleItemKey(it));
@@ -112,21 +133,31 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         ? (Number(it.discount) || 0)
         : (Number(orig?.discount ?? it.discount) || 0) * ratio;
       const unitPrice = Number(it.unitPrice) || 0;
+      const itemCfop = initialIsDevolucao
+        ? (isCfopDevolucao(it.cfop) ? it.cfop : cfopSugerido)
+        : (it.cfop || cfopSugerido);
       return {
         ...it,
         quantity: qty,
         discount,
         total: Math.max(0, qty * unitPrice - discount),
         maxQuantity: rem ?? it.quantity,
-        cfop: it.cfop || cfopSugerido,
+        cfop: itemCfop,
         cst: it.cst || it.csosn || config.cstIcmsPadrao || '40'
       };
-    }).filter((it) => isDevolucao || isTransferencia || (Number(it.quantity) || 0) > 0);
+    }).filter((it) => initialIsDevolucao || initialIsTransferencia || (Number(it.quantity) || 0) > 0);
   });
 
   const [naturezaOperacao, setNaturezaOperacao] = useState(
-    draftNfe?.nfeNaturezaOperacao || order.nfeNaturezaOperacao || (isDevolucao ? 'Devolucao de mercadoria' : isTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
+    draftNfe?.nfeNaturezaOperacao || order.nfeNaturezaOperacao || (initialIsDevolucao ? 'Devolucao de mercadoria' : initialIsTransferencia ? 'Transferencia de estoque' : (config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'))
   );
+
+  const isDevolucao =
+    initialIsDevolucao ||
+    items.some((it) => isCfopDevolucao(it.cfop)) ||
+    isNaturezaDevolucao(naturezaOperacao);
+  const isTransferencia = initialIsTransferencia && !isDevolucao;
+  const isAvulsa = modo === 'avulsa' && !isDevolucao && !isTransferencia;
 
   // Frete / transporte (modFrete SEFAZ): sem frete (9) · CIF remetente (0) · FOB destinatário (1) · 2/3/4
   const [frete, setFrete] = useState<FreteInfo>(() => {
@@ -175,10 +206,27 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const [infCpl, setInfCpl] = useState(initialInfCpl);
 
+  const effectiveChaveDevolucao = useMemo(
+    () =>
+      chaveDevolucao.trim() ||
+      resolveDevolucaoChaveAcesso({ ...order, nfeInfCpl: infCpl }, undefined, draftNfe),
+    [chaveDevolucao, order, infCpl, draftNfe]
+  );
+
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const validation = fiscalService.validarDadosFiscais(
-    { ...order, items, shipping: freteValorEfetivo, total: totalComFrete, discount: discountEfetivo, frete },
-    activeCustomer
+    {
+      ...order,
+      items,
+      shipping: freteValorEfetivo,
+      total: totalComFrete,
+      discount: discountEfetivo,
+      frete,
+      nfeNaturezaOperacao: naturezaOperacao,
+      nfeInfCpl: infCpl,
+    },
+    activeCustomer,
+    { chaveDevolucao: effectiveChaveDevolucao, isDevolucao }
   );
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
@@ -320,7 +368,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     let payloadSent: any = undefined;
     try {
       const opts = isDevolucao
-        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        ? { devolucao: { chaveAcesso: effectiveChaveDevolucao || chaveDevolucao, nItem: 1 } }
         : isTransferencia
           ? { transferencia: true }
           : undefined;
@@ -440,7 +488,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       const orderWithEdits = buildOrderWithEdits(emitItems, referenciaExterna);
 
       const opts = isDevolucao
-        ? { devolucao: { chaveAcesso: chaveDevolucao, nItem: 1 } }
+        ? { devolucao: { chaveAcesso: effectiveChaveDevolucao || chaveDevolucao, nItem: 1 } }
         : isTransferencia
           ? { transferencia: true }
           : undefined;

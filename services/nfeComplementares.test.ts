@@ -281,4 +281,57 @@ const avulsaEdited = fiscalService.montarPayloadNotaAs(
 );
 assert.equal(avulsaEdited.infCpl, doloClause);
 
+// Testes de NF-e de Devolução (Finalidade 4, Rejeição 328 SEFAZ)
+const chaveOriginal = '15261110375218000184550010000072111265883172';
+const devolucaoOrder: SaleOrder = {
+  ...order,
+  reference: 'DEV-001',
+  nfeNaturezaOperacao: 'Devolução de mercadoria adquirida de terceiros',
+  nfeChave: chaveOriginal,
+  items: [
+    {
+      ...order.items[0],
+      cfop: '5202',
+    }
+  ]
+} as SaleOrder;
+
+const devolucaoPayload = fiscalService.montarPayloadNotaAs(
+  devolucaoOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG,
+  {
+    devolucao: { chaveAcesso: chaveOriginal, nItem: 1 }
+  }
+);
+assert.equal(devolucaoPayload.finalidade, 4, 'NF-e de devolução deve ter finalidade 4 (finNFe=4)');
+assert.equal(devolucaoPayload.tipoOperacao, 1, 'CFOP 5202 é saída (tipoOperacao 1)');
+assert.equal(devolucaoPayload.consumidorFinal, 0, 'Devolução não é consumidor final');
+assert.equal(devolucaoPayload.items[0].nfeReferenciada?.chaveAcesso, chaveOriginal, 'Item deve referenciar a chave da NF-e original');
+assert.ok(devolucaoPayload.infCpl?.includes(chaveOriginal), 'Dados adicionais devem citar a NF-e original');
+
+// Devolução com CFOP de Entrada (1202)
+const devolucaoEntradaOrder: SaleOrder = {
+  ...devolucaoOrder,
+  items: [{ ...devolucaoOrder.items[0], cfop: '1202' }]
+};
+const devolucaoEntradaPayload = fiscalService.montarPayloadNotaAs(
+  devolucaoEntradaOrder,
+  customer,
+  DEFAULT_FISCAL_CONFIG,
+  {
+    devolucao: { chaveAcesso: chaveOriginal, nItem: 1 }
+  }
+);
+assert.equal(devolucaoEntradaPayload.finalidade, 4, 'finNFe deve ser 4 para 1202');
+assert.equal(devolucaoEntradaPayload.tipoOperacao, 0, 'CFOP 1202 é entrada (tipoOperacao 0)');
+
+// Validação fiscal para devolução
+const valSemChave = fiscalService.validarDadosFiscais(devolucaoOrder, customer, { isDevolucao: true, chaveDevolucao: '' });
+assert.ok(!valSemChave.valid, 'Devolução sem chave de 44 dígitos deve falhar na validação');
+assert.ok(valSemChave.errors.some(e => e.includes('44 dígitos')));
+
+const valComChave = fiscalService.validarDadosFiscais(devolucaoOrder, customer, { isDevolucao: true, chaveDevolucao: chaveOriginal });
+assert.ok(valComChave.valid, 'Devolução com chave válida deve ser aprovada');
+
 console.log('nfeComplementares tests ok');

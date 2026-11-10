@@ -344,9 +344,13 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
             <button
               type="button"
               onClick={onDuplicate}
-              className="flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-purple-200 text-purple-800 rounded-xl text-xs font-bold"
+              className={`flex-1 min-w-[7.5rem] min-h-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                status === 'rejeitada'
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm'
+                  : 'bg-white border border-purple-200 text-purple-800 hover:bg-purple-50'
+              }`}
             >
-              <Copy size={14} /> Duplicar
+              <Copy size={14} /> {status === 'rejeitada' ? 'Corrigir e Reemitir' : 'Duplicar'}
             </button>
           )}
           {status === 'autorizada' && (
@@ -420,6 +424,15 @@ export const DanfeModal: React.FC<DanfeModalProps> = ({
             <FileX size={32} className="text-slate-400" />
             <p className="text-sm font-black text-slate-800">{isDraft ? 'Prévia indisponível' : 'DANFE oficial indisponível'}</p>
             <p className="text-xs font-medium text-slate-600 max-w-md">{pdfError || (isDraft ? 'Não foi possível gerar o PDF do rascunho.' : 'O PDF da NotaAs ainda não está pronto.')}</p>
+            {status === 'rejeitada' && onDuplicate && (
+              <button
+                type="button"
+                onClick={onDuplicate}
+                className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-sm transition-all"
+              >
+                <Copy size={14} /> Corrigir e Reemitir Nova Nota
+              </button>
+            )}
           </div>
         )}
       </div>

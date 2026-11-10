@@ -1,4 +1,4 @@
-import { SaleOrder, Customer, FiscalConfig, NfeStatus } from '../types';
+import { SaleOrder, SaleOrderLinkedNfe, Customer, FiscalConfig, NfeStatus } from '../types';
 import { DEFAULT_FISCAL_CONFIG, COMPANY_INFO } from '../constants';
 import { db, resolveCompanyKey, isDemoCompany } from './dataService';
 import { firebaseFunctions } from './firebase';
@@ -434,6 +434,101 @@ function onlyDigits(value?: string): string {
   return (value || '').replace(/\D/g, '');
 }
 
+/**
+ * Identifica se um CFOP de 4 dígitos pertence ao grupo oficial de Devolução de Mercadoria na SEFAZ
+ * (Anexo XI / Tabela de CFOPs que exigem finNFe = 4 para evitar a Rejeição 328).
+ */
+export function isCfopDevolucao(cfop?: string | number | null): boolean {
+  const c = onlyDigits(String(cfop ?? ''));
+  if (c.length !== 4) return false;
+  return /^(?:[123567]20[1-9]|[123567]21[01]|[1256]41[0-3]|[12356]50[34]|[123567]55[356]|[1256]66[0-2]|[1256]91[89]|[56]921)$/.test(c);
+}
+
+/**
+ * Identifica se um CFOP de 4 dígitos é de Transferência de Mercadoria/Produção.
+ */
+export function isCfopTransferencia(cfop?: string | number | null): boolean {
+  const c = onlyDigits(String(cfop ?? ''));
+  if (c.length !== 4) return false;
+  return /^[1256](?:15[1256]|40[89])$/.test(c);
+}
+
+export function isNaturezaDevolucao(naturezaOperacao?: string | null): boolean {
+  return /devolu[cç][aã]o/i.test(String(naturezaOperacao ?? ''));
+}
+
+export function extractChaveAcesso44(text?: string | null): string {
+  if (!text) return '';
+  const direct = onlyDigits(String(text));
+  if (direct.length === 44) return direct;
+  const continuous = String(text).match(/\b(\d{44})\b/);
+  if (continuous?.[1]) return continuous[1];
+  const spaced = String(text).match(/(?:\d{4}[\s.-]?){10}\d{4}/);
+  if (spaced?.[0]) {
+    const d = onlyDigits(spaced[0]);
+    if (d.length === 44) return d;
+  }
+  return '';
+}
+
+export function resolveDevolucaoChaveAcesso(
+  order?: Partial<SaleOrder> | null,
+  opts?: NfeEmitOpts,
+  draftNfe?: Partial<SaleOrderLinkedNfe> | null
+): string {
+  const fromOpts = extractChaveAcesso44(opts?.devolucao?.chaveAcesso);
+  if (fromOpts) return fromOpts;
+
+  const fromDraftPayload = extractChaveAcesso44(
+    draftNfe?.nfePayload?.items?.[0]?.nfeReferenciada?.chaveAcesso
+  );
+  if (fromDraftPayload) return fromDraftPayload;
+
+  const fromOrderPayload = extractChaveAcesso44(
+    order?.nfePayload?.items?.[0]?.nfeReferenciada?.chaveAcesso
+  );
+  if (fromOrderPayload) return fromOrderPayload;
+
+  const fromDraftInf = extractChaveAcesso44(draftNfe?.nfeInfCpl);
+  if (fromDraftInf) return fromDraftInf;
+
+  const fromOrderInf = extractChaveAcesso44(order?.nfeInfCpl);
+  if (fromOrderInf) return fromOrderInf;
+
+  const authorizedLinked = (order?.nfes || []).find(
+    (n) => n && n.tipo !== 'devolucao' && n.nfeStatus === 'autorizada' && extractChaveAcesso44(n.nfeChave)
+  );
+  if (authorizedLinked?.nfeChave) {
+    return extractChaveAcesso44(authorizedLinked.nfeChave);
+  }
+
+  if (order?.nfeStatus !== 'rejeitada' && extractChaveAcesso44(order?.nfeChave)) {
+    return extractChaveAcesso44(order?.nfeChave);
+  }
+
+  for (const n of order?.nfes || []) {
+    const k =
+      extractChaveAcesso44(n?.nfePayload?.items?.[0]?.nfeReferenciada?.chaveAcesso) ||
+      extractChaveAcesso44(n?.nfeInfCpl);
+    if (k) return k;
+  }
+
+  return '';
+}
+
+export function isOrderDevolucao(
+  order?: Partial<SaleOrder> | null,
+  opts?: NfeEmitOpts,
+  draftNfe?: Partial<SaleOrderLinkedNfe> | null
+): boolean {
+  if (opts?.devolucao) return true;
+  if (draftNfe?.tipo === 'devolucao') return true;
+  if (isNaturezaDevolucao(draftNfe?.nfeNaturezaOperacao) || isNaturezaDevolucao(order?.nfeNaturezaOperacao)) return true;
+  if ((draftNfe?.items || []).some((it) => isCfopDevolucao(it?.cfop))) return true;
+  if ((order?.items || []).some((it) => isCfopDevolucao(it?.cfop))) return true;
+  return false;
+}
+
 export const fiscalService = {
   
   /**
@@ -512,7 +607,7 @@ export const fiscalService = {
   validarDadosFiscais(
     order: SaleOrder,
     customer?: Customer,
-    options?: { requireResolvedIbge?: boolean }
+    options?: { requireResolvedIbge?: boolean; chaveDevolucao?: string; isDevolucao?: boolean }
   ): { valid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -585,6 +680,22 @@ export const fiscalService = {
       }
     });
 
+    const isDevolucaoOrder =
+      Boolean(options?.isDevolucao) ||
+      isOrderDevolucao(
+        order,
+        options?.chaveDevolucao ? { devolucao: { chaveAcesso: options.chaveDevolucao } } : undefined
+      );
+    if (isDevolucaoOrder) {
+      const chaveRef =
+        extractChaveAcesso44(options?.chaveDevolucao) || resolveDevolucaoChaveAcesso(order);
+      if (chaveRef.length !== 44) {
+        errors.push(
+          'Nota de devolução (CFOP de devolução / finalidade 4) exige a Chave de Acesso de 44 dígitos da NF-e original referenciada.'
+        );
+      }
+    }
+
     // Validação leve do frete (nunca bloqueia, só orienta)
     const freteMod = resolveFreteModalidade(order);
     const freteVal = Number(order.frete?.valor ?? order.shipping ?? 0) || 0;
@@ -624,8 +735,9 @@ export const fiscalService = {
     config: FiscalConfig,
     opts?: NfeEmitOpts
   ): NotaAsCriarNFePayload {
-    const isDevolucao = Boolean(opts?.devolucao?.chaveAcesso);
-    const isTransferencia = Boolean(opts?.transferencia) && !isDevolucao;
+    const isDevolucao = isOrderDevolucao(order, opts);
+    const chaveDevolucao = isDevolucao ? resolveDevolucaoChaveAcesso(order, opts) : '';
+    const isTransferencia = (Boolean(opts?.transferencia) || (order.items || []).some((it) => isCfopTransferencia(it?.cfop))) && !isDevolucao;
     const isInterestadual = customer.state && customer.state !== (config.ufEmitente || COMPANY_INFO.state);
     const cfopVenda = isInterestadual
       ? (config.cfopPadraoInterestadual || '6101')
@@ -680,9 +792,11 @@ export const fiscalService = {
       const cleanNcm = onlyDigits(String(it.ncm ?? ''));
       const safeNcm = cleanNcm.length === 8 ? cleanNcm : '25171000'; // Calcário agrícola padrão
       const cleanCfop = onlyDigits(String(it.cfop ?? ''));
-      const safeCfop = (isDevolucao || isTransferencia) 
-        ? onlyDigits(String(cfopPadrao ?? '')) 
-        : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(String(cfopPadrao ?? '')));
+      const safeCfop = isDevolucao
+        ? (isCfopDevolucao(cleanCfop) ? cleanCfop : onlyDigits(String(cfopPadrao ?? '')))
+        : isTransferencia
+          ? (isCfopTransferencia(cleanCfop) ? cleanCfop : onlyDigits(String(cfopPadrao ?? '')))
+          : (cleanCfop.length === 4 ? cleanCfop : onlyDigits(String(cfopPadrao ?? '')));
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
       const itemCst = String(it.cst || it.csosn || cstIcmsPadrao).trim();
@@ -707,10 +821,10 @@ export const fiscalService = {
         if (aliq != null) row.aliquotaIcms = aliq;
       }
 
-      if (isDevolucao && opts?.devolucao?.chaveAcesso) {
+      if (isDevolucao && chaveDevolucao.length === 44) {
         row.nfeReferenciada = {
-          chaveAcesso: onlyDigits(opts.devolucao.chaveAcesso),
-          nItem: opts.devolucao.nItem || idx + 1
+          chaveAcesso: chaveDevolucao,
+          nItem: opts?.devolucao?.nItem || idx + 1
         };
       }
       const infAdProd = String(it.infAdProd || '').trim().slice(0, INF_ADPROD_MAX);
@@ -827,20 +941,27 @@ export const fiscalService = {
       extras: [
         ...carregamentoParts,
         ...freteInfParts,
+        ...(isDevolucao && chaveDevolucao && !(order.nfeInfCpl || '').includes(chaveDevolucao)
+          ? [`Devolucao da NF-e ${chaveDevolucao}`]
+          : []),
         ...(isAvulsaNote
           ? []
           : [
               order.reference ? `Pedido: ${order.reference}` : '',
-              isDevolucao ? `Devolucao da NF-e ${opts?.devolucao?.chaveAcesso}` : '',
               isTransferencia ? 'Operacao de transferencia de estoque entre estabelecimentos' : ''
             ])
       ]
     });
 
+    const firstCfop = items[0]?.cfop || '';
+    const tipoOperacao: 0 | 1 = /^[123]/.test(firstCfop) ? 0 : 1;
+
     const payload: NotaAsCriarNFePayload = {
       modelo: 55,
       naturezaOperacao: isDevolucao
-        ? 'Devolucao de mercadoria'
+        ? (isNaturezaDevolucao(order.nfeNaturezaOperacao)
+            ? order.nfeNaturezaOperacao!.trim()
+            : 'Devolucao de mercadoria')
         : isTransferencia
           ? 'Transferencia de producao do estabelecimento'
           : (order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
@@ -848,9 +969,9 @@ export const fiscalService = {
       items,
       pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],
       transporte,
-      tipoOperacao: 1,
+      tipoOperacao,
       finalidade: isDevolucao ? 4 : 1,
-      consumidorFinal: isTransferencia ? 0 : (isPF ? 1 : 0),
+      consumidorFinal: (isTransferencia || isDevolucao) ? 0 : (isPF ? 1 : 0),
       presencaComprador: 1,
       infCpl: infCpl,
       referenciaExterna: order.nfeReferenciaExterna || order.reference || `ORDER-${order.id}`
@@ -897,7 +1018,11 @@ export const fiscalService = {
       }
     }
 
-    const validation = this.validarDadosFiscais(order, dest, { requireResolvedIbge: true });
+    const validation = this.validarDadosFiscais(order, dest, {
+      requireResolvedIbge: true,
+      chaveDevolucao: opts?.devolucao?.chaveAcesso,
+      isDevolucao: Boolean(opts?.devolucao)
+    });
 
     if (!validation.valid) {
       console.warn(`⚠️ [FISCAL SERVICE] [${invoiceRequestId}] Falha na validação prévia dos dados fiscais:`, validation.errors);
@@ -1574,7 +1699,7 @@ export const fiscalService = {
         <tpImp>1</tpImp>
         <tpEmis>1</tpEmis>
         <tpAmb>${config.environment === 'production' ? '1' : '2'}</tpAmb>
-        <finNFe>1</finNFe>
+        <finNFe>${isOrderDevolucao(order) ? '4' : '1'}</finNFe>
         <indFinal>${customer.tipoPessoa === 'PF' ? '1' : '0'}</indFinal>
         <indPres>1</indPres>
         <procEmi>0</procEmi>

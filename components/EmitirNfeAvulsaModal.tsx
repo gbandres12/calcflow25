@@ -1,6 +1,12 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador, OrderWithdrawal } from '../types';
-import { fiscalService, mergeNfeConsulta } from '../services/fiscalService';
+import {
+  fiscalService,
+  isCfopDevolucao,
+  isNaturezaDevolucao,
+  mergeNfeConsulta,
+  resolveDevolucaoChaveAcesso,
+} from '../services/fiscalService';
 import { NfeDuplicateDraft } from '../services/nfeDuplicate';
 import { assembleAutoInfCpl } from '../services/nfeComplementares';
 import { buildLinkedNfe, upsertLinkedNfe } from '../services/saleNfe';
@@ -110,6 +116,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const [naturezaOperacao, setNaturezaOperacao] = useState(
     duplicateFrom?.naturezaOperacao || config?.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'
   );
+  const initialDevolucaoChave =
+    duplicateFrom?.chaveReferenciada ||
+    duplicateFrom?.sourceChave ||
+    String(duplicateFrom?.infCpl || '').match(/\b(\d{44})\b/)?.[1] ||
+    '';
+  const [chaveDevolucao, setChaveDevolucao] = useState<string>(initialDevolucaoChave);
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'Boleto' | 'Dinheiro' | 'Transferência' | 'Sem Pagamento'>(
     duplicateFrom?.paymentMethod || 'PIX'
   );
@@ -454,6 +466,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     }
   };
 
+  const isDevolucao = useMemo(() => {
+    if (duplicateFrom?.sourceTipo === 'devolucao') return true;
+    if (isNaturezaDevolucao(naturezaOperacao)) return true;
+    return items.some((it) => isCfopDevolucao(it.cfop));
+  }, [duplicateFrom?.sourceTipo, naturezaOperacao, items]);
+
   // Mock de Ordem de Venda correspondente para emitirNFe
   const syntheticOrder: SaleOrder = useMemo(() => ({
     id: draftOrderId,
@@ -464,6 +482,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     sellerName: currentUser?.name || 'Emissão Fiscal Direta',
     date: getLocalDateStr(),
     isAvulsa: true,
+    nfeChave: (isDevolucao && chaveDevolucao.replace(/\D/g, '').length === 44) ? chaveDevolucao.replace(/\D/g, '') : undefined,
     items: items.map(it => ({
       productId: it.productId,
       productCode: it.productCode,
@@ -501,9 +520,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       }
     },
     status: OrderStatus.FINALIZED,
-    withoutFinance: !generateFinance || Boolean(selectedOrderId),
-    paymentMethod: paymentMethod === 'Sem Pagamento' || !generateFinance ? 'Outros' : paymentMethod,
-    payments: generateFinance && !selectedOrderId ? [{
+    withoutFinance: isDevolucao || !generateFinance || Boolean(selectedOrderId),
+    paymentMethod: isDevolucao || paymentMethod === 'Sem Pagamento' || !generateFinance ? 'Sem Pagamento' : paymentMethod,
+    payments: generateFinance && !selectedOrderId && !isDevolucao ? [{
       id: `pay-${Date.now()}`,
       amount: total,
       date: financeDueDate || getLocalDateStr(),
@@ -514,7 +533,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     receipts: [],
     nfeNaturezaOperacao: naturezaOperacao,
     nfeInfCpl: resolvedInfCpl
-  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, financeDueDate, selectedOrderId, placaCaminhao, nomeMotorista]);
+  }), [draftOrderId, activeCustomer, currentUser, items, subtotal, shippingVal, total, frete, freteModalidadeNum, paymentMethod, naturezaOperacao, resolvedInfCpl, generateFinance, financeDueDate, selectedOrderId, placaCaminhao, nomeMotorista, isDevolucao, chaveDevolucao]);
 
   const previewOrder: SaleOrder = useMemo(() => ({
     ...syntheticOrder,
@@ -523,7 +542,11 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     nfeSerie: String(config?.serieNFe || '1'),
   }), [syntheticOrder, config?.proxNumeroNFe, config?.serieNFe]);
 
-  const validation = fiscalService.validarDadosFiscais(syntheticOrder, activeCustomer);
+  const validation = fiscalService.validarDadosFiscais(
+    syntheticOrder,
+    activeCustomer,
+    { chaveDevolucao, isDevolucao }
+  );
   const formatBRL = (val: number) => (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const isPreview = step === 'preview';
 
@@ -533,16 +556,23 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       return null;
     }
     maybePersistCustomerUpdates();
-    const linkedId = draftLinkedId || newId('nfa');
+    const linkedId = draftLinkedId || newId(isDevolucao ? 'nfd' : 'nfa');
+    const cleanDevolucaoChave = chaveDevolucao.replace(/\D/g, '');
+    const draftOpts = {
+      semPagamento: isDevolucao || !generateFinance || Boolean(selectedOrderId),
+      devolucao: isDevolucao && cleanDevolucaoChave.length === 44
+        ? { chaveAcesso: cleanDevolucaoChave, nItem: 1 }
+        : undefined,
+    };
     let payloadSent: any;
     try {
-      payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config);
+      payloadSent = fiscalService.montarPayloadNotaAs(syntheticOrder, activeCustomer, config, draftOpts);
     } catch {
       payloadSent = undefined;
     }
     const linked = buildLinkedNfe({
       id: linkedId,
-      tipo: 'avulsa',
+      tipo: isDevolucao ? 'devolucao' : 'avulsa',
       reference: syntheticOrder.reference,
       order: syntheticOrder,
       items: syntheticOrder.items,
@@ -620,11 +650,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const semPgto = !generateFinance || Boolean(selectedOrderId);
+      const semPgto = isDevolucao || !generateFinance || Boolean(selectedOrderId);
       const finalPlaca = (placaCaminhao || frete.veiculo?.placa || '').toUpperCase().trim();
       const finalMotorista = (nomeMotorista || frete.transportadora?.nome || '').trim();
+      const cleanDevolucaoChave = chaveDevolucao.replace(/\D/g, '');
       const opts = {
         semPagamento: semPgto,
+        devolucao: isDevolucao && cleanDevolucaoChave.length === 44
+          ? { chaveAcesso: cleanDevolucaoChave, nItem: 1 }
+          : undefined,
         carregamento: {
           ticketPesagem: ticketBalanca.trim() || undefined,
           placa: finalPlaca || undefined,
@@ -638,7 +672,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
       if (result.success || result.nfeId) {
         maybePersistCustomerUpdates();
-        const linkedId = draftLinkedId || newId('nfa');
+        const linkedId = draftLinkedId || newId(isDevolucao ? 'nfd' : 'nfa');
         let createdOrder: SaleOrder = {
           ...syntheticOrder,
           companyId: company.id,
@@ -669,7 +703,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
         const linked = buildLinkedNfe({
           id: linkedId,
-          tipo: 'avulsa',
+          tipo: isDevolucao ? 'devolucao' : 'avulsa',
           reference: syntheticOrder.reference,
           order: createdOrder,
           items: createdOrder.items,
@@ -1370,6 +1404,36 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-purple-500"
                 />
               </div>
+
+              {isDevolucao && (
+                <div className="p-3 bg-amber-50/90 border border-amber-300 rounded-2xl space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-black text-xs uppercase">
+                    <AlertCircle size={15} className="text-amber-700 shrink-0" />
+                    <span>NF-e de Devolução (Finalidade 4 · finNFe=4)</span>
+                  </div>
+                  <label className="text-[11px] font-black uppercase text-amber-900 block">
+                    Chave da NF-e Original Referenciada (44 dígitos) *
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={44}
+                    value={chaveDevolucao}
+                    onChange={(e) => setChaveDevolucao(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Cole os 44 dígitos da NF-e original que está sendo devolvida"
+                    className="w-full p-2.5 bg-white border border-amber-300 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-amber-600"
+                  />
+                  {chaveDevolucao.replace(/\D/g, '').length !== 44 ? (
+                    <p className="text-[11px] text-rose-700 font-bold">
+                      A SEFAZ exige a chave de 44 dígitos da nota original (atualmente {chaveDevolucao.replace(/\D/g, '').length}/44 dígitos).
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                      <CheckCircle2 size={13} /> Chave referenciada válida de 44 dígitos.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-[11px] font-black uppercase text-slate-500">Forma de Pagamento</label>

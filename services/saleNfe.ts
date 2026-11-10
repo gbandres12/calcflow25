@@ -258,12 +258,12 @@ export function upsertLinkedNfe(order: SaleOrder, linked: SaleOrderLinkedNfe): S
   else nfes.push(merged);
 
   const next: SaleOrder = { ...order, nfes };
-  if (linked.tipo !== 'avulsa' || order.isAvulsa) {
+  if (linked.tipo === 'pedido' || order.isAvulsa) {
     return {
       ...next,
       nfeStatus: linked.nfeStatus,
       nfeId: linked.nfeId,
-      nfeChave: linked.nfeChave,
+      nfeChave: linked.nfeChave ?? (linked.nfeStatus === 'rascunho' ? order.nfeChave : undefined),
       nfeNumero: linked.nfeNumero,
       nfeSerie: linked.nfeSerie,
       nfeProtocolo: linked.nfeProtocolo,

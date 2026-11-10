@@ -279,6 +279,14 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
   if (indicadorIE === 1 && customer.ie) dest.ie = onlyDigits(customer.ie);
 
   const cstPadrao = (config.cstIcmsPadrao || '40').trim();
+  const isDevolucaoCfop = (c: string) =>
+    /^(?:[123567]20[1-9]|[123567]21[01]|[1256]41[0-3]|[12356]50[34]|[123567]55[356]|[1256]66[0-2]|[1256]91[89]|[56]921)$/.test(c);
+  const isDevolucao =
+    /devolu[cç][aã]o/i.test(String(order.nfeNaturezaOperacao || '')) ||
+    (order.items || []).some((it) => isDevolucaoCfop(onlyDigits(it.cfop)));
+  const chaveDevolucaoMatch =
+    String(order.nfeInfCpl || '').match(/\b(\d{44})\b/)?.[1] ||
+    (onlyDigits(order.nfeChave).length === 44 && order.nfeStatus !== 'rejeitada' ? onlyDigits(order.nfeChave) : '');
   const items = (order.items || []).map((item, index) => {
     const ncm = onlyDigits(item.ncm);
     const cfop = onlyDigits(item.cfop);
@@ -287,7 +295,7 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
       descricao: item.productName || 'Calcário Agrícola Corretivo',
       codigo: item.productCode || `CALC-${index + 1}`,
       ncm: ncm.length === 8 ? ncm : '25171000',
-      cfop: cfop.length === 4 ? cfop : cfopPadrao,
+      cfop: cfop.length === 4 ? cfop : (isDevolucao ? (isInterestadual ? '6202' : '5202') : cfopPadrao),
       quantidade: item.quantity > 0 ? item.quantity : 1,
       valorUnitario: item.unitPrice > 0 ? item.unitPrice : item.total,
       valorTotal: item.total,
@@ -299,13 +307,16 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
     if (['00', '10', '20', '90'].includes(cst) && (item.aliquotaIcms != null || config.aliquotaIcmsPadrao != null)) {
       row.aliquotaIcms = item.aliquotaIcms ?? config.aliquotaIcmsPadrao;
     }
+    if (isDevolucao && chaveDevolucaoMatch.length === 44) {
+      row.nfeReferenciada = { chaveAcesso: chaveDevolucaoMatch, nItem: index + 1 };
+    }
     return row;
   });
 
   const pmNorm = String(order.paymentMethod || '')
     .trim()
     .toLowerCase();
-  const isSemPagamento = pmNorm.includes('sem pagamento') || pmNorm === '90';
+  const isSemPagamento = isDevolucao || pmNorm.includes('sem pagamento') || pmNorm === '90';
   const tipoPagamento = isSemPagamento
     ? '90'
     : pmNorm === 'pix'
@@ -363,16 +374,19 @@ export function buildNfePayload(order: SaleOrder, customer: Customer, config: Fi
     };
   }
 
+  const firstCfop = items[0]?.cfop || '';
   const payload: any = {
     modelo: 55,
-    naturezaOperacao: order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento',
+    naturezaOperacao: isDevolucao
+      ? (/devolu[cç][aã]o/i.test(String(order.nfeNaturezaOperacao || '')) ? order.nfeNaturezaOperacao : 'Devolucao de mercadoria')
+      : (order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
     dest,
     items,
     pagamentos: [{ tipoPagamento, valor: isSemPagamento ? 0 : order.total }],
     transporte,
-    tipoOperacao: 1,
-    finalidade: 1,
-    consumidorFinal: isPF ? 1 : 0,
+    tipoOperacao: /^[123]/.test(firstCfop) ? 0 : 1,
+    finalidade: isDevolucao ? 4 : 1,
+    consumidorFinal: isDevolucao ? 0 : (isPF ? 1 : 0),
     presencaComprador: 1,
     infCpl: infCpl,
     referenciaExterna: order.nfeReferenciaExterna || order.reference || `ORDER-${order.id}`

@@ -111,5 +111,29 @@ describe('duplicar nota fiscal', () => {
     assert.equal(draft.customerName, 'Márcio Antônio Cezarotto');
     assert.equal(draft.customerDocument, '46338640091');
   });
+
+  it('extrai chave referenciada e chave de origem ao duplicar nota de devolução', () => {
+    const chaveDevolvida = '15261110375218000184550010000072111265883172';
+    const o = order({
+      nfeStatus: 'rejeitada',
+      nfeChave: '15261110375218000184550010000071301265883179',
+      nfeNaturezaOperacao: 'Devolução de mercadoria',
+      nfeInfCpl: `Devolução referente a NF-e chave ${chaveDevolvida}`,
+      items: [{
+        productId: 'calcario',
+        productCode: '01',
+        productName: 'Calcário',
+        unit: 'TON',
+        quantity: 10,
+        unitPrice: 100,
+        discount: 0,
+        total: 1000,
+        cfop: '5202'
+      }]
+    });
+    const draft = buildNfeDuplicateDraft(o);
+    assert.equal(draft.sourceChave, '15261110375218000184550010000071301265883179');
+    assert.equal(draft.chaveReferenciada, chaveDevolvida);
+  });
 });
 

@@ -82,6 +82,22 @@ const RULES: Rule[] = [
       title: 'Dados de transporte em operação interestadual ou sem frete',
       fix: 'Em operações interestaduais ou sem frete, a SEFAZ não aceita a placa e transportador no XML da NF-e (devem constar em dados adicionais ou MDF-e). O sistema agora faz esse ajuste automaticamente.'
     }
+  },
+  {
+    codes: [327, 328, 329],
+    pattern: /CFOP de devolu[cç][aã]o de mercadoria|finalidade de devolu[cç][aã]o/i,
+    help: {
+      title: 'Finalidade da NF-e de Devolução (finNFe = 4)',
+      fix: 'CFOPs de devolução (como 5202, 6202, 5201, 6201) exigem finalidade "4 - Devolução de mercadoria" e a chave de 44 dígitos da NF-e original referenciada. Clique em "Corrigir e Reenviar" (ou "Duplicar") para retransmitir com finalidade de devolução.'
+    }
+  },
+  {
+    codes: [321],
+    pattern: /devolu[cç][aã]o de mercadoria n[aã]o possui documento fiscal referenciado/i,
+    help: {
+      title: 'Falta a Chave de Acesso da NF-e original',
+      fix: 'Toda NF-e de devolução precisa referenciar a chave de 44 dígitos da nota fiscal original. Informe a chave de 44 dígitos no campo "Chave da NF-e original referenciada" e transmita novamente.'
+    }
   }
 ];
 
