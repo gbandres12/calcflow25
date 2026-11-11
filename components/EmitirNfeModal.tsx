@@ -178,20 +178,22 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
 
   const freteValorEfetivo = useMemo(() => {
     const mod = Number(frete.modalidade ?? 9);
-    if (isDevolucao || isTransferencia || mod === 9) return 0;
+    if (isTransferencia || mod === 9) return 0;
     if (!freteValorCompoeTotalNota(mod, frete.valor)) return 0;
     return Math.max(0, Number(frete.valor) || 0);
-  }, [frete, isDevolucao, isTransferencia]);
+  }, [frete, isTransferencia]);
 
   const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
 
   const itemsSubtotal = useMemo(() => items.reduce((acc, it) => acc + (Number(it.total) || 0), 0), [items]);
   const discountEfetivo = useMemo(() => {
+    const itemsDisc = items.reduce((acc, it) => acc + (Number(it.discount) || 0), 0);
+    if (itemsDisc > 0) return itemsDisc;
     if (isDevolucao || isTransferencia) return Number(order.discount) || 0;
     const origSub = Number(order.subtotal) || 0;
     if (origSub <= 0) return Number(order.discount) || 0;
     return (Number(order.discount) || 0) * (itemsSubtotal / origSub);
-  }, [isDevolucao, isTransferencia, order.discount, order.subtotal, itemsSubtotal]);
+  }, [items, isDevolucao, isTransferencia, order.discount, order.subtotal, itemsSubtotal]);
 
   const totalComFrete = useMemo(() => {
     return Math.max(0, itemsSubtotal - discountEfetivo + freteValorEfetivo);
@@ -259,6 +261,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         updated.valorIcms = undefined;
       }
       if (field === 'aliquotaIcms' || field === 'baseCalculoIcms') updated.valorIcms = undefined;
+      if (field === 'discount') {
+        const d = Math.max(0, parseFloat(value) || 0);
+        updated.discount = d;
+        updated.total = Math.max(0, (Number(updated.quantity) || 0) * (Number(updated.unitPrice) || 0) - d);
+      }
       if (field === 'quantity') {
         const raw = parseFloat(value);
         const qty = Number.isFinite(raw) ? raw : 0;
@@ -987,7 +994,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
               </div>
             )}
 
-            {!isDevolucao && !isTransferencia ? (
+            {!isTransferencia ? (
               <FlowSection
                 title="Frete"
                 summary={FRETE_MODALIDADES.find(m => m.value === Number(frete.modalidade ?? 9))?.label || 'Sem frete'}
@@ -1003,7 +1010,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 />
               </FlowSection>
             ) : (
-              <p className="text-xs text-slate-500 px-1">Sem frete (modFrete 9).</p>
+              <p className="text-xs text-slate-500 px-1">Transferência entre filiais: sem frete.</p>
             )}
 
             <FlowSection
@@ -1021,7 +1028,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                       </div>
                       <p className="text-sm font-black text-slate-900 shrink-0">{formatBRL(it.total)}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <div>
                         <label className="text-xs font-bold text-slate-500">NCM</label>
                         <input type="text" inputMode="numeric" value={it.ncm || '25171000'} onChange={e => handleUpdateItem(idx, 'ncm', e.target.value)} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold" />
@@ -1033,6 +1040,10 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                         ) : (
                           <p className="px-2 py-2 text-sm font-bold">{it.quantity}</p>
                         )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-rose-600">Desc (R$)</label>
+                        <input type="number" step="0.01" value={it.discount || ''} onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} placeholder="0,00" className="w-full px-2 py-2 bg-rose-50 border border-rose-200 rounded-lg text-sm font-bold text-right text-rose-800" />
                       </div>
                       <div>
                         <label className="text-xs font-bold text-purple-700">CFOP</label>
@@ -1060,6 +1071,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                       <th className="px-3 py-2">CFOP</th>
                       <th className="px-3 py-2">CST</th>
                       <th className="px-3 py-2 text-center">Qtd</th>
+                      <th className="px-3 py-2 text-right">Desc (R$)</th>
                       <th className="px-3 py-2 text-right">Total</th>
                     </tr>
                   </thead>
@@ -1087,10 +1099,13 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                             <>{it.quantity} {it.unit}</>
                           )}
                         </td>
+                        <td className="px-3 py-2 text-right">
+                          <input type="number" step="0.01" value={it.discount || ''} onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} placeholder="0,00" className="w-20 px-2 py-1 bg-rose-50 border border-rose-200 rounded-lg text-xs font-bold text-right text-rose-800" />
+                        </td>
                         <td className="px-3 py-2 text-right font-black">{formatBRL(it.total)}</td>
                       </tr>
                       <tr key={`tax-${idx}`}>
-                        <td colSpan={6} className="px-3 pb-3">
+                        <td colSpan={7} className="px-3 pb-3">
                           <ItemTaxEditor item={it} taxes={taxCalc.items[idx]} onChange={(f, v) => handleUpdateItem(idx, f, v)} />
                         </td>
                       </tr>

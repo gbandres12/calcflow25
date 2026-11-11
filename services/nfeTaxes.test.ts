@@ -305,4 +305,86 @@ describe('nfeTaxes: regras de destaque de ICMS e IPI', () => {
     assert.equal(item.aliquotaIpi, 5);
     assert.equal(item.cEnqIpi, '999');
   });
+
+  it('calcula e monta payload exato do caso de devolução (Bomba Weichai, Frete R$42, Desconto R$51,93, ICMS 4%)', () => {
+    const chaveOriginal = '15261110375218000184550010000072111265883172';
+    const devolucaoOrder: SaleOrder = {
+      id: 'ord-dev-weichai',
+      reference: 'DEV-WEICHAI-01',
+      customerId: 'cust-1',
+      sellerName: 'Gabriel',
+      date: '2026-11-11',
+      nfeNaturezaOperacao: 'Devolução de compra para industrialização',
+      nfeChave: chaveOriginal,
+      items: [
+        {
+          productId: 'prod-weichai',
+          productCode: '12159770',
+          productName: "Bomba d'água motor Weichai WP4/WP6 35X65/M18X1,25/52",
+          unit: 'Unid',
+          quantity: 1,
+          unitPrice: 519.3,
+          discount: 51.93,
+          total: 467.37,
+          ncm: '84133090',
+          cfop: '6202',
+          cst: '00',
+          aliquotaIcms: 4,
+        },
+      ],
+      subtotal: 519.3,
+      discount: 51.93,
+      shipping: 42,
+      total: 509.37,
+      frete: { modalidade: 0, valor: 42 }, // CIF: frete compõe a nota e a base do ICMS
+      status: OrderStatus.FINALIZED,
+      paymentMethod: 'Sem Pagamento',
+      payments: [],
+    };
+
+    const customer: Customer = {
+      id: 'cust-1',
+      name: 'Fornecedor Weichai Motores S/A',
+      document: '04123456000189',
+      tipoPessoa: 'PJ',
+      email: 'fiscal@weichai.com.br',
+      phone: '11999999999',
+      totalSpent: 0,
+      street: 'Av Industrial',
+      number: '1000',
+      neighborhood: 'Distrito Industrial',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '01000000',
+      ibgeCode: '3550308',
+      ie: '111222333444',
+    };
+
+    const payload = fiscalService.montarPayloadNotaAs(devolucaoOrder, customer, DEFAULT_FISCAL_CONFIG, {
+      devolucao: { chaveAcesso: chaveOriginal, nItem: 1 },
+    });
+
+    assert.equal(payload.finalidade, 4, 'Finalidade deve ser 4 (devolução)');
+    assert.equal(payload.tipoOperacao, 1, 'CFOP 6202 é saída (1)');
+    assert.equal(payload.valorFrete, 42);
+    assert.equal(payload.valorDesconto, 51.93);
+
+    const item0 = payload.items[0];
+    assert.equal(item0.cfop, '6202');
+    assert.equal(item0.cst, '00');
+    assert.equal(item0.quantidade, 1);
+    assert.equal(item0.valorUnitario, 519.3);
+    assert.equal(item0.valorTotal, 519.3, 'vProd do item deve ser 519,30');
+    assert.equal(item0.valorDesconto, 51.93, 'vDesc do item deve ser 51,93');
+    assert.equal(item0.aliquotaIcms, 4);
+    assert.equal(item0.baseCalculoIcms, 509.37, 'Base de cálculo do ICMS deve ser 509,37 (519,30 - 51,93 + 42,00)');
+    assert.equal(item0.valorIcms, 20.37, 'Valor do ICMS deve ser 20,37 (509,37 * 4%)');
+
+    assert.equal(payload.totais?.valorProdutos, 519.3);
+    assert.equal(payload.totais?.valorDesconto, 51.93);
+    assert.equal(payload.totais?.valorFrete, 42);
+    assert.equal(payload.totais?.baseCalculoIcms, 509.37);
+    assert.equal(payload.totais?.valorIcms, 20.37);
+    assert.equal(payload.totais?.valorTotal, 509.37, 'Total da NF-e deve ser exatamente 509,37');
+  });
 });

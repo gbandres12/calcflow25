@@ -72,6 +72,10 @@ export interface NotaAsItemPayload {
   quantidade: number;
   valorUnitario: number;
   valorTotal: number;
+  valorDesconto?: number;
+  vDesc?: number;
+  valorFrete?: number;
+  vFrete?: number;
   unidade: string;
   csosn?: string;
   cst?: string;
@@ -217,6 +221,9 @@ export interface NotaAsCriarNFePayload {
   pagamentos: NotaAsPagamento[];
   transporte?: NotaAsTransporte;
   valorFrete?: number;
+  valorDesconto?: number;
+  vDesc?: number;
+  desconto?: number;
   tipoOperacao: 0 | 1;
   finalidade: 1 | 2 | 3 | 4;
   consumidorFinal: 0 | 1;
@@ -838,6 +845,9 @@ export const fiscalService = {
 
       // Prioridade: CST/CSOSN definido no item/produto -> Padrão configurado
       const itemCst = String(it.cst || it.csosn || cstIcmsPadrao).trim();
+      const itemDesc = Number(it.discount) > 0 ? Number(Number(it.discount).toFixed(2)) : 0;
+      const itemUnit = it.unitPrice > 0 ? it.unitPrice : it.total;
+      const itemGross = it.unitPrice > 0 ? Number((it.quantity * it.unitPrice).toFixed(2)) : it.total;
 
       const row: NotaAsItemPayload = {
         descricao: it.productName || 'Calcário Agrícola Corretivo',
@@ -845,8 +855,10 @@ export const fiscalService = {
         ncm: safeNcm,
         cfop: safeCfop,
         quantidade: it.quantity > 0 ? it.quantity : 1,
-        valorUnitario: it.unitPrice > 0 ? it.unitPrice : it.total,
-        valorTotal: it.total,
+        valorUnitario: itemUnit,
+        valorTotal: itemDesc > 0 ? itemGross : it.total,
+        valorDesconto: itemDesc > 0 ? itemDesc : undefined,
+        vDesc: itemDesc > 0 ? itemDesc : undefined,
         unidade: it.unit || 'TON',
         cst: itemCst,
         aliquotaPis: it.aliquotaPis !== undefined ? it.aliquotaPis : (config.aliquotaPis ?? 0),
@@ -881,12 +893,14 @@ export const fiscalService = {
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
     const hasFreteCobrado = freteValorCompoeTotalNota(freteModalidade, freteValor);
 
+    const orderDesconto = Math.max(0, Number(order.discount) || (order.items || []).reduce((acc, it) => acc + (Number(it.discount) || 0), 0));
+
     // ---- Destaque de ICMS (BC, alíquota, valor) e IPI por item ----
     const taxCalc = computeOrderTaxes(
       (order.items || []).map((it) => ({ ...it, cst: String(it.cst || it.csosn || cstIcmsPadrao).trim() })),
       {
         frete: hasFreteCobrado ? freteValor : 0,
-        desconto: 0,
+        desconto: orderDesconto,
         defaults: {
           cstIcmsPadrao,
           aliquotaIcmsPadrao: config.aliquotaIcmsPadrao,
@@ -900,6 +914,10 @@ export const fiscalService = {
     items.forEach((row, idx) => {
       const t = taxCalc.items[idx];
       if (!t) return;
+      if (t.freteRateado > 0) {
+        row.valorFrete = t.freteRateado;
+        row.vFrete = t.freteRateado;
+      }
       if (t.icmsTributado) {
         row.modalidadeBaseCalculoIcms = 3;
         row.baseCalculoIcms = t.baseCalculoIcms;
@@ -1061,14 +1079,19 @@ export const fiscalService = {
     };
 
     if (hasFreteCobrado) payload.valorFrete = freteValor;
-    if (taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0) {
+    if (orderDesconto > 0) {
+      payload.valorDesconto = orderDesconto;
+      (payload as any).vDesc = orderDesconto;
+      (payload as any).desconto = orderDesconto;
+    }
+    if (taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0 || orderDesconto > 0 || hasFreteCobrado) {
       payload.totais = {
         baseCalculoIcms: taxCalc.totals.baseCalculoIcms,
         valorIcms: taxCalc.totals.valorIcms,
         valorIpi: taxCalc.totals.valorIpi,
         valorProdutos: Math.round((order.subtotal || 0) * 100) / 100,
         valorFrete: hasFreteCobrado ? freteValor : 0,
-        valorDesconto: Math.round((order.discount || 0) * 100) / 100,
+        valorDesconto: orderDesconto,
         valorTotal: Math.round((order.total + taxCalc.totals.valorIpi) * 100) / 100,
       };
     }

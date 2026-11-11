@@ -455,7 +455,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   };
 
   // Totais — frete soma no total apenas quando modalidade ≠ 9 (sem frete)
-  const subtotal = useMemo(() => items.reduce((acc, it) => acc + it.total, 0), [items]);
+  const grossSubtotal = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0), [items]);
+  const totalDesconto = useMemo(() => items.reduce((acc, it) => acc + (Number(it.discount) || 0), 0), [items]);
+  const subtotal = Math.max(0, grossSubtotal - totalDesconto);
   const freteModalidadeNum = Number(frete.modalidade ?? 9);
   const shippingVal = freteModalidadeNum === 9 ? 0 : (Math.max(0, Number(frete.valor) || 0));
   const total = subtotal + shippingVal;
@@ -467,6 +469,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     () =>
       computeOrderTaxes(items as any, {
         frete: freteCompoeNota ? shippingVal : 0,
+        desconto: totalDesconto,
         defaults: {
           cstIcmsPadrao: config?.cstIcmsPadrao,
           aliquotaIcmsPadrao: config?.aliquotaIcmsPadrao,
@@ -476,7 +479,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           cEnqIpiPadrao: config?.cEnqIpiPadrao,
         },
       }),
-    [items, freteCompoeNota, shippingVal, config]
+    [items, freteCompoeNota, shippingVal, totalDesconto, config]
   );
   const hasTaxHighlight = taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0 || taxCalc.items.some((t) => t.icmsTributado || t.destacarIpi);
 
@@ -561,8 +564,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIpi: it.aliquotaIpi,
       cEnqIpi: it.cEnqIpi
     })),
-    subtotal,
-    discount: 0,
+    subtotal: grossSubtotal,
+    discount: totalDesconto,
     shipping: shippingVal,
     total,
     frete: {
@@ -767,8 +770,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           reference: syntheticOrder.reference,
           order: createdOrder,
           items: createdOrder.items,
-          subtotal,
-          discount: 0,
+          subtotal: grossSubtotal,
+          discount: totalDesconto,
           shipping: shippingVal,
           total,
           nfeStatus: (createdOrder.nfeStatus || 'processando') as NfeStatus,
@@ -1376,7 +1379,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-7 gap-2.5">
                     {/* Produto Selecionável ou Nome */}
                     <div className="col-span-2 md:col-span-2 space-y-1">
                       <label className="text-[11px] font-black uppercase text-slate-500">Produto do Catálogo</label>
@@ -1413,6 +1416,18 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                       />
                     </div>
 
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-black uppercase text-rose-600">Desconto (R$)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        value={it.discount || ''} 
+                        onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} 
+                        placeholder="0,00"
+                        className="w-full p-2 bg-rose-50/60 border border-rose-200 rounded-xl text-xs font-bold text-right outline-none focus:border-rose-500 text-rose-800"
+                      />
+                    </div>
+
                     {/* CFOP Editável */}
                     <div className="space-y-1">
                       <label className="text-[11px] font-black uppercase text-purple-700">CFOP *</label>
@@ -1440,7 +1455,11 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs pt-1 border-t border-slate-100">
                     <span className="text-xs text-slate-500 font-mono">NCM: {it.ncm}</span>
-                    <span className="font-black text-slate-800">Total do Item: {formatBRL(it.total)}</span>
+                    <span className="font-black text-slate-800">
+                      Produtos: {formatBRL((it.quantity || 0) * (it.unitPrice || 0))}
+                      {Boolean(it.discount) && <> · Desconto: -{formatBRL(it.discount)}</>}
+                      {' · '}Líquido: {formatBRL(it.total)}
+                    </span>
                   </div>
 
                   <ItemTaxEditor
