@@ -165,6 +165,10 @@ export const FiscalConfigView: React.FC<FiscalConfigViewProps> = ({
           <label className="space-y-1"><span className={label}>CFOP estadual</span><input className={input} value={config.cfopPadraoEstadual || ''} onChange={(e) => patch({ cfopPadraoEstadual: e.target.value })} /></label>
           <label className="space-y-1"><span className={label}>CFOP interestadual</span><input className={input} value={config.cfopPadraoInterestadual || ''} onChange={(e) => patch({ cfopPadraoInterestadual: e.target.value })} /></label>
           <label className="space-y-1"><span className={label}>CST ICMS</span><input className={input} value={config.cstIcmsPadrao || ''} onChange={(e) => patch({ cstIcmsPadrao: e.target.value })} /></label>
+          <label className="space-y-1"><span className={label}>Alíquota ICMS padrão (%)</span><input className={input} type="number" step="0.01" value={config.aliquotaIcmsPadrao ?? ''} onChange={(e) => patch({ aliquotaIcmsPadrao: e.target.value ? Number(e.target.value) : undefined })} placeholder="Ex: 12.0" /></label>
+          <label className="space-y-1"><span className={label}>CST IPI padrão</span><input className={input} value={config.cstIpiPadrao || ''} onChange={(e) => patch({ cstIpiPadrao: e.target.value })} placeholder="Ex: 50" /></label>
+          <label className="space-y-1"><span className={label}>Alíquota IPI padrão (%)</span><input className={input} type="number" step="0.01" value={config.aliquotaIpiPadrao ?? ''} onChange={(e) => patch({ aliquotaIpiPadrao: e.target.value ? Number(e.target.value) : undefined })} placeholder="Ex: 5.0" /></label>
+          <label className="space-y-1"><span className={label}>Código Enquadramento IPI</span><input className={input} maxLength={3} value={config.cEnqIpiPadrao || ''} onChange={(e) => patch({ cEnqIpiPadrao: e.target.value.replace(/\D/g, '') })} placeholder="999" /></label>
           <label className="space-y-1"><span className={label}>Natureza da operação</span><input className={input} value={config.naturezaOperacaoPadrao || ''} onChange={(e) => patch({ naturezaOperacaoPadrao: e.target.value })} /></label>
         </section>
       )}

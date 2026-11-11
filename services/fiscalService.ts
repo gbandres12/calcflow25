@@ -6,6 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
 import { INF_ADPROD_MAX, buildNfeInfCpl } from './nfeComplementares';
 import { CANCEL_CSTATS, mapRemoteNfeStatus, preferCancelledStatus } from './nfeRemoteStatus';
+import { computeOrderTaxes, CST_ICMS_COM_REDUCAO } from './nfeTaxes';
 
 export { mapRemoteNfeStatus } from './nfeRemoteStatus';
 
@@ -75,6 +76,33 @@ export interface NotaAsItemPayload {
   csosn?: string;
   cst?: string;
   aliquotaIcms?: number;
+  /** Destaque de ICMS próprio (modBC 3 = valor da operação). */
+  modalidadeBaseCalculoIcms?: number;
+  baseCalculoIcms?: number;
+  valorIcms?: number;
+  percentualReducaoBc?: number;
+  icms?: {
+    cst: string;
+    origem?: number;
+    modalidadeBaseCalculo?: number;
+    baseCalculo?: number;
+    aliquota?: number;
+    valor?: number;
+    percentualReducaoBc?: number;
+  };
+  /** Grupo IPI (somente NF-e modelo 55). */
+  cstIpi?: string;
+  aliquotaIpi?: number;
+  baseCalculoIpi?: number;
+  valorIpi?: number;
+  codigoEnquadramentoIpi?: string;
+  ipi?: {
+    cst: string;
+    codigoEnquadramento: string;
+    vBC?: number;
+    pIPI?: number;
+    vIPI?: number;
+  };
   aliquotaPis?: number;
   aliquotaCofins?: number;
   nfeReferenciada?: NotaAsNfeReferenciada;
@@ -195,6 +223,16 @@ export interface NotaAsCriarNFePayload {
   presencaComprador: 1;
   infCpl?: string;
   referenciaExterna?: string;
+  /** Totais de impostos destacados (ICMSTot). */
+  totais?: {
+    baseCalculoIcms: number;
+    valorIcms: number;
+    valorIpi: number;
+    valorProdutos: number;
+    valorFrete: number;
+    valorDesconto: number;
+    valorTotal: number;
+  };
 }
 
 /**
@@ -815,11 +853,7 @@ export const fiscalService = {
         aliquotaCofins: it.aliquotaCofins !== undefined ? it.aliquotaCofins : (config.aliquotaCofins ?? 0),
       };
 
-      // Alíquota de ICMS se for tributada
-      if (itemCst === '00' || itemCst === '10' || itemCst === '20' || itemCst === '90') {
-        const aliq = it.aliquotaIcms !== undefined ? it.aliquotaIcms : config.aliquotaIcmsPadrao;
-        if (aliq != null) row.aliquotaIcms = aliq;
-      }
+      // Destaque de ICMS/IPI é aplicado depois (precisa do rateio do frete). Ver applyTaxes abaixo.
 
       if (isDevolucao && chaveDevolucao.length === 44) {
         row.nfeReferenciada = {
@@ -846,6 +880,55 @@ export const fiscalService = {
     const freteValorRaw = order.frete?.valor ?? order.shipping ?? 0;
     const freteValor = Math.max(0, Number(freteValorRaw) || 0);
     const hasFreteCobrado = freteValorCompoeTotalNota(freteModalidade, freteValor);
+
+    // ---- Destaque de ICMS (BC, alíquota, valor) e IPI por item ----
+    const taxCalc = computeOrderTaxes(
+      (order.items || []).map((it) => ({ ...it, cst: String(it.cst || it.csosn || cstIcmsPadrao).trim() })),
+      {
+        frete: hasFreteCobrado ? freteValor : 0,
+        desconto: 0,
+        defaults: {
+          cstIcmsPadrao,
+          aliquotaIcmsPadrao: config.aliquotaIcmsPadrao,
+          freteCompoeBcIcms: config.freteCompoeBcIcms,
+          cstIpiPadrao: config.cstIpiPadrao,
+          aliquotaIpiPadrao: config.aliquotaIpiPadrao,
+          cEnqIpiPadrao: config.cEnqIpiPadrao,
+        },
+      }
+    );
+    items.forEach((row, idx) => {
+      const t = taxCalc.items[idx];
+      if (!t) return;
+      if (t.icmsTributado) {
+        row.modalidadeBaseCalculoIcms = 3;
+        row.baseCalculoIcms = t.baseCalculoIcms;
+        row.aliquotaIcms = t.aliquotaIcms;
+        row.valorIcms = t.valorIcms;
+        if (t.reducaoBcIcms > 0 || CST_ICMS_COM_REDUCAO.includes(t.cst)) row.percentualReducaoBc = t.reducaoBcIcms;
+        row.icms = {
+          cst: t.cst,
+          modalidadeBaseCalculo: 3,
+          baseCalculo: t.baseCalculoIcms,
+          aliquota: t.aliquotaIcms,
+          valor: t.valorIcms,
+          ...(row.percentualReducaoBc !== undefined ? { percentualReducaoBc: t.reducaoBcIcms } : {}),
+        };
+      }
+      if (t.destacarIpi && t.cstIpi) {
+        row.cstIpi = t.cstIpi;
+        row.codigoEnquadramentoIpi = t.cEnqIpi;
+        row.ipi = { cst: t.cstIpi, codigoEnquadramento: t.cEnqIpi || '999' };
+        if (t.ipiTributado) {
+          row.baseCalculoIpi = t.baseCalculoIpi;
+          row.aliquotaIpi = t.aliquotaIpi;
+          row.valorIpi = t.valorIpi;
+          row.ipi.vBC = t.baseCalculoIpi;
+          row.ipi.pIPI = t.aliquotaIpi;
+          row.ipi.vIPI = t.valorIpi;
+        }
+      }
+    });
 
     // SEFAZ Regra de Validação X25-10 e X25-20 (Rejeição 868 e 852):
     // 1) Em operações interestaduais (idDest=2, destUf !== emitUf), a SEFAZ PROÍBE o grupo veicTransp e transporta
@@ -967,7 +1050,7 @@ export const fiscalService = {
           : (order.nfeNaturezaOperacao || config.naturezaOperacaoPadrao || 'Venda de producao do estabelecimento'),
       dest,
       items,
-      pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : order.total }],
+      pagamentos: [{ tipoPagamento, valor: semPagamento ? 0 : Math.round((order.total + taxCalc.totals.valorIpi) * 100) / 100 }],
       transporte,
       tipoOperacao,
       finalidade: isDevolucao ? 4 : 1,
@@ -978,6 +1061,17 @@ export const fiscalService = {
     };
 
     if (hasFreteCobrado) payload.valorFrete = freteValor;
+    if (taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0) {
+      payload.totais = {
+        baseCalculoIcms: taxCalc.totals.baseCalculoIcms,
+        valorIcms: taxCalc.totals.valorIcms,
+        valorIpi: taxCalc.totals.valorIpi,
+        valorProdutos: Math.round((order.subtotal || 0) * 100) / 100,
+        valorFrete: hasFreteCobrado ? freteValor : 0,
+        valorDesconto: Math.round((order.discount || 0) * 100) / 100,
+        valorTotal: Math.round((order.total + taxCalc.totals.valorIpi) * 100) / 100,
+      };
+    }
     return payload;
   },
 
@@ -1681,6 +1775,18 @@ export const fiscalService = {
     const volBloco = vol && ((vol.quantidade || 0) > 0 || (vol.pesoBruto || 0) > 0 || (vol.pesoLiquido || 0) > 0)
       ? `<vol><qVol>${nfeQVol(vol.quantidade)}</qVol><esp>${vol.especie || 'GRANEL'}</esp><pesoL>${(vol.pesoLiquido || 0).toFixed(3)}</pesoL><pesoB>${(vol.pesoBruto || 0).toFixed(3)}</pesoB></vol>`
       : '';
+    const taxCalcXml = computeOrderTaxes(order.items || [], {
+      frete: freteValXml,
+      desconto: order.discount,
+      defaults: {
+        cstIcmsPadrao: config.cstIcmsPadrao,
+        aliquotaIcmsPadrao: config.aliquotaIcmsPadrao,
+        freteCompoeBcIcms: config.freteCompoeBcIcms,
+        cstIpiPadrao: config.cstIpiPadrao,
+        aliquotaIpiPadrao: config.aliquotaIpiPadrao,
+        cEnqIpiPadrao: config.cEnqIpiPadrao,
+      },
+    });
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe>
@@ -1760,12 +1866,13 @@ export const fiscalService = {
       </det>
       <total>
         <ICMSTot>
-          <vBC>0.00</vBC>
-          <vICMS>0.00</vICMS>
+          <vBC>${taxCalcXml.totals.baseCalculoIcms.toFixed(2)}</vBC>
+          <vICMS>${taxCalcXml.totals.valorIcms.toFixed(2)}</vICMS>
           <vProd>${order.subtotal.toFixed(2)}</vProd>
           <vFrete>${freteValXml.toFixed(2)}</vFrete>
           <vDesc>${(order.discount || 0).toFixed(2)}</vDesc>
-          <vNF>${order.total.toFixed(2)}</vNF>
+          <vIPI>${taxCalcXml.totals.valorIpi.toFixed(2)}</vIPI>
+          <vNF>${(order.total + taxCalcXml.totals.valorIpi).toFixed(2)}</vNF>
         </ICMSTot>
       </total>
       <transp>

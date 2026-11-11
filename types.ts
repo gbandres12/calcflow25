@@ -189,6 +189,10 @@ export interface InventoryItem {
   cfop?: string;
   origem?: string;
   aliquotaIcms?: number;
+  reducaoBcIcms?: number;
+  cstIpi?: string;
+  aliquotaIpi?: number;
+  cEnqIpi?: string;
   aliquotaPis?: number;
   aliquotaCofins?: number;
   unidadeTributavel?: string;
@@ -492,6 +496,19 @@ export interface SaleOrderItem {
   cst?: string;
   csosn?: string;
   aliquotaIcms?: number;
+  /** % de redução da base de cálculo do ICMS (CST 20/70). */
+  reducaoBcIcms?: number;
+  /** Base de cálculo do ICMS informada manualmente (se vazio, é calculada). */
+  baseCalculoIcms?: number;
+  /** Valor do ICMS informado manualmente (se vazio, é calculado). */
+  valorIcms?: number;
+  /** Destacar IPI neste item. */
+  destacarIpi?: boolean;
+  cstIpi?: string;
+  aliquotaIpi?: number;
+  cEnqIpi?: string;
+  baseCalculoIpi?: number;
+  valorIpi?: number;
   aliquotaPis?: number;
   aliquotaCofins?: number;
   cClassTrib?: string;
@@ -734,6 +751,11 @@ export interface FiscalConfig {
   cfopTransferenciaInterestadual?: string;
   aliquotaIcmsPadrao?: number;
   cstIcmsPadrao?: string;
+  /** Frete compõe a base de cálculo do ICMS (padrão: sim). */
+  freteCompoeBcIcms?: boolean;
+  cstIpiPadrao?: string;
+  aliquotaIpiPadrao?: number;
+  cEnqIpiPadrao?: string;
   cstPisCofins?: string;
   aliquotaPis?: number;
   aliquotaCofins?: number;

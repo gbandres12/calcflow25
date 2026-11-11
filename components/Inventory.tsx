@@ -162,6 +162,10 @@ export const Inventory: React.FC<InventoryProps> = ({
     cfop: '5101',
     origem: '0',
     aliquotaIcms: '0',
+    reducaoBcIcms: '',
+    cstIpi: '',
+    aliquotaIpi: '',
+    cEnqIpi: '',
     aliquotaPis: '0',
     aliquotaCofins: '0',
     unidadeTributavel: 'TON',
@@ -247,6 +251,10 @@ export const Inventory: React.FC<InventoryProps> = ({
       cfop: '5101',
       origem: '0',
       aliquotaIcms: '0',
+      reducaoBcIcms: '',
+      cstIpi: '',
+      aliquotaIpi: '',
+      cEnqIpi: '',
       aliquotaPis: '0',
       aliquotaCofins: '0',
       unidadeTributavel: 'TON',
@@ -285,6 +293,10 @@ export const Inventory: React.FC<InventoryProps> = ({
       cfop: item.cfop || '5101',
       origem: item.origem || '0',
       aliquotaIcms: item.aliquotaIcms !== undefined ? item.aliquotaIcms.toString() : '0',
+      reducaoBcIcms: item.reducaoBcIcms !== undefined ? item.reducaoBcIcms.toString() : '',
+      cstIpi: item.cstIpi || '',
+      aliquotaIpi: item.aliquotaIpi !== undefined ? item.aliquotaIpi.toString() : '',
+      cEnqIpi: item.cEnqIpi || '',
       aliquotaPis: item.aliquotaPis !== undefined ? item.aliquotaPis.toString() : '0',
       aliquotaCofins: item.aliquotaCofins !== undefined ? item.aliquotaCofins.toString() : '0',
       unidadeTributavel: item.unidadeTributavel || 'TON',
@@ -381,6 +393,10 @@ export const Inventory: React.FC<InventoryProps> = ({
       cfop: formData.cfop,
       origem: formData.origem,
       aliquotaIcms: parseFloat(formData.aliquotaIcms || '0'),
+      reducaoBcIcms: formData.reducaoBcIcms ? parseFloat(formData.reducaoBcIcms) : undefined,
+      cstIpi: formData.cstIpi || undefined,
+      aliquotaIpi: formData.aliquotaIpi ? parseFloat(formData.aliquotaIpi) : undefined,
+      cEnqIpi: formData.cEnqIpi || undefined,
       aliquotaPis: parseFloat(formData.aliquotaPis || '0'),
       aliquotaCofins: parseFloat(formData.aliquotaCofins || '0'),
       unidadeTributavel: formData.unidadeTributavel,
@@ -1079,6 +1095,65 @@ export const Inventory: React.FC<InventoryProps> = ({
                         className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-purple-500" 
                         placeholder="0.0" 
                       />
+                    </div>
+                  </div>
+
+                  {/* IPI & Redução ICMS */}
+                  <div className="p-4 bg-orange-50/60 rounded-3xl border border-orange-200/80 space-y-3">
+                    <h4 className="text-xs font-black text-orange-950 uppercase tracking-wide">
+                      IPI & Redução da Base de ICMS
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Redução BC ICMS (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.reducaoBcIcms}
+                          onChange={e => setFormData({ ...formData, reducaoBcIcms: e.target.value })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-orange-500"
+                          placeholder="Ex: 60.00"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">CST IPI Padrão</label>
+                        <select
+                          value={formData.cstIpi}
+                          onChange={e => setFormData({ ...formData, cstIpi: e.target.value })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-orange-500"
+                        >
+                          <option value="">Sem IPI</option>
+                          <option value="50">50 - Saída tributada</option>
+                          <option value="99">99 - Outras saídas</option>
+                          <option value="51">51 - Saída alíquota zero</option>
+                          <option value="52">52 - Saída isenta</option>
+                          <option value="53">53 - Saída não tributada</option>
+                          <option value="54">54 - Saída imune</option>
+                          <option value="55">55 - Saída c/ suspensão</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Alíquota IPI (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.aliquotaIpi}
+                          onChange={e => setFormData({ ...formData, aliquotaIpi: e.target.value })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-black text-xs outline-none focus:border-orange-500"
+                          placeholder="0.0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Enquadramento IPI</label>
+                        <input
+                          type="text"
+                          maxLength={3}
+                          value={formData.cEnqIpi}
+                          onChange={e => setFormData({ ...formData, cEnqIpi: e.target.value.replace(/\D/g, '') })}
+                          className="w-full p-3 bg-white border border-slate-200 rounded-2xl font-mono font-bold text-xs outline-none focus:border-orange-500"
+                          placeholder="999"
+                        />
+                      </div>
                     </div>
                   </div>
 

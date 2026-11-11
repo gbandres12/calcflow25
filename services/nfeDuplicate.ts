@@ -19,6 +19,14 @@ export interface NfeDuplicateDraftItem {
   aliquotaIbs?: number;
   aliquotaCbs?: number;
   aliquotaIs?: number;
+  aliquotaIcms?: number;
+  reducaoBcIcms?: number;
+  baseCalculoIcms?: number;
+  valorIcms?: number;
+  destacarIpi?: boolean;
+  cstIpi?: string;
+  aliquotaIpi?: number;
+  cEnqIpi?: string;
   informacoesComplementares?: string;
   infAdProd?: string;
 }
@@ -58,6 +66,14 @@ function cloneItem(item: SaleOrderItem): NfeDuplicateDraftItem {
     aliquotaIbs: item.aliquotaIbs,
     aliquotaCbs: item.aliquotaCbs,
     aliquotaIs: item.aliquotaIs,
+    aliquotaIcms: item.aliquotaIcms,
+    reducaoBcIcms: item.reducaoBcIcms,
+    baseCalculoIcms: item.baseCalculoIcms,
+    valorIcms: item.valorIcms,
+    destacarIpi: item.destacarIpi,
+    cstIpi: item.cstIpi,
+    aliquotaIpi: item.aliquotaIpi,
+    cEnqIpi: item.cEnqIpi,
     informacoesComplementares: item.informacoesComplementares,
     infAdProd: item.infAdProd
   };

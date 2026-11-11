@@ -32,6 +32,8 @@ import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
 import NfeRejectionHint from './NfeRejectionHint';
+import { ItemTaxEditor, NfeTaxSummary } from './fiscal/NfeTaxFields';
+import { computeOrderTaxes } from '../services/nfeTaxes';
 
 interface EmitirNfeModalProps {
   order: SaleOrder;
@@ -195,6 +197,25 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     return Math.max(0, itemsSubtotal - discountEfetivo + freteValorEfetivo);
   }, [itemsSubtotal, discountEfetivo, freteValorEfetivo]);
 
+  // Destaque de ICMS/IPI (mesmo cálculo enviado à SEFAZ).
+  const taxCalc = useMemo(
+    () =>
+      computeOrderTaxes(items, {
+        frete: freteValorEfetivo,
+        desconto: discountEfetivo,
+        defaults: {
+          cstIcmsPadrao: currentConfig.cstIcmsPadrao,
+          aliquotaIcmsPadrao: currentConfig.aliquotaIcmsPadrao,
+          freteCompoeBcIcms: currentConfig.freteCompoeBcIcms,
+          cstIpiPadrao: currentConfig.cstIpiPadrao,
+          aliquotaIpiPadrao: currentConfig.aliquotaIpiPadrao,
+          cEnqIpiPadrao: currentConfig.cEnqIpiPadrao,
+        },
+      }),
+    [items, freteValorEfetivo, discountEfetivo, currentConfig]
+  );
+  const hasTaxHighlight = taxCalc.items.some((t) => t.icmsTributado || t.destacarIpi);
+
   // Informações Complementares pré-definidas do produto + padrão
   const productComplementares = orderItems
     .map(it => it.informacoesComplementares)
@@ -233,6 +254,11 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     setItems(prev => prev.map((item, idx) => {
       if (idx !== index) return item;
       const updated = { ...item, [field]: value };
+      if (['quantity', 'cst', 'reducaoBcIcms'].includes(field)) {
+        updated.baseCalculoIcms = undefined;
+        updated.valorIcms = undefined;
+      }
+      if (field === 'aliquotaIcms' || field === 'baseCalculoIcms') updated.valorIcms = undefined;
       if (field === 'quantity') {
         const raw = parseFloat(value);
         const qty = Number.isFinite(raw) ? raw : 0;
@@ -641,7 +667,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total</p>
-            <p className="text-base font-black text-slate-900 leading-none">{formatBRL(totalComFrete)}</p>
+            <p className="text-base font-black text-slate-900 leading-none">{formatBRL(totalComFrete + taxCalc.totals.valorIpi)}</p>
           </div>
           {isPreview ? (
             <>
@@ -735,7 +761,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                 <Eye size={14} /> Prévia em PDF do rascunho — revise antes de transmitir
               </p>
               <p className="text-xs font-medium mt-1">
-                {items.length} item(ns) · Total {formatBRL(totalComFrete)} · {naturezaOperacao}
+                {items.length} item(ns) · Total {formatBRL(totalComFrete + taxCalc.totals.valorIpi)} · {naturezaOperacao}
               </p>
               <p className="text-xs text-emerald-800 mt-1">
                 Este PDF é uma prévia interna (RASCUNHO / SEM VALOR FISCAL). O DANFE oficial só existe depois da autorização da SEFAZ.
@@ -1017,6 +1043,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                         <input type="text" value={it.cst || ''} onChange={e => handleUpdateItem(idx, 'cst', e.target.value)} className="w-full px-2 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm font-mono font-bold" />
                       </div>
                     </div>
+                    <ItemTaxEditor item={it} taxes={taxCalc.items[idx]} onChange={(f, v) => handleUpdateItem(idx, f, v)} />
                     {isAvulsa && items.length > 1 && (
                       <button type="button" onClick={() => handleRemoveItem(idx)} className="text-xs text-rose-600 font-bold">Remover item</button>
                     )}
@@ -1038,7 +1065,8 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {items.map((it, idx) => (
-                      <tr key={idx}>
+                      <React.Fragment key={idx}>
+                      <tr>
                         <td className="px-3 py-2">
                           <p className="font-bold text-slate-800">{it.productName}</p>
                           <p className="text-xs text-slate-500">{it.productCode}</p>
@@ -1061,10 +1089,22 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                         </td>
                         <td className="px-3 py-2 text-right font-black">{formatBRL(it.total)}</td>
                       </tr>
+                      <tr key={`tax-${idx}`}>
+                        <td colSpan={6} className="px-3 pb-3">
+                          <ItemTaxEditor item={it} taxes={taxCalc.items[idx]} onChange={(f, v) => handleUpdateItem(idx, f, v)} />
+                        </td>
+                      </tr>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {hasTaxHighlight && (
+                <div className="mt-3">
+                  <NfeTaxSummary totals={taxCalc.totals} />
+                </div>
+              )}
             </FlowSection>
 
             <FlowSection title="Informações complementares" summary={infCpl ? infCpl.slice(0, 72) : 'Vazio'} defaultOpen={false}>

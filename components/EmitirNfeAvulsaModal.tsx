@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { Customer, InventoryItem, FiscalConfig, Company, User, SaleOrder, OrderStatus, TransactionStatus, NfeStatus, FreteInfo, Transportador, OrderWithdrawal } from '../types';
 import {
   fiscalService,
+  freteValorCompoeTotalNota,
   isCfopDevolucao,
   isNaturezaDevolucao,
   mergeNfeConsulta,
@@ -22,6 +23,8 @@ import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { useToast } from './ui/Toast';
 import NfeRejectionHint from './NfeRejectionHint';
+import { ItemTaxEditor, NfeTaxSummary } from './fiscal/NfeTaxFields';
+import { computeOrderTaxes } from '../services/nfeTaxes';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
 interface EmitirNfeAvulsaModalProps {
@@ -58,7 +61,28 @@ interface AvulsaItem {
   aliquotaCbs?: number;
   aliquotaIs?: number;
   informacoesComplementares?: string;
+  // Destaque de impostos
+  aliquotaIcms?: number;
+  reducaoBcIcms?: number;
+  baseCalculoIcms?: number;
+  valorIcms?: number;
+  destacarIpi?: boolean;
+  cstIpi?: string;
+  aliquotaIpi?: number;
+  cEnqIpi?: string;
 }
+
+/** Campos de imposto copiados do produto/rascunho para o item da nota. */
+const pickTaxFields = (src: any): Partial<AvulsaItem> => ({
+  aliquotaIcms: src?.aliquotaIcms !== undefined && src?.aliquotaIcms !== '' ? Number(src.aliquotaIcms) : undefined,
+  reducaoBcIcms: src?.reducaoBcIcms !== undefined && src?.reducaoBcIcms !== '' ? Number(src.reducaoBcIcms) : undefined,
+  baseCalculoIcms: src?.baseCalculoIcms,
+  valorIcms: src?.valorIcms,
+  destacarIpi: src?.destacarIpi ?? Boolean(src?.cstIpi),
+  cstIpi: src?.cstIpi,
+  aliquotaIpi: src?.aliquotaIpi !== undefined && src?.aliquotaIpi !== '' ? Number(src.aliquotaIpi) : undefined,
+  cEnqIpi: src?.cEnqIpi,
+});
 
 const getLocalDateStr = (d: Date = new Date()) => dateISOBR(d);
 
@@ -194,7 +218,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
         aliquotaIbs: it.aliquotaIbs,
         aliquotaCbs: it.aliquotaCbs,
         aliquotaIs: it.aliquotaIs,
-        informacoesComplementares: it.informacoesComplementares
+        informacoesComplementares: it.informacoesComplementares,
+        ...pickTaxFields(it)
       }));
     }
     const firstProd = (inventory || [])[0];
@@ -216,7 +241,8 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIbs: firstProd?.aliquotaIbs,
       aliquotaCbs: firstProd?.aliquotaCbs,
       aliquotaIs: firstProd?.aliquotaIs,
-      informacoesComplementares: firstProd?.informacoesComplementares
+      informacoesComplementares: firstProd?.informacoesComplementares,
+      ...pickTaxFields(firstProd)
     }
   ];
   });
@@ -392,6 +418,12 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
     setItems(prev => prev.map((it, i) => {
       if (i !== idx) return it;
       const updated = { ...it, [field]: value };
+      // Valores manuais de BC/imposto ficam obsoletos quando a base muda: volta ao cálculo automático.
+      if (['quantity', 'unitPrice', 'discount', 'productId', 'cst', 'reducaoBcIcms'].includes(field as string)) {
+        updated.baseCalculoIcms = undefined;
+        updated.valorIcms = undefined;
+      }
+      if (field === 'aliquotaIcms' || field === 'baseCalculoIcms') updated.valorIcms = undefined;
       if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
         const q = field === 'quantity' ? parseFloat(value) || 0 : it.quantity;
         const p = field === 'unitPrice' ? parseFloat(value) || 0 : it.unitPrice;
@@ -414,6 +446,7 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
           updated.aliquotaCbs = prod.aliquotaCbs;
           updated.aliquotaIs = prod.aliquotaIs;
           updated.informacoesComplementares = prod.informacoesComplementares;
+          Object.assign(updated, pickTaxFields(prod));
           updated.total = (updated.quantity * updated.unitPrice) - updated.discount;
         }
       }
@@ -427,6 +460,25 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
   const shippingVal = freteModalidadeNum === 9 ? 0 : (Math.max(0, Number(frete.valor) || 0));
   const total = subtotal + shippingVal;
   const totalQuantidade = useMemo(() => items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0), [items]);
+
+  // Destaque de ICMS/IPI (mesmo cálculo enviado à SEFAZ). Frete FOB não compõe a base.
+  const freteCompoeNota = freteValorCompoeTotalNota(freteModalidadeNum, shippingVal);
+  const taxCalc = useMemo(
+    () =>
+      computeOrderTaxes(items as any, {
+        frete: freteCompoeNota ? shippingVal : 0,
+        defaults: {
+          cstIcmsPadrao: config?.cstIcmsPadrao,
+          aliquotaIcmsPadrao: config?.aliquotaIcmsPadrao,
+          freteCompoeBcIcms: config?.freteCompoeBcIcms,
+          cstIpiPadrao: config?.cstIpiPadrao,
+          aliquotaIpiPadrao: config?.aliquotaIpiPadrao,
+          cEnqIpiPadrao: config?.cEnqIpiPadrao,
+        },
+      }),
+    [items, freteCompoeNota, shippingVal, config]
+  );
+  const hasTaxHighlight = taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0 || taxCalc.items.some((t) => t.icmsTributado || t.destacarIpi);
 
   const autoInfCpl = useMemo(
     () => assembleAutoInfCpl(config?.observacoesFiscaisPadrao, items),
@@ -499,7 +551,15 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       aliquotaIbs: it.aliquotaIbs,
       aliquotaCbs: it.aliquotaCbs,
       aliquotaIs: it.aliquotaIs,
-      informacoesComplementares: it.informacoesComplementares
+      informacoesComplementares: it.informacoesComplementares,
+      aliquotaIcms: it.aliquotaIcms,
+      reducaoBcIcms: it.reducaoBcIcms,
+      baseCalculoIcms: it.baseCalculoIcms,
+      valorIcms: it.valorIcms,
+      destacarIpi: it.destacarIpi,
+      cstIpi: it.cstIpi,
+      aliquotaIpi: it.aliquotaIpi,
+      cEnqIpi: it.cEnqIpi
     })),
     subtotal,
     discount: 0,
@@ -1382,10 +1442,18 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
                     <span className="text-xs text-slate-500 font-mono">NCM: {it.ncm}</span>
                     <span className="font-black text-slate-800">Total do Item: {formatBRL(it.total)}</span>
                   </div>
+
+                  <ItemTaxEditor
+                    item={it}
+                    taxes={taxCalc.items[idx]}
+                    onChange={(field, value) => handleUpdateItem(idx, field as keyof AvulsaItem, value)}
+                  />
                 </div>
               ))}
             </div>
           </div>
+
+          {hasTaxHighlight && <NfeTaxSummary totals={taxCalc.totals} />}
 
           {/* Seção 3: Parâmetros Fiscais e Informações Complementares */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1573,11 +1641,13 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
               </span>
               <p className="text-xs text-slate-400">
                 Produtos ({items.length} itens): {formatBRL(subtotal)} | Frete: {formatBRL(shippingVal)}
+                {taxCalc.totals.valorIcms > 0 && <> | ICMS: {formatBRL(taxCalc.totals.valorIcms)}</>}
+                {taxCalc.totals.valorIpi > 0 && <> | IPI: {formatBRL(taxCalc.totals.valorIpi)}</>}
               </p>
             </div>
             <div className="text-right w-full sm:w-auto">
               <span className="text-[11px] font-bold text-slate-400 uppercase">Valor Total NF-e:</span>
-              <p className="text-2xl font-black text-emerald-400">{formatBRL(total)}</p>
+              <p className="text-2xl font-black text-emerald-400">{formatBRL(total + taxCalc.totals.valorIpi)}</p>
             </div>
           </div>
           </>

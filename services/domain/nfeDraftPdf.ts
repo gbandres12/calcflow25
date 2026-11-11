@@ -8,6 +8,7 @@ import {
   SaleOrderLinkedNfe,
 } from '../../types.js';
 import { overlayLinkedNfeDocument } from '../saleNfe.js';
+import { computeOrderTaxes, round2 } from '../nfeTaxes.js';
 
 const NAVY = rgb(11 / 255, 31 / 255, 74 / 255);
 const TEXT = rgb(26 / 255, 35 / 255, 50 / 255);
@@ -147,6 +148,23 @@ export async function buildNfeDraftPdf(input: NfeDraftPdfInput): Promise<Uint8Ar
   const transp = frete.transportadora;
   const veiculo = frete.veiculo;
   const volumes = frete.volumes;
+  const freteMod = Number(frete.modalidade ?? 9);
+  const freteVal = Math.max(0, Number(frete.valor ?? order.shipping) || 0);
+  const freteCompoe = freteVal > 0 && (freteMod === 0 || freteMod === 2 || freteMod === 3);
+  const taxCalc = computeOrderTaxes(items, {
+    frete: freteCompoe ? freteVal : 0,
+    desconto: order.discount,
+    defaults: {
+      cstIcmsPadrao: config.cstIcmsPadrao,
+      aliquotaIcmsPadrao: config.aliquotaIcmsPadrao,
+      freteCompoeBcIcms: config.freteCompoeBcIcms,
+      cstIpiPadrao: config.cstIpiPadrao,
+      aliquotaIpiPadrao: config.aliquotaIpiPadrao,
+      cEnqIpiPadrao: config.cEnqIpiPadrao,
+    },
+  });
+  const pct = (v: number) => (v ? `${(Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}` : '0');
+  const num2 = (v: number) => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -295,17 +313,55 @@ export async function buildNfeDraftPdf(input: NfeDraftPdfInput): Promise<Uint8Ar
   draw(fit(order.reference || '-', 8, width * 0.38 - 10, bold), left + width * 0.62 + 4, y - 16, 8, bold);
   y -= 24;
 
+  // --- Cálculo do imposto (quadro do DANFE) ---
+  {
+    const t = taxCalc.totals;
+    const boxes: [string, number][] = [
+      ['BASE DE CALC. DO ICMS', t.baseCalculoIcms],
+      ['VALOR DO ICMS', t.valorIcms],
+      ['BASE CALC. ICMS ST', 0],
+      ['VALOR DO ICMS ST', 0],
+      ['VALOR TOTAL PRODUTOS', t.valorProdutos],
+      ['VALOR DO FRETE', t.valorFrete],
+      ['DESCONTO', t.valorDesconto],
+      ['VALOR DO IPI', t.valorIpi],
+      ['V. TOTAL DA NOTA', round2(Number(order.total) || 0) + t.valorIpi],
+    ];
+    ensure(52);
+    draw('CALCULO DO IMPOSTO', left, y - 7, 6.5, bold, NAVY);
+    y -= 10;
+    const perRow = 5;
+    const bw = width / perRow;
+    const bh = 20;
+    boxes.forEach(([k, v], i) => {
+      const col = i % perRow;
+      const row = Math.floor(i / perRow);
+      const bx = left + col * bw;
+      const by = y - (row + 1) * bh;
+      const last = i === boxes.length - 1;
+      rect(bx, by, bw, bh, last ? AMBER_BG : WHITE);
+      label(k, bx + 3, by + bh - 7);
+      drawRight(num2(v), bx + bw - 4, by + 4, 7.5, last ? bold : font);
+    });
+    y -= Math.ceil(boxes.length / perRow) * bh + 8;
+  }
+
   // Itens
   const cols = [
-    { key: 'cod', title: 'COD', w: 36 },
-    { key: 'desc', title: 'DESCRICAO DO PRODUTO', w: 168 },
-    { key: 'ncm', title: 'NCM', w: 52 },
-    { key: 'cfop', title: 'CFOP', w: 32 },
-    { key: 'cst', title: 'CST', w: 28 },
-    { key: 'un', title: 'UN', w: 24 },
-    { key: 'qtd', title: 'QTD', w: 48 },
-    { key: 'vu', title: 'VL UNIT', w: 70 },
-    { key: 'vt', title: 'VL TOTAL', w: 81 },
+    { key: 'cod', title: 'COD', w: 30 },
+    { key: 'desc', title: 'DESCRICAO', w: 99 },
+    { key: 'ncm', title: 'NCM', w: 40 },
+    { key: 'cst', title: 'CST', w: 22 },
+    { key: 'cfop', title: 'CFOP', w: 24 },
+    { key: 'un', title: 'UN', w: 20 },
+    { key: 'qtd', title: 'QTD', w: 34 },
+    { key: 'vu', title: 'V.UNIT', w: 40 },
+    { key: 'vt', title: 'V.TOTAL', w: 46 },
+    { key: 'bc', title: 'BC ICMS', w: 46 },
+    { key: 'vicms', title: 'V.ICMS', w: 38 },
+    { key: 'vipi', title: 'V.IPI', w: 34 },
+    { key: 'picms', title: '%ICMS', w: 24 },
+    { key: 'pipi', title: '%IPI', w: 22 },
   ];
   const tableW = cols.reduce((s, c) => s + c.w, 0);
 
@@ -335,27 +391,33 @@ export async function buildNfeDraftPdf(input: NfeDraftPdfInput): Promise<Uint8Ar
     if (idx % 2 === 1) rect(left, y - rowH, tableW, rowH, ROW_ALT);
     else rect(left, y - rowH, tableW, rowH);
 
+    const tx = taxCalc.items[idx];
     const cells = [
       dash(it.productCode),
       '',
       dash(it.ncm),
-      dash(it.cfop),
       dash(it.cst || it.csosn),
+      dash(it.cfop),
       dash(it.unit),
       qty(it.quantity),
-      money(it.unitPrice),
-      money(it.total),
+      num2(it.unitPrice),
+      num2(it.total),
+      num2(tx?.baseCalculoIcms || 0),
+      num2(tx?.valorIcms || 0),
+      num2(tx?.valorIpi || 0),
+      pct(tx?.aliquotaIcms || 0),
+      pct(tx?.aliquotaIpi || 0),
     ];
     let x = left;
     cells.forEach((cell, ci) => {
       if (ci === 1) {
         descLines.forEach((line, li) => {
-          draw(line, x + 2, y - 10 - li * 9, 7);
+          draw(line, x + 2, y - 10 - li * 9, 6.5);
         });
       } else {
         const alignRight = ci >= 6;
-        if (alignRight) drawRight(fit(cell, 6.5, cols[ci].w - 4), x + cols[ci].w - 2, y - 10, 6.5);
-        else draw(fit(cell, 6.5, cols[ci].w - 4), x + 2, y - 10, 6.5);
+        if (alignRight) drawRight(fit(cell, 6, cols[ci].w - 3), x + cols[ci].w - 2, y - 10, 6);
+        else draw(fit(cell, 6, cols[ci].w - 3), x + 2, y - 10, 6);
       }
       x += cols[ci].w;
     });
@@ -377,7 +439,9 @@ export async function buildNfeDraftPdf(input: NfeDraftPdfInput): Promise<Uint8Ar
     ['Produtos', money(order.subtotal)],
     ['Desconto', money(order.discount)],
     ['Frete', money(order.shipping)],
-    ['Total da NF-e', money(order.total)],
+    ...(taxCalc.totals.valorIcms > 0 ? [['ICMS destacado', money(taxCalc.totals.valorIcms)] as [string, string]] : []),
+    ...(taxCalc.totals.valorIpi > 0 ? [['IPI', money(taxCalc.totals.valorIpi)] as [string, string]] : []),
+    ['Total da NF-e', money(round2((Number(order.total) || 0) + taxCalc.totals.valorIpi))],
   ];
   totRows.forEach(([k, v], i) => {
     const h = 16;
