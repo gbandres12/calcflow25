@@ -20,9 +20,25 @@ export const CST_ICMS_COM_REDUCAO = ['20', '70'];
 
 export const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
 
+export function normalizeCst(cst?: string): { cst: string; origem: number } {
+  const raw = String(cst || '').trim();
+  if (raw.length === 3) {
+    const orig = parseInt(raw[0], 10);
+    return {
+      origem: Number.isFinite(orig) ? orig : 0,
+      cst: raw.slice(1),
+    };
+  }
+  return {
+    origem: 0,
+    cst: raw.length === 1 ? `0${raw}` : raw,
+  };
+}
+
 export function isIcmsTributado(cst?: string): boolean {
   const c = String(cst || '').trim();
-  return CST_ICMS_TRIBUTADOS.includes(c) || CSOSN_ICMS_TRIBUTADOS.includes(c);
+  const norm = normalizeCst(c).cst;
+  return CST_ICMS_TRIBUTADOS.includes(c) || CST_ICMS_TRIBUTADOS.includes(norm) || CSOSN_ICMS_TRIBUTADOS.includes(c);
 }
 
 export function isIpiTributado(cst?: string): boolean {
@@ -31,6 +47,7 @@ export function isIpiTributado(cst?: string): boolean {
 
 export interface ItemTaxes {
   cst: string;
+  origem?: number;
   icmsTributado: boolean;
   aliquotaIcms: number;
   reducaoBcIcms: number;
@@ -100,8 +117,9 @@ export function computeItemTaxes(
   defaults: TaxDefaults = {},
   freteRateado = 0
 ): ItemTaxes {
-  const cst = String(it.cst || it.csosn || defaults.cstIcmsPadrao || '40').trim();
-  const icmsTributado = isIcmsTributado(cst);
+  const rawCst = String(it.cst || it.csosn || defaults.cstIcmsPadrao || '40').trim();
+  const { cst, origem } = normalizeCst(rawCst);
+  const icmsTributado = isIcmsTributado(rawCst);
   const net = itemNetValue(it);
 
   let aliquotaIcms = 0;
@@ -138,6 +156,7 @@ export function computeItemTaxes(
 
   return {
     cst,
+    origem,
     icmsTributado,
     aliquotaIcms,
     reducaoBcIcms,

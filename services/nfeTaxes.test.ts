@@ -231,10 +231,16 @@ describe('nfeTaxes: regras de destaque de ICMS e IPI', () => {
     assert.equal(item0.modalidadeBaseCalculoIcms, 3);
     assert.deepEqual(item0.icms, {
       cst: '00',
+      origem: 0,
+      orig: 0,
       modalidadeBaseCalculo: 3,
+      modBC: 3,
       baseCalculo: 2200,
+      vBC: 2200,
       aliquota: 12,
+      pICMS: 12,
       valor: 264,
+      vICMS: 264,
     });
 
     // IPI destacado
@@ -376,9 +382,15 @@ describe('nfeTaxes: regras de destaque de ICMS e IPI', () => {
     assert.equal(item0.valorUnitario, 519.3);
     assert.equal(item0.valorTotal, 519.3, 'vProd do item deve ser 519,30');
     assert.equal(item0.valorDesconto, 51.93, 'vDesc do item deve ser 51,93');
+    assert.equal(item0.desconto, 51.93, 'desconto do item deve ser 51,93');
     assert.equal(item0.aliquotaIcms, 4);
     assert.equal(item0.baseCalculoIcms, 509.37, 'Base de cálculo do ICMS deve ser 509,37 (519,30 - 51,93 + 42,00)');
+    assert.equal(item0.vBC, 509.37, 'alias vBC deve ser 509,37');
     assert.equal(item0.valorIcms, 20.37, 'Valor do ICMS deve ser 20,37 (509,37 * 4%)');
+    assert.equal(item0.vICMS, 20.37, 'alias vICMS deve ser 20,37');
+    assert.equal(item0.imposto?.icms?.vBC, 509.37);
+    assert.equal(item0.imposto?.icms?.vICMS, 20.37);
+    assert.equal(item0.imposto?.icms?.pICMS, 4);
 
     assert.equal(payload.totais?.valorProdutos, 519.3);
     assert.equal(payload.totais?.valorDesconto, 51.93);
@@ -386,5 +398,28 @@ describe('nfeTaxes: regras de destaque de ICMS e IPI', () => {
     assert.equal(payload.totais?.baseCalculoIcms, 509.37);
     assert.equal(payload.totais?.valorIcms, 20.37);
     assert.equal(payload.totais?.valorTotal, 509.37, 'Total da NF-e deve ser exatamente 509,37');
+  });
+
+  it('normaliza CST 100 (Origem 1 Estrangeira + CST 00 Tributada) e calcula ICMS a 4%', () => {
+    const item: SaleOrderItem = {
+      productId: 'p-weichai',
+      productCode: '12159770',
+      productName: 'Bomba Weichai',
+      quantity: 1,
+      unitPrice: 519.30,
+      total: 467.37,
+      discount: 51.93,
+      unit: 'UN',
+      cfop: '6202',
+      cst: '100', // 1 = Estrangeira, 00 = Tributada integralmente
+      aliquotaIcms: 4,
+    };
+
+    const tax = computeItemTaxes(item, {}, 42);
+    assert.equal(tax.cst, '00');
+    assert.equal(tax.origem, 1);
+    assert.equal(tax.icmsTributado, true);
+    assert.equal(tax.baseCalculoIcms, 509.37);
+    assert.equal(tax.valorIcms, 20.37);
   });
 });

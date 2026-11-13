@@ -375,7 +375,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
     subtotal: itemsSubtotal,
     frete: {
       ...frete,
-      modalidade: (isDevolucao || isTransferencia)
+      modalidade: isTransferencia
         ? 9
         : (resolveFreteModalidade({ ...order, frete, shipping: freteValorEfetivo }) as FreteInfo['modalidade']),
       valor: freteValorEfetivo,

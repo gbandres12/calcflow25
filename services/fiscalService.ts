@@ -6,7 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { resolveIbgeCode } from './cepService';
 import { INF_ADPROD_MAX, buildNfeInfCpl } from './nfeComplementares';
 import { CANCEL_CSTATS, mapRemoteNfeStatus, preferCancelledStatus } from './nfeRemoteStatus';
-import { computeOrderTaxes, CST_ICMS_COM_REDUCAO } from './nfeTaxes';
+import { computeOrderTaxes, CST_ICMS_COM_REDUCAO, normalizeCst } from './nfeTaxes';
 
 export { mapRemoteNfeStatus } from './nfeRemoteStatus';
 
@@ -73,26 +73,66 @@ export interface NotaAsItemPayload {
   valorUnitario: number;
   valorTotal: number;
   valorDesconto?: number;
+  desconto?: number;
   vDesc?: number;
   valorFrete?: number;
+  frete?: number;
   vFrete?: number;
   unidade: string;
   csosn?: string;
   cst?: string;
+  origem?: number;
+  orig?: number;
   aliquotaIcms?: number;
+  pICMS?: number;
   /** Destaque de ICMS próprio (modBC 3 = valor da operação). */
   modalidadeBaseCalculoIcms?: number;
+  modBC?: number;
   baseCalculoIcms?: number;
+  vBC?: number;
   valorIcms?: number;
+  vICMS?: number;
   percentualReducaoBc?: number;
+  pRedBC?: number;
   icms?: {
     cst: string;
     origem?: number;
+    orig?: number;
     modalidadeBaseCalculo?: number;
+    modBC?: number;
     baseCalculo?: number;
+    vBC?: number;
     aliquota?: number;
+    pICMS?: number;
     valor?: number;
+    vICMS?: number;
     percentualReducaoBc?: number;
+    pRedBC?: number;
+  };
+  imposto?: {
+    icms?: {
+      cst: string;
+      origem?: number;
+      orig?: number;
+      modalidadeBaseCalculo?: number;
+      modBC?: number;
+      baseCalculo?: number;
+      vBC?: number;
+      aliquota?: number;
+      pICMS?: number;
+      valor?: number;
+      vICMS?: number;
+      percentualReducaoBc?: number;
+      pRedBC?: number;
+    };
+    ipi?: {
+      cst: string;
+      codigoEnquadramento?: string;
+      cEnq?: string;
+      vBC?: number;
+      pIPI?: number;
+      vIPI?: number;
+    };
   };
   /** Grupo IPI (somente NF-e modelo 55). */
   cstIpi?: string;
@@ -858,6 +898,7 @@ export const fiscalService = {
         valorUnitario: itemUnit,
         valorTotal: itemDesc > 0 ? itemGross : it.total,
         valorDesconto: itemDesc > 0 ? itemDesc : undefined,
+        desconto: itemDesc > 0 ? itemDesc : undefined,
         vDesc: itemDesc > 0 ? itemDesc : undefined,
         unidade: it.unit || 'TON',
         cst: itemCst,
@@ -917,20 +958,57 @@ export const fiscalService = {
       if (t.freteRateado > 0) {
         row.valorFrete = t.freteRateado;
         row.vFrete = t.freteRateado;
+        row.frete = t.freteRateado;
       }
       if (t.icmsTributado) {
+        const { cst: normCst, origem: normOrig } = normalizeCst(t.cst);
         row.modalidadeBaseCalculoIcms = 3;
+        row.modBC = 3;
         row.baseCalculoIcms = t.baseCalculoIcms;
+        row.vBC = t.baseCalculoIcms;
         row.aliquotaIcms = t.aliquotaIcms;
+        row.pICMS = t.aliquotaIcms;
         row.valorIcms = t.valorIcms;
-        if (t.reducaoBcIcms > 0 || CST_ICMS_COM_REDUCAO.includes(t.cst)) row.percentualReducaoBc = t.reducaoBcIcms;
+        row.vICMS = t.valorIcms;
+        row.origem = normOrig;
+        row.orig = normOrig;
+        row.cst = normCst;
+
+        if (t.reducaoBcIcms > 0 || CST_ICMS_COM_REDUCAO.includes(normCst)) {
+          row.percentualReducaoBc = t.reducaoBcIcms;
+          row.pRedBC = t.reducaoBcIcms;
+        }
+
         row.icms = {
-          cst: t.cst,
+          cst: normCst,
+          origem: normOrig,
+          orig: normOrig,
           modalidadeBaseCalculo: 3,
+          modBC: 3,
           baseCalculo: t.baseCalculoIcms,
+          vBC: t.baseCalculoIcms,
           aliquota: t.aliquotaIcms,
+          pICMS: t.aliquotaIcms,
           valor: t.valorIcms,
-          ...(row.percentualReducaoBc !== undefined ? { percentualReducaoBc: t.reducaoBcIcms } : {}),
+          vICMS: t.valorIcms,
+          ...(row.percentualReducaoBc !== undefined ? { percentualReducaoBc: t.reducaoBcIcms, pRedBC: t.reducaoBcIcms } : {}),
+        };
+
+        row.imposto = {
+          icms: {
+            cst: normCst,
+            origem: normOrig,
+            orig: normOrig,
+            modalidadeBaseCalculo: 3,
+            modBC: 3,
+            baseCalculo: t.baseCalculoIcms,
+            vBC: t.baseCalculoIcms,
+            aliquota: t.aliquotaIcms,
+            pICMS: t.aliquotaIcms,
+            valor: t.valorIcms,
+            vICMS: t.valorIcms,
+            ...(row.percentualReducaoBc !== undefined ? { percentualReducaoBc: t.reducaoBcIcms, pRedBC: t.reducaoBcIcms } : {}),
+          }
         };
       }
       if (t.destacarIpi && t.cstIpi) {
@@ -944,6 +1022,14 @@ export const fiscalService = {
           row.ipi.vBC = t.baseCalculoIpi;
           row.ipi.pIPI = t.aliquotaIpi;
           row.ipi.vIPI = t.valorIpi;
+        }
+        if (row.imposto) {
+          row.imposto.ipi = {
+            cst: t.cstIpi,
+            codigoEnquadramento: t.cEnqIpi || '999',
+            cEnq: t.cEnqIpi || '999',
+            ...(t.ipiTributado ? { vBC: t.baseCalculoIpi, pIPI: t.aliquotaIpi, vIPI: t.valorIpi } : {}),
+          };
         }
       }
     });
@@ -1084,7 +1170,7 @@ export const fiscalService = {
       (payload as any).vDesc = orderDesconto;
       (payload as any).desconto = orderDesconto;
     }
-    if (taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0 || orderDesconto > 0 || hasFreteCobrado) {
+    if (taxCalc.totals.valorIcms > 0 || taxCalc.totals.valorIpi > 0 || orderDesconto > 0 || hasFreteCobrado || taxCalc.totals.baseCalculoIcms > 0) {
       payload.totais = {
         baseCalculoIcms: taxCalc.totals.baseCalculoIcms,
         valorIcms: taxCalc.totals.valorIcms,
@@ -1094,6 +1180,15 @@ export const fiscalService = {
         valorDesconto: orderDesconto,
         valorTotal: Math.round((order.total + taxCalc.totals.valorIpi) * 100) / 100,
       };
+      const t = payload.totais as any;
+      t.vBC = taxCalc.totals.baseCalculoIcms;
+      t.vICMS = taxCalc.totals.valorIcms;
+      t.vProd = t.valorProdutos;
+      t.vFrete = t.valorFrete;
+      t.vDesc = orderDesconto;
+      t.vNF = t.valorTotal;
+      (payload as any).vBC = taxCalc.totals.baseCalculoIcms;
+      (payload as any).vICMS = taxCalc.totals.valorIcms;
     }
     return payload;
   },
