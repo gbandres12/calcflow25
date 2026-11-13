@@ -20,11 +20,70 @@ interface ItemTaxEditorProps {
   onChange: (field: TaxField, value: any) => void;
 }
 
-const parseNum = (raw: string): number | undefined => {
-  const s = raw.replace(',', '.').trim();
-  if (s === '') return undefined;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : undefined;
+export const DecimalTaxInput: React.FC<{
+  value: number | undefined;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+  onChange: (val: number | undefined) => void;
+}> = ({ value, placeholder, disabled, className, onChange }) => {
+  const [text, setText] = React.useState<string>(() => (value != null ? String(value).replace('.', ',') : ''));
+  const isFocusedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!isFocusedRef.current) {
+      setText(value != null ? String(value).replace('.', ',') : '');
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const sanitized = raw.replace(/[^0-9.,]/g, '');
+    const parts = sanitized.split(/[.,]/);
+    let finalStr = sanitized;
+    if (parts.length > 2) {
+      finalStr = parts[0] + ',' + parts.slice(1).join('');
+    }
+
+    setText(finalStr);
+
+    const cleaned = finalStr.replace(',', '.').trim();
+    if (cleaned === '' || cleaned === '.') {
+      onChange(undefined);
+    } else {
+      const num = Number(cleaned);
+      if (Number.isFinite(num)) {
+        onChange(num);
+      }
+    }
+  };
+
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+  };
+
+  const handleBlur = () => {
+    isFocusedRef.current = false;
+    if (value != null) {
+      setText(String(value).replace('.', ','));
+    } else {
+      setText('');
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      disabled={disabled}
+      className={className}
+      value={text}
+      placeholder={placeholder}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    />
+  );
 };
 
 const inputCls =
@@ -51,44 +110,40 @@ export const ItemTaxEditor: React.FC<ItemTaxEditorProps> = ({ item, taxes, onCha
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <label className="space-y-0.5">
             <span className={labelCls}>Alíq. ICMS (%)</span>
-            <input
+            <DecimalTaxInput
               className={inputCls}
-              inputMode="decimal"
-              value={item.aliquotaIcms ?? ''}
-              placeholder={String(taxes?.aliquotaIcms ?? 0)}
-              onChange={(e) => onChange('aliquotaIcms', parseNum(e.target.value))}
+              value={item.aliquotaIcms}
+              placeholder={String(taxes?.aliquotaIcms ?? 0).replace('.', ',')}
+              onChange={(v) => onChange('aliquotaIcms', v)}
             />
           </label>
           {comReducao && (
             <label className="space-y-0.5">
               <span className={labelCls}>Redução BC (%)</span>
-              <input
+              <DecimalTaxInput
                 className={inputCls}
-                inputMode="decimal"
-                value={item.reducaoBcIcms ?? ''}
+                value={item.reducaoBcIcms}
                 placeholder="0"
-                onChange={(e) => onChange('reducaoBcIcms', parseNum(e.target.value))}
+                onChange={(v) => onChange('reducaoBcIcms', v)}
               />
             </label>
           )}
           <label className="space-y-0.5">
             <span className={labelCls}>Base ICMS (R$)</span>
-            <input
+            <DecimalTaxInput
               className={inputCls}
-              inputMode="decimal"
-              value={item.baseCalculoIcms ?? ''}
-              placeholder={(taxes?.baseCalculoIcms ?? 0).toFixed(2)}
-              onChange={(e) => onChange('baseCalculoIcms', parseNum(e.target.value))}
+              value={item.baseCalculoIcms}
+              placeholder={(taxes?.baseCalculoIcms ?? 0).toFixed(2).replace('.', ',')}
+              onChange={(v) => onChange('baseCalculoIcms', v)}
             />
           </label>
           <label className="space-y-0.5">
             <span className={labelCls}>Valor ICMS (R$)</span>
-            <input
+            <DecimalTaxInput
               className={inputCls}
-              inputMode="decimal"
-              value={item.valorIcms ?? ''}
-              placeholder={(taxes?.valorIcms ?? 0).toFixed(2)}
-              onChange={(e) => onChange('valorIcms', parseNum(e.target.value))}
+              value={item.valorIcms}
+              placeholder={(taxes?.valorIcms ?? 0).toFixed(2).replace('.', ',')}
+              onChange={(v) => onChange('valorIcms', v)}
             />
           </label>
         </div>
@@ -125,13 +180,12 @@ export const ItemTaxEditor: React.FC<ItemTaxEditorProps> = ({ item, taxes, onCha
           </label>
           <label className="space-y-0.5">
             <span className={labelCls}>Alíq. IPI (%)</span>
-            <input
+            <DecimalTaxInput
               className={inputCls}
-              inputMode="decimal"
               disabled={!taxes?.ipiTributado}
-              value={item.aliquotaIpi ?? ''}
-              placeholder={String(taxes?.aliquotaIpi ?? 0)}
-              onChange={(e) => onChange('aliquotaIpi', parseNum(e.target.value))}
+              value={item.aliquotaIpi}
+              placeholder={String(taxes?.aliquotaIpi ?? 0).replace('.', ',')}
+              onChange={(v) => onChange('aliquotaIpi', v)}
             />
           </label>
           <label className="space-y-0.5">

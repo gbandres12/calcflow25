@@ -32,7 +32,7 @@ import { FlowSheet, FlowSection } from './ui/FlowSheet';
 import { fetchAddressByCep, formatCep, fetchIbgeByCityUf } from '../services/cepService';
 import { normalizeCustomer } from '../utils/customerUtils';
 import NfeRejectionHint from './NfeRejectionHint';
-import { ItemTaxEditor, NfeTaxSummary } from './fiscal/NfeTaxFields';
+import { ItemTaxEditor, NfeTaxSummary, DecimalTaxInput } from './fiscal/NfeTaxFields';
 import { computeOrderTaxes } from '../services/nfeTaxes';
 
 interface EmitirNfeModalProps {
@@ -262,7 +262,7 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
       }
       if (field === 'aliquotaIcms' || field === 'baseCalculoIcms') updated.valorIcms = undefined;
       if (field === 'discount') {
-        const d = Math.max(0, parseFloat(value) || 0);
+        const d = Math.max(0, parseFloat(String(value).replace(',', '.')) || 0);
         updated.discount = d;
         updated.total = Math.max(0, (Number(updated.quantity) || 0) * (Number(updated.unitPrice) || 0) - d);
       }
@@ -1043,7 +1043,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                       </div>
                       <div>
                         <label className="text-xs font-bold text-rose-600">Desc (R$)</label>
-                        <input type="number" step="0.01" value={it.discount || ''} onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} placeholder="0,00" className="w-full px-2 py-2 bg-rose-50 border border-rose-200 rounded-lg text-sm font-bold text-right text-rose-800" />
+                        <DecimalTaxInput
+                          className="w-full px-2 py-2 bg-rose-50 border border-rose-200 rounded-lg text-sm font-bold text-right text-rose-800 outline-none focus:border-rose-400"
+                          value={it.discount}
+                          placeholder="0,00"
+                          onChange={(v) => handleUpdateItem(idx, 'discount', v ?? 0)}
+                        />
                       </div>
                       <div>
                         <label className="text-xs font-bold text-purple-700">CFOP</label>
@@ -1100,7 +1105,12 @@ export const EmitirNfeModal: React.FC<EmitirNfeModalProps> = ({
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <input type="number" step="0.01" value={it.discount || ''} onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} placeholder="0,00" className="w-20 px-2 py-1 bg-rose-50 border border-rose-200 rounded-lg text-xs font-bold text-right text-rose-800" />
+                          <DecimalTaxInput
+                            className="w-20 px-2 py-1 bg-rose-50 border border-rose-200 rounded-lg text-xs font-bold text-right text-rose-800 outline-none focus:border-rose-400"
+                            value={it.discount}
+                            placeholder="0,00"
+                            onChange={(v) => handleUpdateItem(idx, 'discount', v ?? 0)}
+                          />
                         </td>
                         <td className="px-3 py-2 text-right font-black">{formatBRL(it.total)}</td>
                       </tr>

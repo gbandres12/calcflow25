@@ -23,7 +23,7 @@ import { FlowSheet } from './ui/FlowSheet';
 import { NfeDraftPdfPreview } from './NfeDraftPdfPreview';
 import { useToast } from './ui/Toast';
 import NfeRejectionHint from './NfeRejectionHint';
-import { ItemTaxEditor, NfeTaxSummary } from './fiscal/NfeTaxFields';
+import { ItemTaxEditor, NfeTaxSummary, DecimalTaxInput } from './fiscal/NfeTaxFields';
 import { computeOrderTaxes } from '../services/nfeTaxes';
 import { dateISOBR } from '../utils/dateFilterUtils';
 
@@ -425,9 +425,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
       }
       if (field === 'aliquotaIcms' || field === 'baseCalculoIcms') updated.valorIcms = undefined;
       if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
-        const q = field === 'quantity' ? parseFloat(value) || 0 : it.quantity;
-        const p = field === 'unitPrice' ? parseFloat(value) || 0 : it.unitPrice;
-        const d = field === 'discount' ? parseFloat(value) || 0 : it.discount;
+        const q = field === 'quantity' ? parseFloat(String(value).replace(',', '.')) || 0 : it.quantity;
+        const p = field === 'unitPrice' ? parseFloat(String(value).replace(',', '.')) || 0 : it.unitPrice;
+        const d = field === 'discount' ? parseFloat(String(value).replace(',', '.')) || 0 : it.discount;
         updated.total = Math.max(0, (q * p) - d);
       }
       if (field === 'productId') {
@@ -1418,11 +1418,9 @@ export const EmitirNfeAvulsaModal: React.FC<EmitirNfeAvulsaModalProps> = ({
 
                     <div className="space-y-1">
                       <label className="text-[11px] font-black uppercase text-rose-600">Desconto (R$)</label>
-                      <input 
-                        type="number" 
-                        step="0.01" 
-                        value={it.discount || ''} 
-                        onChange={e => handleUpdateItem(idx, 'discount', e.target.value)} 
+                      <DecimalTaxInput 
+                        value={it.discount} 
+                        onChange={v => handleUpdateItem(idx, 'discount', v ?? 0)} 
                         placeholder="0,00"
                         className="w-full p-2 bg-rose-50/60 border border-rose-200 rounded-xl text-xs font-bold text-right outline-none focus:border-rose-500 text-rose-800"
                       />
