@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { PurchaseAuthorizationTab } from './PurchaseAuthorizationTab';
 import {
   AlertTriangle,
   Building2,
@@ -579,6 +580,8 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
     );
   };
 
+  const [activeTab, setActiveTab] = useState<'orders' | 'authorizations'>('orders');
+
   return (
     <div className="space-y-6 pb-12">
       {/* Cabeçalho */}
@@ -593,6 +596,30 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
           <p className="text-slate-500 text-sm">
             Solicitações, mapa de cotações, aprovação vinculada à verba do Centro de Custo e recebimento integrado
           </p>
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('orders')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                activeTab === 'orders'
+                  ? 'bg-[#0F5948] text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Pedidos de Compra
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('authorizations')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                activeTab === 'authorizations'
+                  ? 'bg-[#0F5948] text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Autorizações de Compra
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -614,6 +641,17 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
           </button>
         </div>
       </div>
+
+      {activeTab === 'authorizations' ? (
+        <PurchaseAuthorizationTab
+          companyId={company.id}
+          company={company}
+          currentUser={currentUser}
+          storeItems={storeItems}
+          inventory={[]}
+        />
+      ) : (
+        <>
 
       {/* KPIs Rápidos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -665,6 +703,7 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
           <p className="text-xs text-emerald-200/90 mt-1">Integradas ao Contas a Pagar</p>
         </div>
       </div>
+
 
       {/* Filtros e Abas de Status */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
@@ -720,6 +759,7 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
           </select>
         </div>
       </div>
+
 
       {/* Lista de Ordens de Compra */}
       <div className="space-y-3">
@@ -1562,6 +1602,8 @@ export const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

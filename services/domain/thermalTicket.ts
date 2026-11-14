@@ -134,3 +134,104 @@ export function printThermalTicket(input: ThermalTicketInput): void {
     cleanup();
   }, 150);
 }
+
+export interface PurchaseAuthorizationThermalInput {
+  companyName: string;
+  companyCity?: string;
+  number: string;
+  date: string;
+  authorizedBuyer: string;
+  authorizedBy: string;
+  supplierName?: string;
+  notes?: string;
+  items: Array<{ productName: string; unit: string; quantity: number }>;
+  printedAt?: Date;
+}
+
+/** Cupom de Autorização de Compra para impressora térmica de 80 mm. */
+export function buildPurchaseAuthorizationThermalHtml(
+  input: PurchaseAuthorizationThermalInput
+): string {
+  const printedAt = (input.printedAt || new Date()).toLocaleString('pt-BR');
+  const itemsHtml = (input.items || [])
+    .map((item, idx) => {
+      const qty = (item.quantity || 0).toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3
+      });
+      const unit = (item.unit || 'UN').toUpperCase();
+      return `<div class="item">
+        <div class="item-name">${String(idx + 1).padStart(2, '0')}. ${esc(item.productName)}</div>
+        <div class="row"><span>Qtd. Autorizada:</span><b>${esc(qty)} ${esc(unit)}</b></div>
+      </div>`;
+    })
+    .join('');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Autorização ${esc(input.number)}</title>
+<style>
+@page { size: 80mm auto; margin: 0; }
+* { box-sizing: border-box; }
+body { width: 72mm; margin: 0 auto; padding: 3mm 0 6mm; font: 11px/1.35 'Courier New', monospace; color: #000; }
+h1 { font-size: 13px; margin: 0; text-align: center; text-transform: uppercase; }
+.center { text-align: center; }
+.op-title { font-weight: bold; margin: 4px 0; text-align: center; font-size: 12px; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; }
+.row { display: flex; justify-content: space-between; gap: 6px; margin: 2px 0; }
+.row b { text-align: right; }
+.sep { border-top: 1px dashed #000; margin: 5px 0; }
+.item { margin: 4px 0; padding-bottom: 3px; border-bottom: 1px dotted #999; }
+.item-name { font-weight: bold; }
+.sig { margin-top: 18px; text-align: center; }
+.sig-line { border-top: 1px solid #000; margin: 0 6mm 2px; }
+.small { font-size: 10px; }
+</style></head><body>
+  <h1>${esc(input.companyName || 'CBA Mineração')}</h1>
+  ${input.companyCity ? `<div class="center small">${esc(input.companyCity)}</div>` : ''}
+  <div class="op-title">AUTORIZAÇÃO DE COMPRA Nº ${esc(input.number)}</div>
+  ${row('Data:', brDate(input.date))}
+  ${row('Comprador:', input.authorizedBuyer)}
+  ${row('Autorizado por:', input.authorizedBy)}
+  ${input.supplierName ? row('Fornecedor:', input.supplierName) : ''}
+  <div class="sep"></div>
+  <div class="small" style="font-weight:bold;margin-bottom:3px;">ITENS AUTORIZADOS</div>
+  ${itemsHtml}
+  ${input.notes ? `<div class="sep"></div><div class="small"><b>Obs:</b> ${esc(input.notes)}</div>` : ''}
+  <div class="sig">
+    <div class="sig-line"></div>
+    <div class="small">${esc(input.authorizedBuyer)}</div>
+    <div class="small">Comprador Autorizado</div>
+  </div>
+  <div class="sig">
+    <div class="sig-line"></div>
+    <div class="small">${esc(input.authorizedBy)}</div>
+    <div class="small">Autorizador / Responsável</div>
+  </div>
+  <div class="sep"></div>
+  <div class="center small">Impresso em ${esc(printedAt)}</div>
+</body></html>`;
+}
+
+export function openPurchaseAuthorizationThermalPrint(
+  input: PurchaseAuthorizationThermalInput
+): void {
+  if (typeof document === 'undefined') return;
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  if (!doc || !frame.contentWindow) {
+    frame.remove();
+    return;
+  }
+  doc.open();
+  doc.write(buildPurchaseAuthorizationThermalHtml(input));
+  doc.close();
+  const win = frame.contentWindow;
+  const cleanup = () => setTimeout(() => frame.remove(), 1000);
+  win.addEventListener('afterprint', cleanup);
+  setTimeout(() => {
+    win.focus();
+    win.print();
+    cleanup();
+  }, 150);
+}

@@ -972,6 +972,30 @@ export interface PurchaseOrder {
   updatedAt?: string;
 }
 
+export interface PurchaseAuthorizationItem {
+  id: string;
+  productId?: string;
+  productSource?: 'store' | 'inventory' | 'custom';
+  productName: string;
+  unit: string;
+  quantity: number;
+  notes?: string;
+}
+
+export interface PurchaseAuthorization {
+  id: string;
+  number: string;
+  date: string;
+  authorizedBuyer: string;
+  authorizedBy: string;
+  supplierName?: string;
+  notes?: string;
+  items: PurchaseAuthorizationItem[];
+  companyId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type View = 'crm' | 'dashboard' | 'inventory' | 'sales' | 'purchases' | 'cost_centers' | 'milling' | 'customers' | 'transportadores' | 'transactions' | 'payables_receivables' | 'daily' | 'accounts' | 'orders' | 'quotes' | 'fleet' | 'yard' | 'fuel' | 'cashflow' | 'users' | 'settings' | 'fiscal' | 'fiscal_config' | 'transfers' | 'branches' | 'loadings';
 
 
