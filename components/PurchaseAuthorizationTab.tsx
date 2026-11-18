@@ -268,17 +268,19 @@ export const PurchaseAuthorizationTab: React.FC<PurchaseAuthorizationTabProps> =
   const handleSave = async (printMode?: 'a4' | 'thermal') => {
     const record = buildRecord();
     if (!record) return;
+    const printWin = printMode === 'a4' ? window.open('', '_blank') : null;
     setSaving(true);
     try {
       await db.upsert('purchase_authorizations', companyId, record);
       await loadAuthorizations();
       setIsModalOpen(false);
       if (printMode === 'a4') {
-        await handlePrintA4(record);
+        await handlePrintA4(record, printWin);
       } else if (printMode === 'thermal') {
         handlePrintThermal(record);
       }
     } catch (err) {
+      if (printWin && !printWin.closed) printWin.close();
       console.error('Erro ao salvar autorização:', err);
       alert('Erro ao salvar autorização de compra.');
     } finally {
@@ -296,15 +298,18 @@ export const PurchaseAuthorizationTab: React.FC<PurchaseAuthorizationTabProps> =
     }
   };
 
-  const handlePrintA4 = async (auth: PurchaseAuthorization) => {
-    await openPurchaseAuthorizationPdf({
-      authorization: auth,
-      brand: fiscalConfig,
-      companyName: company?.name,
-      companyDocument: company?.document,
-      companyPhone: company?.phone,
-      companyCity: company?.city
-    });
+  const handlePrintA4 = async (auth: PurchaseAuthorization, targetWindow?: Window | null) => {
+    await openPurchaseAuthorizationPdf(
+      {
+        authorization: auth,
+        brand: fiscalConfig,
+        companyName: company?.name,
+        companyDocument: company?.document,
+        companyPhone: company?.phone,
+        companyCity: company?.city
+      },
+      targetWindow
+    );
   };
 
   const handlePrintThermal = (auth: PurchaseAuthorization) => {

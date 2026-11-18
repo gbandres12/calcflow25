@@ -326,12 +326,17 @@ export async function generatePurchaseAuthorizationPdf(
 }
 
 export async function openPurchaseAuthorizationPdf(
-  input: PurchaseAuthorizationPdfInput
+  input: PurchaseAuthorizationPdfInput,
+  targetWindow?: Window | null
 ): Promise<void> {
   const bytes = await generatePurchaseAuthorizationPdf(input);
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.href = url;
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
