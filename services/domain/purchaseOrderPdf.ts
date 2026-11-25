@@ -452,14 +452,23 @@ export async function openPurchaseOrderPdfInBrowser(
   po: PurchaseOrder,
   company?: Company | null
 ): Promise<void> {
-  const bytes = await buildPurchaseOrderPdf(po, company);
-  const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if (!win) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${po.reference || 'ordem-compra'}.pdf`;
-    a.click();
+  const win = window.open('', '_blank');
+  try {
+    const bytes = await buildPurchaseOrderPdf(po, company);
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    if (win && !win.closed) {
+      win.location.href = url;
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${po.reference || 'ordem-compra'}.pdf`;
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    if (win && !win.closed) win.close();
+    console.error('Erro ao gerar PDF da Ordem de Compra:', err);
+    alert('Não foi possível gerar o PDF da Ordem de Compra. Verifique os dados e tente novamente.');
   }
 }
