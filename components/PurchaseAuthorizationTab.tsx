@@ -279,10 +279,11 @@ export const PurchaseAuthorizationTab: React.FC<PurchaseAuthorizationTabProps> =
       } else if (printMode === 'thermal') {
         handlePrintThermal(record);
       }
-    } catch (err) {
+    } catch (err: any) {
       if (printWin && !printWin.closed) printWin.close();
       console.error('Erro ao salvar autorização:', err);
-      alert('Erro ao salvar autorização de compra.');
+      const msg = err?.message || err?.error_description || 'Erro desconhecido';
+      alert(`Erro ao salvar autorização de compra: ${msg}`);
     } finally {
       setSaving(false);
     }
